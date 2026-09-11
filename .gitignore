@@ -1,0 +1,22 @@
+node_modules/
+out/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.log
+.env
+.env.*
+!.env.example
+
+# Local application data and signing credentials
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.pfx
+*.p12
+
+# Local OS metadata
+.DS_Store
+Thumbs.db

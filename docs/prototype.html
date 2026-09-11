@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>接着 PickUp — 个人工作助手原型</title>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    :root {
+      --ink: #121313;
+      --paper: #f2f0e9;
+      --muted: #888a84;
+      --line: rgba(242, 240, 233, .14);
+      --line-dark: rgba(18, 19, 19, .14);
+      --lime: #d8ff5c;
+      --coral: #ff8066;
+      --cyan: #86e4ef;
+      --shadow: 0 24px 80px rgba(0, 0, 0, .24);
+      --ease: cubic-bezier(.2, .8, .2, 1);
+    }
+    * { box-sizing: border-box; }
+    html { background: var(--ink); scroll-behavior: smooth; }
+    body {
+      min-width: 320px; margin: 0; color: var(--paper);
+      background: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px), var(--ink);
+      background-size: 56px 56px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+    button, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--lime); outline-offset: 3px; }
+    .app-shell { min-height: 100vh; overflow: hidden; }
+    .topbar { height: 78px; display: flex; align-items: center; justify-content: space-between; padding: 0 34px; border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; background: rgba(18, 19, 19, .88); backdrop-filter: blur(18px); }
+    .brand-lockup { display: flex; align-items: center; gap: 15px; }
+    .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; color: var(--ink); background: var(--lime); font-size: 14px; font-weight: 800; letter-spacing: -.08em; }
+    .brand-name { font-size: 15px; font-weight: 760; letter-spacing: .02em; }
+    .brand-meta { color: var(--muted); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; }
+    .topbar-right { display: flex; align-items: center; gap: 14px; }
+    .date-stamp { color: var(--muted); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+    .quiet-chip { display: inline-flex; align-items: center; gap: 7px; color: var(--cyan); font-size: 11px; }
+    .quiet-chip::before { content: ""; width: 6px; height: 6px; background: var(--cyan); border-radius: 50%; box-shadow: 0 0 0 5px rgba(134,228,239,.12); }
+    .icon-button { width: 38px; height: 38px; display: inline-grid; place-items: center; color: var(--paper); background: transparent; border: 1px solid var(--line); transition: background .25s var(--ease), color .25s var(--ease), border-color .25s var(--ease), transform .25s var(--ease); }
+    .icon-button:hover { color: var(--ink); background: var(--lime); border-color: var(--lime); transform: translateY(-2px); }
+    .icon-button svg { width: 16px; height: 16px; }
+    .layout { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: calc(100vh - 78px); }
+    .sidebar { padding: 28px 20px 24px; border-right: 1px solid var(--line); display: flex; flex-direction: column; justify-content: space-between; }
+    .side-label { color: #666a65; font-size: 10px; font-weight: 750; letter-spacing: .18em; text-transform: uppercase; margin: 2px 11px 14px; }
+    .side-nav { display: grid; gap: 4px; }
+    .nav-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 11px; color: var(--muted); background: transparent; border: 0; text-align: left; transition: color .25s var(--ease), background .25s var(--ease), transform .25s var(--ease); }
+    .nav-item:hover, .nav-item.active { color: var(--paper); background: rgba(242,240,233,.07); transform: translateX(4px); }
+    .nav-left { display: flex; align-items: center; gap: 11px; font-size: 13px; }
+    .nav-left svg { width: 16px; height: 16px; stroke-width: 1.6; }
+    .nav-count { min-width: 22px; padding: 2px 6px; color: var(--ink); background: var(--paper); font-size: 10px; text-align: center; }
+    .nav-item.active .nav-count { background: var(--lime); }
+    .sidebar-bottom { display: grid; gap: 14px; }
+    .local-state { padding: 14px 12px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .local-state-top { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+    .local-state strong { display: block; margin-top: 9px; color: var(--paper); font-size: 13px; font-weight: 550; }
+    .sidebar-note { color: #656964; font-size: 11px; line-height: 1.7; }
+    .main { min-width: 0; padding: 28px 34px 34px; }
+    .main-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 28px; }
+    .eyebrow { color: var(--lime); font-size: 10px; font-weight: 760; letter-spacing: .2em; text-transform: uppercase; }
+    .main-title { margin: 8px 0 0; max-width: 640px; font-family: Georgia, "Times New Roman", serif; font-size: clamp(32px, 4.3vw, 70px); font-weight: 400; line-height: .94; letter-spacing: -.045em; }
+    .main-title em { color: var(--lime); font-style: normal; }
+    .head-actions { display: flex; align-items: center; gap: 10px; }
+    .text-button { min-height: 40px; display: inline-flex; align-items: center; gap: 9px; padding: 0 14px; color: var(--ink); background: var(--lime); border: 1px solid var(--lime); font-size: 12px; font-weight: 760; transition: transform .25s var(--ease), background .25s var(--ease); }
+    .text-button:hover { background: #efffa6; transform: translateY(-2px); }
+    .text-button.secondary { color: var(--paper); background: transparent; border-color: var(--line); }
+    .text-button.secondary:hover { color: var(--ink); background: var(--paper); border-color: var(--paper); }
+    .text-button svg { width: 15px; height: 15px; }
+    .dashboard-grid, .lower-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, .85fr); gap: 18px; }
+    .current-card { min-height: 355px; position: relative; overflow: hidden; padding: 28px 30px; color: var(--ink); background: var(--paper); display: flex; flex-direction: column; justify-content: space-between; }
+    .current-card::after { content: "01"; position: absolute; right: -18px; bottom: -62px; color: rgba(18,19,19,.06); font-family: Georgia, serif; font-size: 270px; line-height: 1; pointer-events: none; }
+    .card-topline { display: flex; align-items: center; justify-content: space-between; position: relative; z-index: 1; }
+    .card-kicker { display: flex; align-items: center; gap: 8px; color: #5e615d; font-size: 10px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+    .card-kicker::before { content: ""; width: 7px; height: 7px; background: var(--coral); border-radius: 50%; }
+    .card-id { color: #9da09a; font-size: 10px; letter-spacing: .16em; }
+    .current-content { max-width: 650px; position: relative; z-index: 1; }
+    .current-content h2 { max-width: 660px; margin: 24px 0 14px; font-family: Georgia, "Times New Roman", serif; font-size: clamp(34px, 4.4vw, 68px); font-weight: 400; line-height: .95; letter-spacing: -.055em; }
+    .next-line { display: flex; align-items: flex-start; gap: 10px; max-width: 490px; color: #696c67; font-size: 14px; line-height: 1.55; }
+    .next-line svg { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 2px; color: var(--coral); }
+    .current-actions { display: flex; align-items: center; gap: 9px; position: relative; z-index: 1; }
+    .current-actions .text-button.secondary { color: var(--ink); border-color: var(--line-dark); }
+    .current-actions .text-button.secondary:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+    .wave-art { position: absolute; right: 35px; top: 96px; width: 182px; height: 130px; opacity: .82; transform: rotate(-10deg); }
+    .wave-art span { position: absolute; bottom: 0; width: 2px; background: var(--ink); transform-origin: bottom; animation: signal 2.8s var(--ease) infinite alternate; }
+    .wave-art span:nth-child(1) { left: 6px; height: 24px; animation-delay: -.2s; }
+    .wave-art span:nth-child(2) { left: 18px; height: 52px; animation-delay: -.7s; }
+    .wave-art span:nth-child(3) { left: 30px; height: 86px; animation-delay: -1.2s; }
+    .wave-art span:nth-child(4) { left: 42px; height: 42px; animation-delay: -.3s; }
+    .wave-art span:nth-child(5) { left: 54px; height: 106px; animation-delay: -1.8s; }
+    .wave-art span:nth-child(6) { left: 66px; height: 58px; animation-delay: -.9s; }
+    .wave-art span:nth-child(7) { left: 78px; height: 74px; animation-delay: -1.1s; }
+    .wave-art span:nth-child(8) { left: 90px; height: 32px; animation-delay: -.4s; }
+    .wave-art span:nth-child(9) { left: 102px; height: 92px; animation-delay: -1.3s; }
+    .wave-art span:nth-child(10) { left: 114px; height: 48px; animation-delay: -.6s; }
+    .wave-art span:nth-child(11) { left: 126px; height: 112px; animation-delay: -1.7s; }
+    .wave-art span:nth-child(12) { left: 138px; height: 60px; animation-delay: -1s; }
+    .wave-art span:nth-child(13) { left: 150px; height: 88px; animation-delay: -.5s; }
+    .wave-art span:nth-child(14) { left: 162px; height: 26px; animation-delay: -1.4s; }
+    .wave-axis { position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--ink); opacity: .22; }
+    @keyframes signal { from { transform: scaleY(.48); } to { transform: scaleY(1.12); } }
+    .capture-card { min-height: 355px; padding: 25px; border: 1px solid var(--line); background: rgba(242,240,233,.055); display: flex; flex-direction: column; justify-content: space-between; }
+    .capture-card h3 { margin: 0; font-size: 13px; font-weight: 700; }
+    .capture-card p { max-width: 250px; margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
+    .context-image { height: 82px; margin-top: 19px; border: 1px solid rgba(242,240,233,.16); background-color: #202522; background-image: url('https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=900&q=80'); background-position: center; background-size: cover; filter: saturate(.6) contrast(1.12); opacity: .78; }
+    .capture-trigger { width: 100%; margin: 27px 0 25px; padding: 18px; display: flex; align-items: center; justify-content: space-between; gap: 15px; color: var(--paper); background: transparent; border: 1px solid rgba(242,240,233,.22); text-align: left; transition: border-color .25s var(--ease), background .25s var(--ease), transform .25s var(--ease); }
+    .capture-trigger:hover { background: rgba(216,255,92,.09); border-color: var(--lime); transform: translateY(-3px); }
+    .capture-placeholder { display: flex; align-items: center; gap: 10px; color: #bfc1ba; font-size: 13px; }
+    .capture-placeholder svg { color: var(--lime); width: 17px; height: 17px; }
+    .capture-key { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; }
+    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; border-top: 1px solid var(--line); padding-top: 18px; }
+    .metric-value { display: block; font-family: Georgia, serif; font-size: 29px; line-height: 1; }
+    .metric-label { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; line-height: 1.25; }
+    .lower-grid { margin-top: 18px; }
+    .task-board, .recovery-panel { border-top: 1px solid var(--line); }
+    .section-head { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 15px; border-bottom: 1px solid var(--line); }
+    .section-head h3 { margin: 0; font-size: 13px; font-weight: 700; }
+    .section-head .section-meta { color: var(--muted); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+    .filter-tabs { display: flex; align-items: center; gap: 4px; }
+    .filter-tab { padding: 7px 8px; color: var(--muted); background: transparent; border: 0; font-size: 11px; }
+    .filter-tab:hover, .filter-tab.active { color: var(--lime); }
+    .task-list { display: grid; }
+    .task-row { min-height: 84px; display: grid; grid-template-columns: 12px minmax(0, 1fr) auto auto; gap: 14px; align-items: center; padding: 15px 8px 15px 0; border-bottom: 1px solid var(--line); transition: background .25s var(--ease), padding .25s var(--ease); }
+    .task-row:hover { padding-left: 9px; background: rgba(242,240,233,.045); }
+    .status-dot { width: 8px; height: 8px; margin-left: 2px; border-radius: 50%; background: var(--muted); }
+    .status-dot.doing { background: var(--coral); box-shadow: 0 0 0 5px rgba(255,128,102,.12); }
+    .status-dot.paused { background: var(--lime); }
+    .status-dot.waiting { background: var(--cyan); }
+    .status-dot.done { background: #626661; }
+    .task-main { min-width: 0; }
+    .task-title { overflow: hidden; color: var(--paper); font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    .task-sub { overflow: hidden; margin-top: 6px; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .task-sub .accent { color: #d2d4cb; }
+    .task-status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; white-space: nowrap; }
+    .task-status svg { width: 13px; height: 13px; }
+    .row-actions { display: flex; align-items: center; gap: 4px; opacity: 0; transition: opacity .2s ease; }
+    .task-row:hover .row-actions, .task-row:focus-within .row-actions { opacity: 1; }
+    .mini-button { width: 30px; height: 30px; display: grid; place-items: center; color: var(--muted); background: transparent; border: 1px solid transparent; }
+    .mini-button:hover { color: var(--lime); border-color: var(--line); }
+    .mini-button svg { width: 14px; height: 14px; }
+    .recovery-panel { padding-left: 24px; border-left: 1px solid var(--line); }
+    .recovery-body { padding-top: 20px; }
+    .recovery-intro { color: var(--muted); font-size: 12px; line-height: 1.65; }
+    .recommend-card { margin-top: 16px; padding: 18px; color: var(--ink); background: var(--lime); position: relative; overflow: hidden; }
+    .recommend-card::after { content: ""; position: absolute; right: 22px; bottom: 22px; width: 44px; height: 44px; border-right: 1px solid rgba(18,19,19,.18); border-bottom: 1px solid rgba(18,19,19,.18); transform: skew(-18deg); }
+    .recommend-label { color: #5d6c31; font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+    .recommend-title { max-width: 220px; margin: 15px 0 11px; font-family: Georgia, serif; font-size: 28px; line-height: .98; letter-spacing: -.04em; }
+    .recommend-note { max-width: 235px; color: #56602f; font-size: 11px; line-height: 1.55; }
+    .recommend-meta { display: flex; align-items: center; gap: 8px; margin-top: 17px; color: #5d6c31; font-size: 10px; }
+    .recommend-meta svg { width: 13px; height: 13px; }
+    .recommend-actions { display: flex; gap: 8px; margin-top: 12px; position: relative; z-index: 1; }
+    .recommend-actions .text-button { min-height: 34px; padding: 0 11px; font-size: 11px; }
+    .recommend-actions .text-button.secondary { color: var(--ink); border-color: rgba(18,19,19,.22); }
+    .next-up { margin-top: 23px; padding-top: 18px; border-top: 1px solid var(--line); }
+    .next-up-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .next-up-head span { color: var(--muted); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+    .next-up-head button { display: inline-flex; align-items: center; gap: 5px; color: var(--lime); background: transparent; border: 0; font-size: 11px; }
+    .next-up-head svg { width: 13px; height: 13px; }
+    .next-up-empty { margin-top: 12px; color: #646863; font-size: 11px; line-height: 1.55; }
+    .next-up-item { display: flex; align-items: center; gap: 10px; margin-top: 12px; color: var(--paper); font-size: 12px; }
+    .next-up-item svg { width: 14px; height: 14px; color: var(--coral); }
+    .toast { position: fixed; right: 28px; bottom: 24px; z-index: 20; max-width: 360px; padding: 14px 16px; color: var(--ink); background: var(--lime); box-shadow: var(--shadow); font-size: 12px; transform: translateY(24px); opacity: 0; pointer-events: none; transition: opacity .25s var(--ease), transform .25s var(--ease); }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.error { color: var(--paper); background: var(--coral); }
+    .modal-backdrop { position: fixed; inset: 0; z-index: 10; display: none; place-items: center; padding: 20px; background: rgba(7,8,8,.76); backdrop-filter: blur(9px); }
+    .modal-backdrop.open { display: grid; animation: appear .2s ease both; }
+    @keyframes appear { from { opacity: 0; } to { opacity: 1; } }
+    .modal { width: min(100%, 580px); max-height: calc(100vh - 40px); overflow: auto; padding: 27px; color: var(--ink); background: var(--paper); box-shadow: var(--shadow); animation: rise .38s var(--ease) both; }
+    @keyframes rise { from { opacity: 0; transform: translateY(24px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    .modal.narrow { width: min(100%, 480px); }
+    .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 26px; }
+    .modal-eyebrow { color: #777a73; font-size: 10px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+    .modal h2 { margin: 7px 0 0; font-family: Georgia, serif; font-size: 35px; font-weight: 400; line-height: .98; letter-spacing: -.04em; }
+    .modal-close { width: 32px; height: 32px; display: grid; place-items: center; color: var(--ink); background: transparent; border: 1px solid var(--line-dark); }
+    .modal-close:hover { color: var(--paper); background: var(--ink); }
+    .field { display: grid; gap: 8px; margin-top: 16px; }
+    .field label { color: #686b65; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    .field input, .field textarea { width: 100%; padding: 13px 14px; color: var(--ink); background: rgba(255,255,255,.42); border: 1px solid rgba(18,19,19,.18); border-radius: 0; }
+    .field input { min-height: 46px; }
+    .field textarea { min-height: 104px; resize: vertical; line-height: 1.55; }
+    .field input::placeholder, .field textarea::placeholder { color: #9a9c95; }
+    .helper { margin-top: 8px; color: #888b83; font-size: 11px; line-height: 1.55; }
+    .expand-link { display: inline-flex; align-items: center; gap: 6px; padding: 0; color: var(--ink); background: transparent; border: 0; font-size: 11px; }
+    .expand-link svg { width: 13px; height: 13px; }
+    .modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line-dark); }
+    .modal-actions .text-button.secondary { color: var(--ink); border-color: var(--line-dark); }
+    .modal-actions .text-button.secondary:hover { color: var(--paper); background: var(--ink); border-color: var(--ink); }
+    .switch-context { display: grid; grid-template-columns: 1fr 40px 1fr; align-items: center; gap: 12px; margin-bottom: 22px; }
+    .context-box { min-width: 0; padding: 14px; border: 1px solid var(--line-dark); }
+    .context-box span { display: block; overflow: hidden; color: #777a73; font-size: 10px; letter-spacing: .12em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+    .context-box strong { display: block; overflow: hidden; margin-top: 9px; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+    .context-arrow { display: grid; place-items: center; color: #777a73; }
+    .context-arrow svg { width: 18px; height: 18px; }
+    .current-breakpoint { margin: 16px 0 0; padding: 13px 14px; color: #646760; background: rgba(18,19,19,.055); font-size: 11px; line-height: 1.6; }
+    .current-breakpoint strong { color: var(--ink); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+    .detail-modal { width: min(100%, 720px); }
+    .detail-status { display: inline-flex; align-items: center; gap: 7px; margin-top: 11px; color: #747770; font-size: 11px; }
+    .detail-status .status-dot { margin: 0; }
+    .detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 24px; }
+    .detail-section { padding-top: 18px; border-top: 1px solid var(--line-dark); }
+    .detail-section + .detail-section { margin-top: 18px; }
+    .detail-section h4 { margin: 0 0 9px; color: #73766f; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+    .detail-copy { margin: 0; color: #454843; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
+    .breakpoint-item { position: relative; padding: 0 0 16px 18px; border-left: 1px solid #bbbdb6; }
+    .breakpoint-item::before { content: ""; position: absolute; left: -4px; top: 3px; width: 7px; height: 7px; background: var(--coral); }
+    .breakpoint-time { color: #8d9088; font-size: 10px; }
+    .breakpoint-text { margin-top: 6px; color: #454843; font-size: 12px; line-height: 1.5; }
+    .detail-side { padding: 17px; background: rgba(18,19,19,.055); }
+    .detail-side label { display: block; color: #777a73; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    .detail-side .side-stat { margin-top: 10px; font-family: Georgia, serif; font-size: 28px; }
+    .detail-side p { margin: 7px 0 0; color: #747770; font-size: 11px; line-height: 1.55; }
+    .detail-side .text-button { width: 100%; justify-content: center; margin-top: 20px; }
+    .detail-actions { display: grid; gap: 8px; margin-top: 20px; }
+    .endday-list { display: grid; gap: 9px; max-height: 320px; overflow: auto; padding-right: 4px; }
+    .endday-item { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 11px; padding: 12px 13px; border: 1px solid var(--line-dark); }
+    .endday-item.selected { border-color: var(--ink); background: rgba(18,19,19,.055); }
+    .endday-title { overflow: hidden; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    .endday-sub { margin-top: 4px; color: #81847c; font-size: 10px; }
+    .choose-button { display: inline-flex; align-items: center; gap: 5px; color: var(--ink); background: transparent; border: 0; font-size: 10px; white-space: nowrap; }
+    .choose-button svg { width: 13px; height: 13px; }
+    .endday-note { margin-top: 16px; padding: 12px 13px; color: #696c65; background: rgba(216,255,92,.22); font-size: 11px; line-height: 1.6; }
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 15px 0; border-bottom: 1px solid var(--line-dark); }
+    .toggle-row strong { display: block; font-size: 12px; }
+    .toggle-row span { display: block; margin-top: 5px; color: #7c7f77; font-size: 11px; line-height: 1.45; }
+    .toggle { width: 42px; height: 23px; padding: 3px; border: 0; background: #bdc0b8; }
+    .toggle::before { content: ""; display: block; width: 17px; height: 17px; background: var(--paper); transition: transform .25s var(--ease); }
+    .toggle.on { background: var(--ink); }
+    .toggle.on::before { transform: translateX(19px); background: var(--lime); }
+    .empty { padding: 28px 0; color: #676b65; font-size: 12px; line-height: 1.7; }
+    .hidden { display: none !important; }
+    @media (max-width: 1050px) {
+      .layout { grid-template-columns: 190px minmax(0,1fr); }
+      .main { padding: 24px; }
+      .topbar { padding: 0 24px; }
+      .dashboard-grid, .lower-grid { grid-template-columns: 1fr; }
+      .capture-card { min-height: 240px; }
+      .recovery-panel { padding: 0; border-left: 0; }
+      .recovery-body { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+      .next-up { margin-top: 0; padding-top: 0; border-top: 0; }
+    }
+    @media (max-width: 720px) {
+      .topbar { height: 68px; padding: 0 16px; }
+      .brand-meta, .date-stamp, .quiet-chip { display: none; }
+      .layout { display: block; min-height: calc(100vh - 68px); }
+      .sidebar { position: sticky; top: 68px; z-index: 4; display: block; padding: 8px 16px; border-right: 0; border-bottom: 1px solid var(--line); background: rgba(18,19,19,.92); backdrop-filter: blur(18px); }
+      .side-label, .sidebar-bottom { display: none; }
+      .side-nav { display: flex; overflow-x: auto; gap: 4px; }
+      .nav-item { width: auto; flex: 0 0 auto; padding: 9px 10px; }
+      .nav-left { font-size: 11px; }
+      .nav-count { display: none; }
+      .main { padding: 23px 16px 30px; }
+      .main-head { align-items: flex-start; margin-bottom: 21px; }
+      .main-title { font-size: 42px; }
+      .head-actions .text-button { padding: 0 11px; }
+      .head-actions .text-button span { display: none; }
+      .current-card { min-height: 400px; padding: 22px; }
+      .current-content h2 { font-size: 47px; max-width: 82%; }
+      .wave-art { right: 15px; top: 150px; transform: rotate(-10deg) scale(.8); transform-origin: right top; }
+      .current-actions { flex-wrap: wrap; }
+      .current-actions .text-button { flex: 1 1 auto; justify-content: center; }
+      .recovery-body { display: block; }
+      .next-up { margin-top: 23px; padding-top: 18px; border-top: 1px solid var(--line); }
+      .detail-grid { grid-template-columns: 1fr; }
+      .modal { padding: 22px; }
+      .switch-context { grid-template-columns: 1fr; }
+      .context-arrow { transform: rotate(90deg); }
+      .toast { left: 16px; right: 16px; bottom: 16px; max-width: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true">接</div>
+        <div>
+          <div class="brand-name">接着 PickUp</div>
+          <div class="brand-meta">Personal work assistant / MVP prototype</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <span class="quiet-chip">本地已保存</span>
+        <span class="date-stamp">2026.09.09 / WED</span>
+        <button class="icon-button" id="settingsButton" aria-label="打开设置" title="设置"><i data-lucide="sliders-horizontal"></i></button>
+      </div>
+    </header>
+    <div class="layout">
+      <aside class="sidebar">
+        <div>
+          <div class="side-label">Workspace</div>
+          <nav class="side-nav" aria-label="主导航">
+            <button class="nav-item active" data-filter="all"><span class="nav-left"><i data-lucide="layout-dashboard"></i>工作台</span><span class="nav-count" id="navAll">0</span></button>
+            <button class="nav-item" data-filter="todo"><span class="nav-left"><i data-lucide="inbox"></i>待处理</span><span class="nav-count" id="navTodo">0</span></button>
+            <button class="nav-item" data-filter="paused"><span class="nav-left"><i data-lucide="pause-circle"></i>已暂停</span><span class="nav-count" id="navPaused">0</span></button>
+            <button class="nav-item" data-filter="waiting"><span class="nav-left"><i data-lucide="clock-3"></i>等待中</span><span class="nav-count" id="navWaiting">0</span></button>
+            <button class="nav-item" data-filter="done"><span class="nav-left"><i data-lucide="archive"></i>已结束</span><span class="nav-count" id="navDone">0</span></button>
+          </nav>
+        </div>
+        <div class="sidebar-bottom">
+          <button class="nav-item" id="endDayButton"><span class="nav-left"><i data-lucide="sunset"></i>今日收尾</span><i data-lucide="arrow-up-right"></i></button>
+          <div class="local-state"><div class="local-state-top"><span>Storage</span><span>Offline first</span></div><strong>状态已在本机保存</strong></div>
+          <div class="sidebar-note">记下新事，接回未完的事。<br>每一次暂停，都留一条回来的线。</div>
+        </div>
+      </aside>
+      <main class="main">
+        <div class="main-head">
+          <div><div class="eyebrow">The thread keeper / 01</div><h1 class="main-title">别让工作<br><em>断在半路。</em></h1></div>
+          <div class="head-actions"><button class="text-button secondary" id="searchButton" title="查看全部任务"><i data-lucide="list-filter"></i><span>查看任务</span></button><button class="text-button" id="quickCaptureButton"><i data-lucide="plus"></i><span>记一件事</span></button></div>
+        </div>
+        <section class="dashboard-grid" aria-label="当前工作">
+          <article class="current-card" id="currentCard"></article>
+          <article class="capture-card">
+            <div>
+              <div class="card-topline"><h3>收件入口</h3><span class="card-id">F01 / CAPTURE</span></div>
+              <p>先收下，不必现在决定。标题就是一条可以回来的线索。</p><div class="context-image" role="img" aria-label="代码工作上下文视觉素材"></div>
+              <button class="capture-trigger" id="captureTrigger"><span class="capture-placeholder"><i data-lucide="pen-line"></i>输入新事项</span><span class="capture-key">N</span></button>
+            </div>
+            <div class="metrics"><div class="metric"><span class="metric-value" id="metricOpen">0</span><span class="metric-label">未结束事项</span></div><div class="metric"><span class="metric-value" id="metricPaused">0</span><span class="metric-label">已暂停</span></div><div class="metric"><span class="metric-value" id="metricToday">0</span><span class="metric-label">今日完成</span></div></div>
+          </article>
+        </section>
+        <section class="lower-grid" aria-label="任务与恢复">
+          <article class="task-board">
+            <div class="section-head"><div><h3>所有线程</h3><span class="section-meta" id="listMeta">按状态查看</span></div><div class="filter-tabs" role="tablist" aria-label="任务筛选"><button class="filter-tab active" data-filter="all">全部</button><button class="filter-tab" data-filter="todo">待处理</button><button class="filter-tab" data-filter="paused">暂停</button><button class="filter-tab" data-filter="waiting">等待</button></div></div>
+            <div class="task-list" id="taskList"></div>
+          </article>
+          <article class="recovery-panel">
+            <div class="section-head"><div><h3>恢复区域</h3><span class="section-meta">Recovery / next move</span></div><i data-lucide="corner-down-left"></i></div>
+            <div class="recovery-body"><div id="recoveryContent"></div><div class="next-up" id="nextUp"></div></div>
+          </article>
+        </section>
+      </main>
+    </div>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="modal-backdrop" id="captureModal" aria-hidden="true">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="captureHeading">
+      <div class="modal-head"><div><div class="modal-eyebrow">Quick capture / F01</div><h2 id="captureHeading">记下新一件事。</h2></div><button class="modal-close" data-close="captureModal" aria-label="关闭"><i data-lucide="x"></i></button></div>
+      <form id="captureForm"><div class="field"><label for="captureTitle">标题</label><input id="captureTitle" name="title" autocomplete="off" placeholder="例如：跟进支付接口的重试策略" required></div><div class="field"><button class="expand-link" id="toggleCaptureNote" type="button"><i data-lucide="plus"></i><span>展开备注</span></button><textarea id="captureNote" name="note" class="hidden" placeholder="可选。粘贴链接、文件路径或一句背景"></textarea></div><p class="helper">Enter 保存为待处理。需要现在处理时，选择“现在处理”。</p><div class="modal-actions"><button class="text-button secondary" type="button" data-close="captureModal">关闭</button><button class="text-button" type="submit" name="intent" value="later">稍后处理 <i data-lucide="arrow-down-right"></i></button><button class="text-button secondary" type="submit" name="intent" value="now">现在处理 <i data-lucide="arrow-up-right"></i></button></div></form>
+    </section>
+  </div>
+  <div class="modal-backdrop" id="switchModal" aria-hidden="true">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="switchHeading">
+      <div class="modal-head"><div><div class="modal-eyebrow" id="switchEyebrow">Switch / F03</div><h2 id="switchHeading">把线索留在这里。</h2></div><button class="modal-close" data-close="switchModal" aria-label="关闭"><i data-lucide="x"></i></button></div>
+      <div class="switch-context" id="switchContext"></div><div class="field"><label for="breakpointInput">断点记录</label><textarea id="breakpointInput" placeholder="下一步做什么？一句话也够。"></textarea></div><div class="current-breakpoint" id="previousBreakpoint"></div>
+      <div class="modal-actions"><button class="text-button secondary" data-close="switchModal" type="button">返回</button><button class="text-button secondary" id="skipSwitchButton" type="button">跳过并切换 <i data-lucide="arrow-right"></i></button><button class="text-button" id="saveSwitchButton" type="button">保存并切换 <i data-lucide="corner-down-left"></i></button></div>
+    </section>
+  </div>
+  <div class="modal-backdrop" id="detailModal" aria-hidden="true">
+    <section class="modal detail-modal" role="dialog" aria-modal="true" aria-labelledby="detailHeading">
+      <div class="modal-head"><div><div class="modal-eyebrow">Task detail / context</div><h2 id="detailHeading">任务详情</h2><div class="detail-status" id="detailStatus"></div></div><button class="modal-close" data-close="detailModal" aria-label="关闭"><i data-lucide="x"></i></button></div>
+      <div class="detail-grid"><div id="detailMain"></div><aside class="detail-side" id="detailSide"></aside></div>
+    </section>
+  </div>
+  <div class="modal-backdrop" id="waitModal" aria-hidden="true">
+    <section class="modal narrow" role="dialog" aria-modal="true" aria-labelledby="waitHeading">
+      <div class="modal-head"><div><div class="modal-eyebrow">Waiting / F05</div><h2 id="waitHeading">等什么？</h2></div><button class="modal-close" data-close="waitModal" aria-label="关闭"><i data-lucide="x"></i></button></div><div class="field"><label for="waitInput">等待原因</label><textarea id="waitInput" placeholder="例如：等待 Mia 确认交互稿"></textarea></div><div class="modal-actions"><button class="text-button secondary" data-close="waitModal" type="button">返回</button><button class="text-button" id="saveWaitButton" type="button">标记等待 <i data-lucide="clock-3"></i></button></div>
+    </section>
+  </div>
+  <div class="modal-backdrop" id="endDayModal" aria-hidden="true">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="endDayHeading">
+      <div class="modal-head"><div><div class="modal-eyebrow">Daily close / F06</div><h2 id="endDayHeading">把今天收好。</h2></div><button class="modal-close" data-close="endDayModal" aria-label="关闭"><i data-lucide="x"></i></button></div><p class="helper" style="margin-top:0">未结束的事情都会留在这里。选一件，作为下一次开工的第一件事。</p><div class="field"><label>下一次开工第一件事</label><div class="endday-list" id="endDayList"></div></div><div class="endday-note" id="endDayCurrentNote"></div><div class="modal-actions"><button class="text-button secondary" data-close="endDayModal" type="button">稍后收尾</button><button class="text-button secondary hidden" id="pauseEndDayButton" type="button"><i data-lucide="pause"></i>暂停并结束</button><button class="text-button" id="finishEndDayButton" type="button">结束收尾 <i data-lucide="check"></i></button></div>
+    </section>
+  </div>
+  <div class="modal-backdrop" id="settingsModal" aria-hidden="true">
+    <section class="modal narrow" role="dialog" aria-modal="true" aria-labelledby="settingsHeading">
+      <div class="modal-head"><div><div class="modal-eyebrow">Preferences / F07</div><h2 id="settingsHeading">让入口安静。</h2></div><button class="modal-close" data-close="settingsModal" aria-label="关闭"><i data-lucide="x"></i></button></div><div class="toggle-row"><div><strong>显示桌面入口</strong><span>在工作区外保留一个轻量入口。</span></div><button class="toggle on" data-setting="desktopEntry" aria-label="切换桌面入口"></button></div><div class="toggle-row"><div><strong>开机启动</strong><span>仅在你明确打开时生效。</span></div><button class="toggle" data-setting="startup" aria-label="切换开机启动"></button></div><div class="toggle-row"><div><strong>保持安静</strong><span>默认不周期弹窗，不播放提醒音。</span></div><button class="toggle on" data-setting="quiet" aria-label="切换安静模式"></button></div><div class="modal-actions"><button class="text-button" data-close="settingsModal" type="button">完成 <i data-lucide="check"></i></button></div>
+    </section>
+  </div>
+  <script>
+    const STORAGE_KEY = 'pickup-prototype-v2';
+    const seed = {
+      tasks: [
+        { id: 'task-api', title: '排查接口超时', status: 'doing', note: '错误集中在支付服务的重试边界，先保留现场。', created: '2026-09-08T09:10:00', updated: '2026-09-09T09:42:00', breakpoints: [{ time: '09:42', text: '已排除数据库慢查询；下一步检查下游重试配置。', refs: 'trace: payments/api #4821' }] },
+        { id: 'task-orders', title: '查询昨日订单数据', status: 'todo', note: '补齐运营复盘里缺的样本，先查退款异常。', created: '2026-09-09T09:31:00', updated: '2026-09-09T09:31:00', breakpoints: [] },
+        { id: 'task-incident', title: '处理线上故障', status: 'paused', note: '线上告警已降级，等待下一轮指标确认。', created: '2026-09-08T14:25:00', updated: '2026-09-09T08:52:00', breakpoints: [{ time: '08:52', text: '已切换临时限流规则；下一步看 10 分钟错误率。', refs: 'monitor: edge / p95' }] },
+        { id: 'task-review', title: '跟进设计评审意见', status: 'waiting', note: '等反馈回来后再统一改交互稿。', wait: '等待 Mia 确认交互稿', created: '2026-09-08T17:08:00', updated: '2026-09-08T17:24:00', breakpoints: [{ time: '17:24', text: '评审意见已整理，等确认后修改。', refs: 'doc: review-notes' }] },
+        { id: 'task-cleanup', title: '整理本周技术债', status: 'done', note: '把零散问题归档到下周计划。', created: '2026-09-07T13:20:00', updated: '2026-09-09T08:15:00', completed: '2026-09-09T08:15:00', breakpoints: [{ time: '08:15', text: '已归档并标注优先级。', refs: '' }] }
+      ],
+      nextUp: 'task-api',
+      draft: '',
+      settings: { desktopEntry: true, startup: false, quiet: true }
+    };
+    let state = loadState();
+    let activeFilter = 'all';
+    let switchContext = { mode: 'switch', fromId: null, toId: null };
+    let waitId = null;
+    let toastTimer;
+    const $ = (selector) => document.querySelector(selector);
+    const $$ = (selector) => [...document.querySelectorAll(selector)];
+    const escapeHTML = (value) => String(value || '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+    const statusLabel = { todo: '待处理', doing: '进行中', paused: '已暂停', waiting: '等待中', done: '已完成', cancelled: '已取消' };
+    const statusIcon = { todo: 'inbox', doing: 'play', paused: 'pause', waiting: 'clock-3', done: 'check', cancelled: 'x' };
+
+    function loadState() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        if (saved && saved.tasks) return { ...seed, ...saved, settings: { ...seed.settings, ...(saved.settings || {}) } };
+      } catch (error) {}
+      return JSON.parse(JSON.stringify(seed));
+    }
+    function persist() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    function currentTask() { return state.tasks.find((task) => task.status === 'doing'); }
+    function openTasks() { return state.tasks.filter((task) => ['todo', 'doing', 'paused', 'waiting'].includes(task.status)); }
+    function pausedTasks() { return state.tasks.filter((task) => task.status === 'paused').sort((a, b) => new Date(b.updated) - new Date(a.updated)); }
+    function todayDone() { return state.tasks.filter((task) => task.status === 'done' && String(task.completed || '').startsWith('2026-09-09')); }
+    function formatTime(value) { return new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }); }
+    function formatDate(value) { return new Date(value).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }); }
+    function latestBreakpoint(task) { return task && task.breakpoints && task.breakpoints[task.breakpoints.length - 1]; }
+    function nextText(task) { return (latestBreakpoint(task) && latestBreakpoint(task).text) || '还没有保存断点，打开详情查看上下文。'; }
+    function statusMarkup(status) { return '<span class="task-status"><i data-lucide="' + (statusIcon[status] || 'circle') + '"></i>' + (statusLabel[status] || status) + '</span>'; }
+
+    function render() {
+      const open = openTasks();
+      const paused = pausedTasks();
+      $('#navAll').textContent = open.length;
+      $('#navTodo').textContent = state.tasks.filter((task) => task.status === 'todo').length;
+      $('#navPaused').textContent = paused.length;
+      $('#navWaiting').textContent = state.tasks.filter((task) => task.status === 'waiting').length;
+      $('#navDone').textContent = state.tasks.filter((task) => task.status === 'done' || task.status === 'cancelled').length;
+      $('#metricOpen').textContent = open.length;
+      $('#metricPaused').textContent = paused.length;
+      $('#metricToday').textContent = todayDone().length;
+      renderCurrent(currentTask());
+      renderList();
+      renderRecovery(paused);
+      renderNextUp();
+      lucide.createIcons();
+    }
+
+    function renderCurrent(current) {
+      if (!current) {
+        $('#currentCard').innerHTML = '<div class="card-topline"><div class="card-kicker">NOW / OPEN SLOT</div><div class="card-id">F02 / CURRENT</div></div><div class="current-content"><h2>现在准备做什么？</h2><div class="next-line"><i data-lucide="sparkles"></i><span>选择一件未结束的事开始，或者先把新事项收进来。</span></div></div><div class="current-actions"><button class="text-button" id="chooseTaskButton"><i data-lucide="list-start"></i>选择任务</button><button class="text-button secondary" id="emptyCaptureButton"><i data-lucide="plus"></i>记一件事</button></div>';
+        $('#chooseTaskButton').addEventListener('click', () => setFilterAndFocus('todo'));
+        $('#emptyCaptureButton').addEventListener('click', openCapture);
+        return;
+      }
+      const breakpoint = latestBreakpoint(current);
+      $('#currentCard').innerHTML = '<div class="card-topline"><div class="card-kicker">CURRENT / IN PROGRESS</div><div class="card-id">F02 / ' + escapeHTML(current.id.toUpperCase()) + '</div></div><div class="current-content"><h2>' + escapeHTML(current.title) + '</h2><div class="next-line"><i data-lucide="arrow-down-right"></i><span><strong>下一步：</strong>' + escapeHTML(breakpoint ? breakpoint.text : '还没有保存断点。完成一小步，再回来留下一句。') + '</span></div></div><div class="wave-art" aria-hidden="true">' + Array.from({ length: 14 }, () => '<span></span>').join('') + '<div class="wave-axis"></div></div><div class="current-actions"><button class="text-button secondary" id="pauseButton"><i data-lucide="pause"></i>暂停并留线索</button><button class="text-button secondary" id="completeButton"><i data-lucide="check"></i>完成</button><button class="icon-button" id="currentDetailButton" aria-label="查看当前任务详情" title="查看详情"><i data-lucide="maximize-2"></i></button></div>';
+      $('#pauseButton').addEventListener('click', () => openPause(current.id));
+      $('#completeButton').addEventListener('click', () => completeTask(current.id));
+      $('#currentDetailButton').addEventListener('click', () => openDetail(current.id));
+    }
+
+    function renderList() {
+      const source = activeFilter === 'all' ? state.tasks.filter((task) => task.status !== 'cancelled') : activeFilter === 'done' ? state.tasks.filter((task) => task.status === 'done' || task.status === 'cancelled') : state.tasks.filter((task) => task.status === activeFilter);
+      const sorted = source.sort((a, b) => {
+        if (activeFilter === 'done') return new Date(b.completed || b.updated) - new Date(a.completed || a.updated);
+        if (activeFilter === 'paused' || activeFilter === 'waiting') return new Date(b.updated) - new Date(a.updated);
+        return new Date(a.created) - new Date(b.created);
+      });
+      $('#listMeta').textContent = sorted.length + ' 条记录 / ' + (activeFilter === 'all' ? '当前工作区' : statusLabel[activeFilter]);
+      if (!sorted.length) { $('#taskList').innerHTML = '<div class="empty">这里暂时没有记录。先记下一件新事，给未来的自己留个入口。</div>'; return; }
+      $('#taskList').innerHTML = sorted.map((task) => '<article class="task-row" tabindex="0" data-task-id="' + escapeHTML(task.id) + '"><span class="status-dot ' + task.status + '"></span><div class="task-main"><div class="task-title">' + escapeHTML(task.title) + '</div><div class="task-sub">' + (task.status === 'waiting' ? '<span class="accent">' + escapeHTML(task.wait || '等待条件') + '</span>' : escapeHTML(latestBreakpoint(task) ? latestBreakpoint(task).text : (task.note || '尚未留下说明'))) + '</div></div><div class="row-actions"><button class="mini-button" data-action="open" aria-label="打开详情" title="查看详情"><i data-lucide="arrow-up-right"></i></button>' + (task.status !== 'done' && task.status !== 'cancelled' ? '<button class="mini-button" data-action="start" aria-label="开始任务" title="开始或继续"><i data-lucide="play"></i></button>' : '') + '</div>' + statusMarkup(task.status) + '</article>').join('');
+      $$('#taskList .task-row').forEach((row) => {
+        const id = row.dataset.taskId;
+        row.addEventListener('click', (event) => { if (!event.target.closest('button')) openDetail(id); });
+        row.addEventListener('keydown', (event) => { if (event.key === 'Enter') openDetail(id); });
+        row.querySelector('[data-action="open"]') && row.querySelector('[data-action="open"]').addEventListener('click', (event) => { event.stopPropagation(); openDetail(id); });
+        row.querySelector('[data-action="start"]') && row.querySelector('[data-action="start"]').addEventListener('click', (event) => { event.stopPropagation(); startTask(id); });
+      });
+    }
+    function renderRecovery(paused) {
+      const recommendation = paused[0];
+      const todo = state.tasks.find((task) => task.status === 'todo');
+      if (!recommendation) {
+        $('#recoveryContent').innerHTML = '<div class="recovery-body-copy"><p class="recovery-intro">完成当前任务后，这里会出现最近暂停的工作和它的下一步。</p>' + (todo ? '<div class="recommend-card"><div class="recommend-label">Next available</div><div class="recommend-title">' + escapeHTML(todo.title) + '</div><div class="recommend-note">待处理事项已准备好。选择它，进入正常的开始流程。</div><div class="recommend-actions"><button class="text-button" data-recover="' + escapeHTML(todo.id) + '">开始 <i data-lucide="play"></i></button></div></div>' : '<div class="empty">没有需要恢复的事项。当前工作区是空的。</div>') + '</div>';
+        $('#recoveryContent').querySelector('[data-recover]') && $('#recoveryContent').querySelector('[data-recover]').addEventListener('click', () => startTask(todo.id));
+        return;
+      }
+      $('#recoveryContent').innerHTML = '<p class="recovery-intro">最近暂停的事项会先出现在这里。推荐只是建议，不会自动替你开始。</p><div class="recommend-card"><div class="recommend-label">Recommended recovery</div><div class="recommend-title">' + escapeHTML(recommendation.title) + '</div><div class="recommend-note">' + escapeHTML(nextText(recommendation)) + '</div><div class="recommend-meta"><i data-lucide="pause-circle"></i>' + escapeHTML(formatDate(recommendation.updated)) + ' ' + escapeHTML(formatTime(recommendation.updated)) + ' 暂停</div><div class="recommend-actions"><button class="text-button" data-recover="' + escapeHTML(recommendation.id) + '">继续这件事 <i data-lucide="arrow-up-right"></i></button><button class="text-button secondary" id="chooseOtherButton">选择其他</button></div></div>';
+      $('#recoveryContent [data-recover]').addEventListener('click', () => startTask(recommendation.id));
+      $('#chooseOtherButton').addEventListener('click', () => setFilterAndFocus('paused'));
+    }
+    function renderNextUp() {
+      const task = state.tasks.find((item) => item.id === state.nextUp && ['todo', 'paused', 'waiting', 'doing'].includes(item.status));
+      if (!task) {
+        $('#nextUp').innerHTML = '<div class="next-up-head"><span>Next start</span><button id="pickNextButton">选择 <i data-lucide="arrow-up-right"></i></button></div><div class="next-up-empty">还没有指定下一次开工的第一件事。</div>';
+        $('#pickNextButton').addEventListener('click', openEndDay);
+        return;
+      }
+      $('#nextUp').innerHTML = '<div class="next-up-head"><span>Next start</span><button id="changeNextButton">更换 <i data-lucide="arrow-up-right"></i></button></div><div class="next-up-item"><i data-lucide="corner-down-left"></i><span>' + escapeHTML(task.title) + '</span></div>';
+      $('#changeNextButton').addEventListener('click', openEndDay);
+    }
+    function openModal(id) { const modal = document.getElementById(id); modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false'); setTimeout(() => modal.querySelector('input, textarea, button') && modal.querySelector('input, textarea, button').focus(), 30); lucide.createIcons(); }
+    function closeModal(id) { const modal = document.getElementById(id); if (!modal) return; modal.classList.remove('open'); modal.setAttribute('aria-hidden', 'true'); }
+    function showToast(message, error) { const toast = $('#toast'); toast.textContent = message; toast.classList.toggle('error', !!error); toast.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 3000); }
+    function setFilterAndFocus(filter) { activeFilter = filter; $$('.filter-tab').forEach((tab) => tab.classList.toggle('active', tab.dataset.filter === filter)); $$('.nav-item[data-filter]').forEach((item) => item.classList.toggle('active', item.dataset.filter === filter)); renderList(); document.querySelector('.task-board').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    function openCapture() { $('#captureTitle').value = state.draft || ''; $('#captureNote').value = ''; $('#captureNote').classList.add('hidden'); $('#toggleCaptureNote span').textContent = '展开备注'; openModal('captureModal'); }
+    function createTask(title, note, intent) { const task = { id: 'task-' + Date.now(), title: title.trim(), status: 'todo', note: note.trim(), created: new Date().toISOString(), updated: new Date().toISOString(), breakpoints: [] }; state.tasks.push(task); state.draft = ''; persist(); closeModal('captureModal'); render(); showToast('已收下这件事，当前工作保持不变。'); if (intent === 'now') startTask(task.id); }
+    function openSwitch(fromId, toId, mode) {
+      const from = state.tasks.find((task) => task.id === fromId); const to = toId ? state.tasks.find((task) => task.id === toId) : null;
+      switchContext = { mode: mode || 'switch', fromId: fromId, toId: toId };
+      $('#switchEyebrow').textContent = switchContext.mode === 'pause' ? 'Pause / F03' : 'Switch / F03';
+      $('#switchHeading').textContent = switchContext.mode === 'pause' ? '把线索留在这里。' : '先保存，再继续。';
+      $('#switchContext').innerHTML = '<div class="context-box"><span>' + (switchContext.mode === 'pause' ? '正在暂停' : '当前任务') + '</span><strong>' + escapeHTML(from ? from.title : '没有当前任务') + '</strong></div><div class="context-arrow"><i data-lucide="arrow-right"></i></div><div class="context-box"><span>' + (switchContext.mode === 'pause' ? '当前位' : '下一件事') + '</span><strong>' + escapeHTML(to ? to.title : '暂时空着') + '</strong></div>';
+      const previous = latestBreakpoint(from);
+      $('#previousBreakpoint').innerHTML = previous ? '<strong>最近一条断点</strong><br>' + escapeHTML(previous.text) : '<strong>最近一条断点</strong><br>尚未记录断点。你可以跳过，历史不会被覆盖。';
+      $('#breakpointInput').value = '';
+      $('#skipSwitchButton').textContent = switchContext.mode === 'pause' ? '暂不记录' : '跳过并切换';
+      $('#saveSwitchButton').innerHTML = switchContext.mode === 'pause' ? '保存并暂停 <i data-lucide="pause"></i>' : '保存并切换 <i data-lucide="corner-down-left"></i>';
+      openModal('switchModal');
+    }
+    function openPause(id) { openSwitch(id, null, 'pause'); }
+    function applyBreakpoint(task, text) { const clean = text.trim(); if (!clean) return; task.breakpoints = (task.breakpoints || []).concat([{ time: formatTime(new Date()), text: clean, refs: '' }]); }
+    function finishSwitch(saveBreakpoint) {
+      const from = state.tasks.find((task) => task.id === switchContext.fromId); const to = state.tasks.find((task) => task.id === switchContext.toId);
+      if (from && saveBreakpoint) applyBreakpoint(from, $('#breakpointInput').value);
+      if (from) { from.status = 'paused'; from.updated = new Date().toISOString(); }
+      if (switchContext.mode === 'switch' && to) { state.tasks.forEach((task) => { if (task.id !== to.id && task.status === 'doing') task.status = 'paused'; }); to.status = 'doing'; to.updated = new Date().toISOString(); state.nextUp = to.id; }
+      persist(); closeModal('switchModal'); render(); showToast(switchContext.mode === 'pause' ? '已暂停，回来时从这条线索继续。' : '已保存断点并切换任务。');
+    }
+    function startTask(id) {
+      const target = state.tasks.find((task) => task.id === id); if (!target || target.status === 'done' || target.status === 'cancelled') return;
+      const current = currentTask(); if (current && current.id === id) return showToast('这件事已经是当前任务。');
+      if (current) return openSwitch(current.id, id, 'switch');
+      target.status = 'doing'; target.updated = new Date().toISOString(); state.nextUp = id; persist(); render(); showToast('已开始：' + target.title);
+    }
+    function completeTask(id) {
+      const task = state.tasks.find((item) => item.id === id); if (!task || task.status === 'done' || task.status === 'cancelled') return;
+      const wasCurrent = task.status === 'doing'; task.status = 'done'; task.completed = new Date().toISOString(); task.updated = task.completed; if (state.nextUp === id) state.nextUp = null;
+      persist(); render(); showToast(wasCurrent ? '已完成。恢复区域已经为你留出下一步。' : '已标记完成。');
+    }
+    function openDetail(id) {
+      const task = state.tasks.find((item) => item.id === id); if (!task) return;
+      $('#detailHeading').textContent = task.title;
+      $('#detailStatus').innerHTML = '<span class="status-dot ' + task.status + '"></span>' + statusLabel[task.status];
+      const history = (task.breakpoints || []).slice().reverse();
+      $('#detailMain').innerHTML = '<div class="detail-section"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><h4 style="margin:0">备注</h4><button class="expand-link" id="editDetailButton" type="button"><i data-lucide="pencil"></i>编辑</button></div><p class="detail-copy" style="margin-top:12px">' + escapeHTML(task.note || '还没有备注。') + '</p></div><div class="detail-section"><h4>断点历史</h4>' + (history.length ? history.map((item) => '<div class="breakpoint-item"><div class="breakpoint-time">' + escapeHTML(item.time) + '</div><div class="breakpoint-text">' + escapeHTML(item.text) + (item.refs ? '<br><span style="color:#878a82">' + escapeHTML(item.refs) + '</span>' : '') + '</div></div>').join('') : '<p class="detail-copy">尚未留下断点。下一次暂停时，一句话就够。</p>') + '</div>';
+      let actions = '';
+      if (task.status !== 'done' && task.status !== 'cancelled') actions += '<button class="text-button" id="detailStartButton"><i data-lucide="play"></i>' + (task.status === 'doing' ? '正在处理' : '继续处理') + '</button><button class="text-button secondary" id="detailWaitButton"><i data-lucide="clock-3"></i>标记等待</button><button class="text-button secondary" id="detailDoneButton"><i data-lucide="check"></i>完成</button>';
+      if (task.status !== 'done' && task.status !== 'cancelled') actions += '<button class="text-button secondary" id="detailCancelButton"><i data-lucide="archive-x"></i>取消这件事</button>';
+      if (task.status === 'done' || task.status === 'cancelled') actions += '<button class="text-button" id="detailReopenButton"><i data-lucide="rotate-ccw"></i>重新打开</button>';
+      $('#detailSide').innerHTML = '<label>Created</label><div class="side-stat">' + escapeHTML(formatDate(task.created)) + '</div><p>' + escapeHTML(formatTime(task.created)) + ' 创建<br>' + (task.completed ? escapeHTML(formatTime(task.completed)) + ' 结束' : '仍在工作区里') + '</p>' + (task.wait ? '<div class="detail-section" style="margin-top:18px"><h4>等待原因</h4><p class="detail-copy">' + escapeHTML(task.wait) + '</p></div>' : '') + '<div class="detail-actions">' + actions + '</div>';
+      openModal('detailModal');
+      $('#detailStartButton') && $('#detailStartButton').addEventListener('click', () => { closeModal('detailModal'); startTask(id); });
+      $('#detailWaitButton') && $('#detailWaitButton').addEventListener('click', () => { closeModal('detailModal'); openWait(id); });
+      $('#detailDoneButton') && $('#detailDoneButton').addEventListener('click', () => { closeModal('detailModal'); completeTask(id); });
+      $('#detailCancelButton') && $('#detailCancelButton').addEventListener('click', () => cancelTask(id));
+      $('#detailReopenButton') && $('#detailReopenButton').addEventListener('click', () => reopenTask(id));
+      $('#editDetailButton').addEventListener('click', () => editDetail(task));
+    }
+    function editDetail(task) {
+      $('#detailMain').querySelector('.detail-section').innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><h4 style="margin:0">编辑内容</h4><button class="expand-link" id="cancelEditButton" type="button">返回</button></div><div class="field"><label for="editTaskTitle">标题</label><input id="editTaskTitle" value="' + escapeHTML(task.title) + '"></div><div class="field"><label for="editTaskNote">备注</label><textarea id="editTaskNote">' + escapeHTML(task.note || '') + '</textarea></div><div class="modal-actions"><button class="text-button" id="saveEditButton" type="button">保存修改 <i data-lucide="check"></i></button></div>';
+      $('#editTaskTitle').value = task.title; $('#editTaskNote').value = task.note || ''; lucide.createIcons();
+      $('#cancelEditButton').addEventListener('click', () => openDetail(task.id));
+      $('#saveEditButton').addEventListener('click', () => { const title = $('#editTaskTitle').value.trim(); if (!title) return showToast('标题不能为空。', true); task.title = title; task.note = $('#editTaskNote').value.trim(); task.updated = new Date().toISOString(); persist(); render(); openDetail(task.id); showToast('任务内容已更新，状态保持不变。'); });
+    }
+    function cancelTask(id) { const task = state.tasks.find((item) => item.id === id); if (!task) return; task.status = 'cancelled'; task.updated = new Date().toISOString(); if (state.nextUp === id) state.nextUp = null; persist(); closeModal('detailModal'); render(); showToast('已取消这件事。需要时可从已结束重新打开。'); }
+    function reopenTask(id) { const task = state.tasks.find((item) => item.id === id); if (!task) return; task.status = 'todo'; task.completed = null; task.updated = new Date().toISOString(); persist(); closeModal('detailModal'); render(); showToast('已重新打开，断点历史仍然保留。'); }
+    function openWait(id) { waitId = id; $('#waitInput').value = state.tasks.find((task) => task.id === id).wait || ''; openModal('waitModal'); }
+    function openEndDay() {
+      const candidates = openTasks().filter((task) => task.status !== 'doing');
+      $('#endDayList').innerHTML = candidates.length ? candidates.map((task) => '<div class="endday-item ' + (task.id === state.nextUp ? 'selected' : '') + '" data-pick-id="' + escapeHTML(task.id) + '"><span class="status-dot ' + task.status + '"></span><div><div class="endday-title">' + escapeHTML(task.title) + '</div><div class="endday-sub">' + escapeHTML(statusLabel[task.status]) + ' / ' + escapeHTML(nextText(task).slice(0, 42)) + '</div></div><button class="choose-button" type="button">' + (task.id === state.nextUp ? '已选择' : '选为第一件事') + ' <i data-lucide="arrow-up-right"></i></button></div>').join('') : '<div class="empty">今天没有需要交接的事项。</div>';
+      $$('#endDayList .endday-item').forEach((item) => item.addEventListener('click', () => { state.nextUp = item.dataset.pickId; $$('#endDayList .endday-item').forEach((row) => row.classList.toggle('selected', row.dataset.pickId === state.nextUp)); $$('#endDayList .choose-button').forEach((button) => { button.firstChild.textContent = button.closest('.endday-item').dataset.pickId === state.nextUp ? '已选择' : '选为第一件事'; }); }));
+      const current = currentTask(); $('#endDayCurrentNote').textContent = current ? '当前仍在进行：' + current.title + '。结束收尾时会保留当前状态；如需暂停，请先在当前卡片保存断点。' : '当前没有进行中的任务。结束收尾只会记录你的下一次开工选择。';
+      $('#pauseEndDayButton').classList.toggle('hidden', !current);
+      openModal('endDayModal');
+    }
+    function updateSetting(key, button) { state.settings[key] = !state.settings[key]; button.classList.toggle('on', state.settings[key]); persist(); showToast((state.settings[key] ? '已开启：' : '已关闭：') + (key === 'desktopEntry' ? '桌面入口' : key === 'startup' ? '开机启动' : '安静模式')); }
+    function pauseCurrentForEndDay() { const current = currentTask(); if (!current) return; current.status = 'paused'; current.updated = new Date().toISOString(); persist(); closeModal('endDayModal'); render(); showToast('当前任务已暂停，明天可以从恢复区域接着做。'); }
+    $$('#captureTrigger, #quickCaptureButton').forEach((button) => button.addEventListener('click', openCapture));
+    $('#captureForm').addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const title = String(form.get('title') || ''); if (!title.trim()) return showToast('请先写下事项标题。', true); const intent = event.submitter ? event.submitter.value : 'later'; createTask(title, String(form.get('note') || ''), intent); });
+    $('#captureTitle').addEventListener('input', (event) => { state.draft = event.target.value; persist(); });
+    $('#toggleCaptureNote').addEventListener('click', () => { const note = $('#captureNote'); const hidden = note.classList.toggle('hidden'); $('#toggleCaptureNote span').textContent = hidden ? '展开备注' : '收起备注'; });
+    $('#saveSwitchButton').addEventListener('click', () => finishSwitch(true));
+    $('#skipSwitchButton').addEventListener('click', () => finishSwitch(false));
+    $('#saveWaitButton').addEventListener('click', () => { const task = state.tasks.find((item) => item.id === waitId); if (!task) return; task.wait = $('#waitInput').value.trim() || '等待外部条件'; task.status = 'waiting'; task.updated = new Date().toISOString(); persist(); closeModal('waitModal'); render(); showToast('已标记等待，不会主动打扰你。'); });
+    $('#pauseEndDayButton').addEventListener('click', pauseCurrentForEndDay);
+    $('#finishEndDayButton').addEventListener('click', () => { persist(); closeModal('endDayModal'); render(); showToast(state.nextUp ? '收尾完成。下一次开工会从你选择的事项开始。' : '收尾完成。所有事项已保留在工作区。'); });
+    $('#settingsButton').addEventListener('click', () => { $$('.toggle').forEach((button) => button.classList.toggle('on', !!state.settings[button.dataset.setting])); openModal('settingsModal'); });
+    $$('.toggle').forEach((button) => button.addEventListener('click', () => updateSetting(button.dataset.setting, button)));
+    $('#endDayButton').addEventListener('click', openEndDay);
+    $('#searchButton').addEventListener('click', () => { setFilterAndFocus('all'); showToast('已展开全部任务。'); });
+    $$('.filter-tab').forEach((tab) => tab.addEventListener('click', () => setFilterAndFocus(tab.dataset.filter)));
+    $$('.nav-item[data-filter]').forEach((item) => item.addEventListener('click', () => setFilterAndFocus(item.dataset.filter)));
+    $$('.modal-backdrop').forEach((backdrop) => backdrop.addEventListener('click', (event) => { if (event.target === backdrop) closeModal(backdrop.id); }));
+    $$('[data-close]').forEach((button) => button.addEventListener('click', () => { const modal = button.dataset.close; if (modal === 'captureModal' && $('#captureTitle').value.trim()) { state.draft = $('#captureTitle').value; persist(); } closeModal(modal); }));
+    document.addEventListener('keydown', (event) => { if (event.key.toLowerCase() === 'n' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) { event.preventDefault(); openCapture(); } if (event.key === 'Escape') $$('.modal-backdrop.open').forEach((modal) => closeModal(modal.id)); });
+    render();
+  </script>
+</body>
+</html>

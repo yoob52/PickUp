@@ -1,0 +1,56 @@
+{
+  "name": "pickup",
+  "version": "0.1.0",
+  "private": true,
+  "description": "接着 PickUp — 本地个人工作助手",
+  "author": "PickUp",
+  "license": "UNLICENSED",
+  "main": "out/main/index.js",
+  "engines": {
+    "node": "24.12.0",
+    "npm": "11.6.2"
+  },
+  "packageManager": "npm@11.6.2",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "vitest run",
+    "build": "npm run typecheck && electron-vite build",
+    "test:integration": "npm run build && node scripts/run-integration.mjs",
+    "test:e2e": "npm run build && playwright test",
+    "check": "npm run typecheck && npm run format:check && npm test",
+    "rebuild:native": "electron-builder install-app-deps",
+    "postinstall": "node scripts/install-runtime.mjs && npm run rebuild:native",
+    "pack": "npm run build && electron-builder --dir --win --x64",
+    "dist": "npm run build && electron-builder --win nsis --x64",
+    "format": "prettier --write src tests scripts *.ts *.json *.yml",
+    "format:check": "prettier --check src tests scripts *.ts *.json *.yml"
+  },
+  "dependencies": {
+    "better-sqlite3": "12.11.1",
+    "lucide-react": "1.43.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zod": "4.6.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "24.13.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "42.11.3",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "jsdom": "26.1.0",
+    "prettier": "3.9.6",
+    "typescript": "5.9.3",
+    "vite": "7.3.6",
+    "vitest": "4.1.11"
+  }
+}
