@@ -1,15 +1,8 @@
-import {
-  app,
-  BrowserWindow,
-  ipcMain,
-  net,
-  protocol,
-  type IpcMainInvokeEvent,
-} from "electron";
+import { app, BrowserWindow, net, protocol } from "electron";
 import { mkdir } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { createTaskSchema, type Snapshot } from "../shared/contracts";
+import { registerIpcHandlers } from "./ipc";
 import { StoreClient } from "./worker-client";
 import { runIntegration } from "./integration";
 
@@ -28,16 +21,6 @@ if (!app.isPackaged)
 if (e2eMode && process.env.PICKUP_TEST_DATA)
   app.setPath("userData", resolve(process.env.PICKUP_TEST_DATA));
 
-function trusted(event: IpcMainInvokeEvent) {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  if (!win || event.senderFrame !== event.sender.mainFrame)
-    throw new Error("Invalid IPC sender");
-  const url = new URL(event.senderFrame.url);
-  const dev = process.env.ELECTRON_RENDERER_URL;
-  if (url.protocol === "pickup:" && url.host === "app") return;
-  if (!app.isPackaged && dev && url.origin === new URL(dev).origin) return;
-  throw new Error("Invalid IPC origin");
-}
 async function main() {
   if (testMode) {
     await app.whenReady();
@@ -66,47 +49,18 @@ async function main() {
   const data = join(app.getPath("userData"), "data");
   await mkdir(data, { recursive: true });
   store = new StoreClient(join(data, "pickup.sqlite"));
-  let databaseReady = true;
   try {
     await store.ready;
+    if (store.backupPath)
+      console.log("database-upgraded", {
+        schemaVersion: store.schemaVersion,
+        hasBackup: true,
+      });
   } catch {
-    databaseReady = false;
+    // 失败原因通过 IPC 结果返回给界面；这里只记录类别，不记录数据内容。
+    console.error("database-unavailable", {});
   }
-  ipcMain.handle("pickup:snapshot", async (event) => {
-    trusted(event);
-    return databaseReady
-      ? store!.send<Snapshot>({ kind: "snapshot" })
-      : {
-          ok: false,
-          code: "DB_UNAVAILABLE",
-          message: "数据库初始化失败。原数据已保留，请关闭后检查存储环境。",
-        };
-  });
-  ipcMain.handle("pickup:create", async (event, raw: unknown) => {
-    trusted(event);
-    const parsed = createTaskSchema.safeParse(raw);
-    if (!parsed.success)
-      return {
-        ok: false,
-        code: "VALIDATION_ERROR",
-        message: "请填写有效标题。",
-      };
-    if (!databaseReady)
-      return {
-        ok: false,
-        code: "DB_UNAVAILABLE",
-        message: "数据库当前不可用，请保留输入。",
-      };
-    const result = await store!.send<{ taskId: string }>({
-      kind: "create",
-      input: parsed.data,
-    });
-    if (result.ok)
-      for (const win of BrowserWindow.getAllWindows())
-        if (!win.isDestroyed())
-          win.webContents.send("pickup:changed", result.revision);
-    return result;
-  });
+  registerIpcHandlers(store);
   const rendererRoot = resolve(__dirname, "../renderer");
   protocol.handle("pickup", async (request) => {
     const url = new URL(request.url);

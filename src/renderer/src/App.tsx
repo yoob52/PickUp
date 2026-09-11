@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowDownToLine, Plus } from "lucide-react";
-import type { CreateTaskInput, Snapshot } from "../../shared/contracts";
+import type {
+  CreateTaskInput,
+  WorkspaceSnapshot,
+} from "../../shared/contracts";
+import { TASK_STATUS_LABEL, emptyWorkspaceSnapshot } from "../../shared/task";
 export function App() {
-  const [snapshot, setSnapshot] = useState<Snapshot>({
-    revision: 0,
-    tasks: [],
-  });
+  const [snapshot, setSnapshot] = useState<WorkspaceSnapshot>(
+    emptyWorkspaceSnapshot,
+  );
   const [title, setTitle] = useState(""),
     [note, setNote] = useState(""),
     [message, setMessage] = useState("正在读取本地数据…"),
@@ -18,7 +21,7 @@ export function App() {
     const refresh = async () => {
       const seq = ++sequence.current;
       try {
-        const result = await window.pickup.snapshot();
+        const result = await window.pickup.getWorkspaceSnapshot();
         if (active && seq === sequence.current) {
           if (result.ok) {
             setSnapshot((current) =>
@@ -61,7 +64,7 @@ export function App() {
         setTitle("");
         setNote("");
         setMessage("已收下，保存为待处理。");
-        const refreshed = await window.pickup.snapshot();
+        const refreshed = await window.pickup.getWorkspaceSnapshot();
         if (refreshed.ok)
           setSnapshot((current) =>
             refreshed.revision >= current.revision ? refreshed.value : current,
@@ -126,17 +129,17 @@ export function App() {
         </section>
         <section className="list">
           <h2>
-            待处理 <span>{snapshot.tasks.length}</span>
+            未结束 <span>{snapshot.counts.unfinished}</span>
           </h2>
-          {snapshot.tasks.length === 0 ? (
+          {snapshot.unfinished.length === 0 ? (
             <p className="empty">还没有事项，从左侧记下第一件。</p>
           ) : (
             <ul>
-              {snapshot.tasks.map((task) => (
+              {snapshot.unfinished.map((task) => (
                 <li key={task.id}>
                   <strong>{task.title}</strong>
                   {task.note && <p>{task.note}</p>}
-                  <small>待处理</small>
+                  <small>{TASK_STATUS_LABEL[task.status]}</small>
                 </li>
               ))}
             </ul>

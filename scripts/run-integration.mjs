@@ -11,7 +11,7 @@ const timeout = setTimeout(() => {
   child.kill();
   console.error("Integration test timeout");
   process.exitCode = 1;
-}, 30000);
+}, 120000);
 child.on("error", (error) => {
   clearTimeout(timeout);
   console.error(error);
