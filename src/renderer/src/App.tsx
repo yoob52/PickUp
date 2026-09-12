@@ -7,6 +7,7 @@ import { WidgetApp } from "./views/WidgetApp";
 
 export function App() {
   const kind = getWindowKind();
+  document.documentElement.dataset.window = kind;
   return (
     <WorkspaceProvider>
       <ToastProvider>

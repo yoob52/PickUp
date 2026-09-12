@@ -206,12 +206,14 @@ export function createQueries(db: SqliteDatabase) {
     const where = "t.status = 'done' AND t.ended_at >= ? AND t.ended_at < ?";
     const parameters = [input.startUtc, input.endUtc];
     const total = countTasks(db, where, parameters);
+    const offset = input.completedOffset ?? 0;
+    const limit = input.completedLimit;
     const completedRows = selectTaskRowsPaged(
       db,
       where,
       parameters,
-      input.completedLimit,
-      0,
+      limit,
+      offset,
     );
     const unfinished = readAllSummaries(db, UNFINISHED_PREDICATE);
     const state = readAppState(db);
@@ -223,9 +225,9 @@ export function createQueries(db: SqliteDatabase) {
       completedToday: {
         items: mapTaskSummaries(db, completedRows),
         total,
-        offset: 0,
-        limit: input.completedLimit,
-        hasMore: completedRows.length < total,
+        offset,
+        limit,
+        hasMore: offset + completedRows.length < total,
       },
       unfinished,
       counts: readCounts(db),

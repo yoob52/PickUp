@@ -31,7 +31,7 @@ export function ResumePanel({
       <div className="section-head">
         <div>
           <h3>恢复区域</h3>
-          <span className="section-meta">Recovery / next move</span>
+          <span className="section-meta">下一步从这里接回</span>
         </div>
       </div>
       <div className="recovery-body">
@@ -43,7 +43,7 @@ export function ResumePanel({
                 : "最近暂停的事项会先出现在这里。推荐只是建议。"}
             </p>
             <div className="recommend-card">
-              <div className="recommend-label">Recommended recovery</div>
+              <div className="recommend-label">推荐恢复</div>
               <div className="recommend-title">{resume.task.title}</div>
               <div className="recommend-note">
                 {nextStepText(resume.task) || "尚未记录断点，可以直接继续。"}
@@ -75,7 +75,7 @@ export function ResumePanel({
               没有暂停事项。可以从待处理里选一件开始。
             </p>
             <div className="recommend-card">
-              <div className="recommend-label">Next available</div>
+              <div className="recommend-label">可开始</div>
               <div className="recommend-title">{todo.title}</div>
               <div className="recommend-actions">
                 <Button
@@ -87,14 +87,20 @@ export function ResumePanel({
               </div>
             </div>
           </div>
+        ) : snapshot.counts.doing || snapshot.counts.waiting ? (
+          <EmptyState>
+            {snapshot.counts.doing
+              ? "当前任务还在进行中。等待中的事项不会自动开始。"
+              : "没有暂停或待处理事项。等待中的事项不会自动开始。"}
+          </EmptyState>
         ) : (
-          <EmptyState>没有需要恢复的事项。当前工作区是空的。</EmptyState>
+          <EmptyState>没有需要恢复的事项。可以先记下第一件事。</EmptyState>
         )}
         <div className="next-up">
           {snapshot.nextUp ? (
             <>
               <div className="next-up-head">
-                <span>Next start</span>
+                <span>下次开工</span>
                 <button type="button" onClick={onChangeNext}>
                   更换
                 </button>
@@ -107,7 +113,7 @@ export function ResumePanel({
           ) : (
             <>
               <div className="next-up-head">
-                <span>Next start</span>
+                <span>下次开工</span>
                 <button type="button" onClick={onPickNext}>
                   选择
                 </button>

@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import type { PickupAPI } from "../src/shared/contracts";
+import type { PickupAPI, WindowAction } from "../src/shared/contracts";
 import type { StoreClient } from "../src/main/worker-client";
 
 const mocks = vi.hoisted(() => ({
@@ -18,6 +18,7 @@ vi.mock("electron", () => ({
   ipcMain: { handle: mocks.handle },
   ipcRenderer: {
     invoke: mocks.invoke,
+    send: vi.fn(),
     on: (channel: string, handler: (...args: unknown[]) => void) => {
       mocks.listeners.set(channel, handler);
     },
@@ -43,7 +44,7 @@ function api(): PickupAPI {
 function collectChannels(): string[] {
   const channels = new Set<string>();
   for (const [name, value] of Object.entries(api())) {
-    if (name === "onStateChanged") continue;
+    if (name.startsWith("on")) continue;
     mocks.invoke.mockClear();
     (value as (input: unknown) => unknown)(undefined);
     expect(mocks.invoke, `${name} 必须调用单一 channel`).toHaveBeenCalledTimes(
@@ -55,7 +56,34 @@ function collectChannels(): string[] {
 }
 
 beforeAll(() => {
-  registerIpcHandlers({ send: vi.fn() } as unknown as StoreClient);
+  const send = vi.fn();
+  const windowOk = async (action: WindowAction) => ({
+    ok: true as const,
+    value: { type: "window" as const, action },
+    revision: 0,
+  });
+  registerIpcHandlers({ send } as unknown as StoreClient, {
+    start: async () => undefined,
+    isQuitting: () => false,
+    showMain: () => windowOk("showMain"),
+    showCapture: () => windowOk("showCapture"),
+    hideCapture: () => windowOk("hideCapture"),
+    hideWidget: () => windowOk("hideWidget"),
+    quit: () => windowOk("quit"),
+    getDesktopState: async () => ({
+      ok: true,
+      revision: 0,
+      value: {
+        accelerator: "Control+Alt+N",
+        acceleratorRegistered: true,
+        launchAtLogin: false,
+        launchAtLoginApplied: true,
+        widgetVisible: false,
+      },
+    }),
+    applyPreferencePatch: async (input) =>
+      send({ kind: "updatePreference", input }),
+  });
 });
 
 describe("IPC 契约一致性", () => {

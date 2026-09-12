@@ -3,9 +3,9 @@
 | 项目 | 内容 |
 | --- | --- |
 | 文档编号 | ARCH-001 |
-| 版本 | v1.2 |
-| 日期 | 2026-09-11 |
-| 状态 | 架构设计基线；本地业务后端已实现；正式产品界面已接入真实 IPC。托盘、全局快捷键、独立 capture/widget 窗口、开机启动等桌面集成，以及性能与发布验收未完成。实现回写见第 21 节 |
+| 版本 | v1.3 |
+| 日期 | 2026-09-12 |
+| 状态 | 架构设计基线；业务后端、产品界面与 Windows 桌面集成已实现。性能/安装有本轮证据，系统热键与签名等见 VALIDATION 未验证项。实现回写见第 21 节 |
 | 需求依据 | [PRD v0.1](PRD.md)、[第一版交互原型](prototype.html) |
 | 技术摘要 | [TECH-STACK.md](TECH-STACK.md) |
 | 接口语义 | [IPC-CONTRACT.md](IPC-CONTRACT.md) |
@@ -15,7 +15,7 @@
 
 本文件用于工程初始化、模块开发和测试设计。PRD 决定产品规则；本文件决定实现边界。若原型行为与 PRD 不一致，以 PRD 为准。Windows 11 x64、小范围试用、手动更新是本稿采用的工程默认值，并非用户已逐项确认的产品承诺。框架相关官方资料见第 19 节。
 
-实际实现范围、锁定版本和验证结果分别见 [ENGINEERING.md](ENGINEERING.md) 与 [VALIDATION.md](VALIDATION.md)。本架构的其他模块仍是待实施目标。
+实际实现范围、锁定版本和验证结果分别见 [ENGINEERING.md](ENGINEERING.md)、[VALIDATION.md](VALIDATION.md) 与 [ACCEPTANCE-TRACKING.md](ACCEPTANCE-TRACKING.md)。P1/P2（同步、搜索、手机、AI、导出）仍不在本版。
 
 ## 目录
 
@@ -619,6 +619,7 @@ main 和 worker 通过 shared 契约通信，不互相导入执行入口；rende
 | 2026-09-09 | v1.0 | 按用户确认的 TypeScript 与 React 约束采用 Electron，明确进程职责、SQLite 事务、IPC、窗口同步、恢复、交付和验收基线 |
 | 2026-09-11 | v1.1 | 追加第 21 节：业务后端实现回写与三处语义澄清（版本递增粒度、草稿/偏好不递增工作区 revision、等待中重复标记）；接口语义移交 [IPC-CONTRACT.md](IPC-CONTRACT.md) 维护，类型以代码为准 |
 | 2026-09-11 | v1.2 | 追加 21.9—21.13：命令来源状态前置条件、收尾当前任务一致性、本地日期边界改用平台原生能力、启动阶段退出的初始化结算，及对应的集成覆盖补充 |
+| 2026-09-12 | v1.3 | 桌面集成落地（托盘、快捷键、capture/widget、关闭隐藏、登录项协调）；收尾完成清单分页；21.8 回写 |
 
 ## 21. 业务后端实现回写与澄清
 
@@ -654,7 +655,7 @@ main 在 IPC 边界用 shared schema 拒绝非法输入（未知字段、越界�
 
 ### 21.8 与前端/桌面职责的边界
 
-本轮交付覆盖 `src/shared`、`src/worker`、`src/main`、`src/preload` 与后端测试。窗口创建之外的托盘、全局快捷键、开机启动、窗口布局与系统设置协调仍属桌面集成职责；正式产品页面属前端职责。为保持工程验证界面可编译运行，对 `src/renderer/src/App.tsx` 与 `tests/ui.test.tsx` 做了最小兼容调整：快照方法名改为 `getWorkspaceSnapshot`、未结束列表改用 `unfinished`/`counts`、状态文案改用共享的 `TASK_STATUS_LABEL`、测试替身补齐类型化 mock。业务规则没有下沉到 renderer。
+桌面集成已由 `src/main/desktop.ts` 落地：托盘、全局快捷键、唯一 capture、widget、关闭隐藏、完全退出、登录项协调。系统设置失败使用 `SHORTCUT_CONFLICT` / `SYSTEM_SETTING_ERROR`，与业务事务失败分开。业务规则仍只在 worker。
 
 ### 21.9 命令来源状态前置条件（澄清第 5 节状态转换表）
 

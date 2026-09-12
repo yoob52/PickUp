@@ -15,6 +15,7 @@ export function Modal({
   title,
   eyebrow,
   wide,
+  stacked,
   onClose,
   children,
   labelledBy,
@@ -22,6 +23,7 @@ export function Modal({
   title: string;
   eyebrow?: string;
   wide?: boolean;
+  stacked?: boolean;
   onClose: () => void;
   children: ReactNode;
   labelledBy?: string;
@@ -71,7 +73,12 @@ export function Modal({
   }
 
   return (
-    <div className="modal-backdrop open" onKeyDown={onKeyDown}>
+    <div
+      className={
+        stacked ? "modal-backdrop open stacked" : "modal-backdrop open"
+      }
+      onKeyDown={onKeyDown}
+    >
       <div
         className="modal-scrim"
         onMouseDown={(event) => {

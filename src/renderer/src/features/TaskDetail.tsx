@@ -26,6 +26,7 @@ import { Modal } from "../ui/Modal";
 type Props = {
   taskId: string;
   revision: number;
+  stacked?: boolean;
   onClose: () => void;
   onStart: (task: TaskSummary) => void;
   onWait: (task: TaskSummary) => void;
@@ -37,6 +38,7 @@ type Props = {
 export function TaskDetailDialog({
   taskId,
   revision,
+  stacked,
   onClose,
   onStart,
   onWait,
@@ -294,7 +296,8 @@ export function TaskDetailDialog({
   return (
     <Modal
       wide
-      eyebrow="Task detail / context"
+      stacked={stacked}
+      eyebrow="任务详情"
       title={task?.title ?? "任务详情"}
       onClose={onClose}
     >

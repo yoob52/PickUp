@@ -7,6 +7,7 @@ import {
   completeTaskSchema,
   createTaskSchema,
   finishDailyReviewSchema,
+  getDailyReviewQuerySchema,
   listTasksSchema,
   markWaitingSchema,
   pauseTaskSchema,
@@ -31,9 +32,8 @@ import {
   type WorkspaceSnapshot,
 } from "../shared/contracts";
 import { localDayRangeUtc } from "../shared/local-date";
+import type { DesktopHost } from "./desktop";
 import type { StoreClient } from "./worker-client";
-
-const COMPLETED_TODAY_LIMIT = 100;
 
 const noInput = z.undefined();
 
@@ -80,19 +80,25 @@ register(
   (client, input) =>
     client.send<CommandOutcome>({ kind: "getCommandResult", input }),
 );
-// 本地日期边界由 main 的可信代码计算；renderer 不能指定或推导查询范围。
-register("pickup:getDailyReview", noInput, false, (client) => {
-  const range = localDayRangeUtc(Date.now());
-  return client.send<DailyReview>({
-    kind: "getDailyReview",
-    input: {
-      dayKey: range.dayKey,
-      startUtc: range.startUtc,
-      endUtc: range.endUtc,
-      completedLimit: COMPLETED_TODAY_LIMIT,
-    },
-  });
-});
+// 本地日期边界由 main 的可信代码计算；renderer 只能请求当天完成清单分页。
+register(
+  "pickup:getDailyReview",
+  getDailyReviewQuerySchema.optional(),
+  false,
+  (client, input) => {
+    const range = localDayRangeUtc(Date.now());
+    return client.send<DailyReview>({
+      kind: "getDailyReview",
+      input: {
+        dayKey: range.dayKey,
+        startUtc: range.startUtc,
+        endUtc: range.endUtc,
+        completedOffset: input?.completedOffset ?? 0,
+        completedLimit: input?.completedLimit ?? 50,
+      },
+    });
+  },
+);
 
 register("pickup:createTask", createTaskSchema, true, (client, input) =>
   client.send({ kind: "createTask", input }),
@@ -150,13 +156,6 @@ register("pickup:clearDraft", clearDraftSchema, false, (client, input) =>
 register("pickup:getPreferences", noInput, false, (client) =>
   client.send<PreferenceState>({ kind: "getPreferences" }),
 );
-register(
-  "pickup:updatePreference",
-  updatePreferenceSchema,
-  false,
-  (client, input) => client.send({ kind: "updatePreference", input }),
-);
-
 /** 校验已登记窗口、主 frame 与允许的来源；renderer 参数不构成权限证明。 */
 function assertTrustedSender(event: IpcMainInvokeEvent): void {
   const win = BrowserWindow.fromWebContents(event.sender);
@@ -185,7 +184,24 @@ function notifyStateChanged(revision: number): void {
   }
 }
 
-export function registerIpcHandlers(client: StoreClient): void {
+export function registerIpcHandlers(
+  client: StoreClient,
+  desktop: DesktopHost,
+): void {
+  register(
+    "pickup:updatePreference",
+    updatePreferenceSchema,
+    false,
+    (_client, input) => desktop.applyPreferencePatch(input),
+  );
+  register("pickup:showMain", noInput, false, () => desktop.showMain());
+  register("pickup:showCapture", noInput, false, () => desktop.showCapture());
+  register("pickup:hideCapture", noInput, false, () => desktop.hideCapture());
+  register("pickup:hideWidget", noInput, false, () => desktop.hideWidget());
+  register("pickup:quit", noInput, false, () => desktop.quit());
+  register("pickup:getDesktopState", noInput, false, () =>
+    desktop.getDesktopState(),
+  );
   for (const entry of registry) {
     ipcMain.handle(entry.channel, async (event, raw: unknown) => {
       try {

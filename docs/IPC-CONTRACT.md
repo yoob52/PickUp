@@ -2,9 +2,9 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 版本 | v1.1 |
-| 日期 | 2026-09-11 |
-| 状态 | 与当前代码一致；精确类型以 `src/shared/contracts.ts`、`src/shared/worker-protocol.ts` 为准 |
+| 版本 | v1.2 |
+| 日期 | 2026-09-12 |
+| 状态 | 与当前代码一致；精确类型以 `src/shared/contracts.ts`、`src/shared/worker-protocol.ts` 为准。已含窗口 API 与收尾完成清单分页 |
 | 适用范围 | renderer → preload → main → worker → SQLite 的业务链路 |
 | 需求依据 | [PRD](PRD.md) F01—F07、[架构设计](ARCHITECTURE.md) 第 6—10 节 |
 
@@ -113,7 +113,7 @@ type Result<T> =
 | `getWorkspaceSnapshot()` | `pickup:getWorkspaceSnapshot` | 无 | `WorkspaceSnapshot` | 否 |
 | `listTasks(input)` | `pickup:listTasks` | `{ statuses, offset?, limit? }` | `Page<TaskSummary>` | 否 |
 | `getTaskDetail(input)` | `pickup:getTaskDetail` | `{ taskId, breakpointOffset?, breakpointLimit?, transitionOffset?, transitionLimit? }` | `TaskDetail` | 否 |
-| `getDailyReview()` | `pickup:getDailyReview` | 无 | `DailyReview` | 否 |
+| `getDailyReview(input?)` | `pickup:getDailyReview` | `{ completedOffset?, completedLimit? }`，不能传日期 | `DailyReview` | 否 |
 | `getCommandResult(input)` | `pickup:getCommandResult` | `{ commandId }` | `CommandOutcome` | 否 |
 
 ### 3.2 写命令
@@ -144,6 +144,15 @@ type Result<T> =
 | `getDraft()` | `pickup:getDraft` | `Draft`（`{ title, note, version }`） |
 | `getPreferences()` | `pickup:getPreferences` | `PreferenceState`（`{ values, version }`） |
 | `onStateChanged(listener)` | 事件 `pickup:changed` | 返回取消订阅函数 |
+| `showMain()` | `pickup:showMain` | `{ type: "window", action: "showMain" }` |
+| `showCapture()` | `pickup:showCapture` | 显示唯一记录窗口并聚焦标题 |
+| `hideCapture()` | `pickup:hideCapture` | 隐藏记录窗口，尽量把焦点交还系统 |
+| `hideWidget()` | `pickup:hideWidget` | 隐藏入口并写入 `widgetEnabled: false` |
+| `quit()` | `pickup:quit` | 先 flush 草稿再关 worker；失败则留下记录窗口 |
+| `getDesktopState()` | `pickup:getDesktopState` | 快捷键是否注册、登录项是否与偏好一致 |
+| `onDayInvalidated` | 事件 `pickup:day-invalidated` | 系统恢复等，收尾页重算日期 |
+| `onCaptureShown` | 事件 `pickup:capture-shown` | 焦点回到标题 |
+| `onPrepareClose` | 事件 `pickup:prepare-close` | handler 返回是否已落盘草稿 |
 
 ## 4. 命令语义
 
@@ -299,11 +308,11 @@ const result = await window.pickup.switchTask({
 
 ### 5.5 getDailyReview
 
-- `getDailyReview()` **不接受参数**：本地日期边界由 main 的可信代码计算（`src/shared/local-date.ts`），renderer 不能指定或推导查询范围。
+- `getDailyReview(input?)` **不能指定日期**：本地日期边界仍由 main 计算。renderer 只能传当天完成清单的 `completedOffset` / `completedLimit`（默认 0/50，上限 100）。
 - 返回 `{ dayKey, startUtc, endUtc, currentTask, completedToday, unfinished, counts, nextUp, nextUpVersion }`。
 - 本地日历日与本地零点交给平台原生的本地时区能力解释，不按固定 24 小时相加，也不自行迭代推断时区偏移：本地零点不存在（时钟前跳）时当天从跳变后的第一个时刻开始；本地零点出现两次（时钟回拨）时取较早的实例。因此当天区间长度可能是 23、24 或 25 小时（夏令时当天），区间始终覆盖该本地日的全部时刻。
 - 区间为左闭右开：`ended_at === startUtc` 计入当天，`ended_at === endUtc` 属于次日；相邻本地日的区间首尾相接，不重叠也不留空隙。
-- `completedToday` 只统计“当前仍为 `done` 且 `ended_at` 落在区间内”的任务：取消不计入，重新打开后自动移出；默认最多 100 条并带 `total`。
+- `completedToday` 只统计“当前仍为 `done` 且 `ended_at` 落在区间内”的任务：取消不计入，重新打开后自动移出；分页字段 `offset`/`limit`/`total`/`hasMore`。
 - `unfinished` 覆盖全部跨日遗留事项（含暂停与等待），`currentTask` 单独突出显示。
 - 查询本身不修改任何任务状态；设备日期或时区变化不改变任务状态。
 
@@ -400,7 +409,7 @@ async function submitWithRetry(commandId: string, payload: SwitchTaskInput) {
 | 等待原因 | 1 000 字符 |
 | 列表分页 `limit` | 1—100，默认 50 |
 | 详情历史分页 | 断点 1—50（默认 10），状态历史 1—50（默认 20） |
-| 收尾当天完成列表 | 默认 100 条，带 `total` |
+| 收尾当天完成列表 | 每页 1—100，默认 50；用 offset 继续取 |
 
 ## 11. 前端接入清单
 
@@ -427,4 +436,4 @@ OS 状态与数据库偏好的协调边界（由 main 负责，不在 worker 内
 4. 快捷键冲突使用 `SHORTCUT_CONFLICT`；注册失败时保留原可用快捷键与主窗口入口。
 5. 窗口位置写入使用 `updatePreference({ patch: { widgetBounds } })`，由桌面侧去抖，避免高频写库。
 
-窗口（`showMain`/`showCapture`/`hideWidget`/`quit`）与托盘、快捷键注册不在后端范围内，当前**未实现**，需要桌面集成职责补齐；后端不提供任意窗口脚本或文件路径入口。
+窗口方法由 main 实现：`showMain` / `showCapture` / `hideCapture` / `hideWidget` / `quit` / `getDesktopState`。不接受任意窗口脚本或文件路径。`PICKUP_E2E=1` 时不写入系统登录项。`quit` 先让 capture 落盘草稿，失败则重新显示记录窗口。

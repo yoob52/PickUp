@@ -65,3 +65,9 @@ export function localDayRangeUtc(utcMs: number): LocalDayRange {
   );
   return { dayKey: localDayKey(utcMs), startUtc, endUtc };
 }
+
+/** 距下一个本地日开始的毫秒数；已越过终点时返回 1，便于立即刷新。 */
+export function msUntilNextLocalDay(utcMs: number): number {
+  const { endUtc } = localDayRangeUtc(utcMs);
+  return Math.max(1, endUtc - utcMs);
+}

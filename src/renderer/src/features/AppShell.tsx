@@ -92,15 +92,19 @@ export function AppShell({
                 active={filter === "ended"}
                 onClick={() => onFilter("ended")}
               />
+              <button
+                type="button"
+                className="nav-item review-nav"
+                onClick={onReview}
+              >
+                <span className="nav-left">
+                  <Sunset size={16} />
+                  今日收尾
+                </span>
+              </button>
             </nav>
           </div>
           <div className="sidebar-bottom">
-            <button type="button" className="nav-item" onClick={onReview}>
-              <span className="nav-left">
-                <Sunset size={16} />
-                今日收尾
-              </span>
-            </button>
             <div className="local-state">
               <div className="local-state-top">
                 <span>Storage</span>
