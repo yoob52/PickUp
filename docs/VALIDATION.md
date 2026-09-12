@@ -28,7 +28,7 @@
 | `dist/win-unpacked/resources/app.asar` | `D9A20DFBBDE7826E396A3BB44E00CBE078E914462C3761F610721047F2AFAA50` | 40142095 |
 | `dist/PickUp Setup 0.1.0.exe` | `6CDE93B7627B830EF27667E25B39CF6C2DD62E0114558E345F713CF7077631D6` | 108484170 |
 
-renderer 资源：`out/renderer/assets/index-Bv0xPFRr.js`。上述哈希对应当前工作区构建，提交号以 git 记录为准。
+renderer 资源：`out/renderer/assets/index-Bv0xPFRr.js`。源码提交 `2051730`（`feature/mvp-p0`）。asar 由该提交的源码构建；本句是事后写入的提交号，不在包内。
 
 设备：Windows 11 x64（build 26200），Electron 42.11.3。测试全程独立临时目录，未访问正式 userData。
 
