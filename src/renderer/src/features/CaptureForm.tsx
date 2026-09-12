@@ -25,6 +25,7 @@ type Props = {
 
 export type CaptureFormHandle = {
   tryClose: () => Promise<boolean>;
+  flushDraft: () => Promise<boolean>;
 };
 
 export const CaptureForm = forwardRef<CaptureFormHandle, Props>(
@@ -47,6 +48,10 @@ export const CaptureForm = forwardRef<CaptureFormHandle, Props>(
     const titleState = useRef("");
     const noteState = useRef("");
 
+    function focusTitle() {
+      window.setTimeout(() => titleRef.current?.focus(), 30);
+    }
+
     useEffect(() => {
       let active = true;
       void window.pickup.getDraft().then((result) => {
@@ -57,11 +62,19 @@ export const CaptureForm = forwardRef<CaptureFormHandle, Props>(
         }
         applyDraft(result.value);
       });
-      const id = window.setTimeout(() => titleRef.current?.focus(), 30);
+      focusTitle();
+      const onVisible = () => {
+        if (document.visibilityState === "visible") focusTitle();
+      };
+      document.addEventListener("visibilitychange", onVisible);
+      window.addEventListener("focus", onVisible);
+      const unsubShown = window.pickup.onCaptureShown(() => focusTitle());
       return () => {
         active = false;
-        window.clearTimeout(id);
         window.clearTimeout(timer.current);
+        document.removeEventListener("visibilitychange", onVisible);
+        window.removeEventListener("focus", onVisible);
+        unsubShown();
       };
     }, []);
 
@@ -141,23 +154,21 @@ export const CaptureForm = forwardRef<CaptureFormHandle, Props>(
       }
     }
 
-    async function tryClose() {
+    async function flushDraft() {
       window.clearTimeout(timer.current);
-      if (!dirty.current && !titleState.current && !noteState.current) {
-        onCancel();
+      if (!dirty.current && !titleState.current && !noteState.current)
         return true;
-      }
-      const saved = await persistDraft(
-        titleState.current,
-        noteState.current,
-        true,
-      );
+      return persistDraft(titleState.current, noteState.current, true);
+    }
+
+    async function tryClose() {
+      const saved = await flushDraft();
       if (!saved) return false;
       onCancel();
       return true;
     }
 
-    useImperativeHandle(ref, () => ({ tryClose }));
+    useImperativeHandle(ref, () => ({ tryClose, flushDraft }));
 
     async function clearStoredDraft() {
       window.clearTimeout(timer.current);

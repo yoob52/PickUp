@@ -264,10 +264,20 @@ export const dailyReviewSchema = z
     dayKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     startUtc: z.number().int(),
     endUtc: z.number().int(),
+    completedOffset: z.number().int().min(0).optional(),
     completedLimit: z.number().int().min(1).max(200).default(100),
   })
   .strict();
 export type DailyReviewInput = z.infer<typeof dailyReviewSchema>;
+
+/** renderer 只能请求当天完成清单的分页；不能指定日期范围。 */
+export const getDailyReviewQuerySchema = z
+  .object({
+    completedOffset: z.number().int().min(0).default(0),
+    completedLimit: z.number().int().min(1).max(100).default(50),
+  })
+  .strict();
+export type GetDailyReviewQuery = z.infer<typeof getDailyReviewQuerySchema>;
 
 export const commandResultSchema = z
   .object({ commandId: commandIdSchema })
@@ -435,6 +445,19 @@ export type UpdatePreferenceValue = {
   preferences: PreferenceState;
 };
 
+export type WindowAction =
+  "showMain" | "showCapture" | "hideCapture" | "hideWidget" | "quit";
+
+export type WindowActionValue = { type: "window"; action: WindowAction };
+
+export type DesktopState = {
+  accelerator: string;
+  acceleratorRegistered: boolean;
+  launchAtLogin: boolean;
+  launchAtLoginApplied: boolean;
+  widgetVisible: boolean;
+};
+
 export type CommandValue =
   | CreateTaskValue
   | UpdateTaskValue
@@ -469,7 +492,7 @@ export type PickupAPI = {
   getWorkspaceSnapshot(): Promise<Result<WorkspaceSnapshot>>;
   listTasks(input: ListTasksInput): Promise<Result<Page<TaskSummary>>>;
   getTaskDetail(input: TaskDetailInput): Promise<Result<TaskDetail>>;
-  getDailyReview(): Promise<Result<DailyReview>>;
+  getDailyReview(input?: GetDailyReviewQuery): Promise<Result<DailyReview>>;
   getCommandResult(input: CommandResultInput): Promise<Result<CommandOutcome>>;
   createTask(input: CreateTaskInput): Promise<Result<CreateTaskValue>>;
   updateTask(input: UpdateTaskInput): Promise<Result<UpdateTaskValue>>;
@@ -497,5 +520,14 @@ export type PickupAPI = {
   updatePreference(
     input: UpdatePreferenceInput,
   ): Promise<Result<UpdatePreferenceValue>>;
+  showMain(): Promise<Result<WindowActionValue>>;
+  showCapture(): Promise<Result<WindowActionValue>>;
+  hideCapture(): Promise<Result<WindowActionValue>>;
+  hideWidget(): Promise<Result<WindowActionValue>>;
+  quit(): Promise<Result<WindowActionValue>>;
+  getDesktopState(): Promise<Result<DesktopState>>;
   onStateChanged(listener: (revision: number) => void): () => void;
+  onDayInvalidated(listener: () => void): () => void;
+  onCaptureShown(listener: () => void): () => void;
+  onPrepareClose(handler: () => Promise<boolean>): () => void;
 };

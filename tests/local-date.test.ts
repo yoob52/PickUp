@@ -1,6 +1,10 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it } from "vitest";
-import { localDayKey, localDayRangeUtc } from "../src/shared/local-date";
+import {
+  localDayKey,
+  localDayRangeUtc,
+  msUntilNextLocalDay,
+} from "../src/shared/local-date";
 
 const HOUR = 60 * 60 * 1000;
 const MINUTE = 60 * 1000;
@@ -208,5 +212,12 @@ describe("本地日期区间", () => {
     expect(hours).toBeGreaterThanOrEqual(23);
     expect(hours).toBeLessThanOrEqual(25);
     expect(hours).toBe(Math.round(hours));
+  });
+
+  it("距下一本地日的等待时间落在当天剩余区间内", () => {
+    const now = Date.now();
+    const range = localDayRangeUtc(now);
+    expect(msUntilNextLocalDay(now)).toBe(range.endUtc - now);
+    expect(msUntilNextLocalDay(range.endUtc - 1)).toBe(1);
   });
 });

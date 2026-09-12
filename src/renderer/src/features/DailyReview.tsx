@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Pause } from "lucide-react";
+import { msUntilNextLocalDay } from "../../../shared/local-date";
 import type {
   BreakpointDraft,
   DailyReview,
@@ -37,6 +38,7 @@ export function DailyReviewDialog({
   const [draft, setDraft] = useState<BreakpointDraft>(emptyBreakpoint);
   const seenCurrent = useRef<TaskRef | null>(null);
   const seq = useRef(0);
+  const midnightTimer = useRef(0);
   const pendingNext =
     useRef(
       createPending<{
@@ -65,6 +67,11 @@ export function DailyReviewDialog({
     }
     setReview(result.value);
     setError("");
+    window.clearTimeout(midnightTimer.current);
+    midnightTimer.current = window.setTimeout(
+      () => void load(),
+      Math.min(msUntilNextLocalDay(Date.now()), 2_000_000_000),
+    );
     if (!seenCurrent.current) {
       seenCurrent.current = result.value.currentTask
         ? taskRef(result.value.currentTask)
@@ -93,12 +100,44 @@ export function DailyReviewDialog({
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
+    const unsubDay = window.pickup.onDayInvalidated(() => void load());
     return () => {
       seq.current += 1;
+      window.clearTimeout(midnightTimer.current);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
+      unsubDay();
     };
   }, []);
+
+  async function loadMoreCompleted() {
+    if (!review || !review.completedToday.hasMore || busy) return;
+    const current = ++seq.current;
+    const result = await window.pickup.getDailyReview({
+      completedOffset:
+        review.completedToday.offset + review.completedToday.limit,
+      completedLimit: review.completedToday.limit,
+    });
+    if (current !== seq.current) return;
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+    if (result.value.dayKey !== review.dayKey) {
+      setReview(result.value);
+      return;
+    }
+    setReview({
+      ...result.value,
+      completedToday: {
+        ...result.value.completedToday,
+        items: [
+          ...review.completedToday.items,
+          ...result.value.completedToday.items,
+        ],
+      },
+    });
+  }
 
   async function chooseNext(taskId: string | null) {
     if (!review || busy) return;
@@ -188,7 +227,7 @@ export function DailyReviewDialog({
   const completed = review?.completedToday;
 
   return (
-    <Modal eyebrow="Daily close / F06" title="把今天收好。" onClose={onClose}>
+    <Modal eyebrow="今日收尾" title="把今天收好。" onClose={onClose}>
       <p className="helper" style={{ marginTop: 0 }}>
         未结束的事情都会留在这里。选一件作为下一次开工的第一件事，选择本身不会开始任务。
       </p>
@@ -227,10 +266,13 @@ export function DailyReviewDialog({
                 ))
               )}
               {completed?.hasMore ? (
-                <p className="helper">
-                  仅列出 {completed.items.length} / {completed.total}{" "}
-                  条当天完成记录。
-                </p>
+                <button
+                  type="button"
+                  className="expand-link"
+                  onClick={() => void loadMoreCompleted()}
+                >
+                  显示更多（{completed.items.length} / {completed.total}）
+                </button>
               ) : null}
             </div>
           </Field>

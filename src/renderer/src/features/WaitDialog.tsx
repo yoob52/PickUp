@@ -58,7 +58,7 @@ export function WaitDialog({ task, onClose, onDone, onNotice }: Props) {
   }
 
   return (
-    <Modal eyebrow="Waiting / F05" title="等什么？" onClose={onClose}>
+    <Modal eyebrow="等待" title="等什么？" onClose={onClose}>
       <Field id="wait-reason" label="等待原因" error={error}>
         <textarea
           id="wait-reason"

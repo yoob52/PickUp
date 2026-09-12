@@ -163,7 +163,7 @@ export function SwitchFlow({
 
   return (
     <Modal
-      eyebrow={mode === "pause" ? "Pause / F03" : "Switch / F03"}
+      eyebrow={mode === "pause" ? "暂停" : "切换"}
       title={mode === "pause" ? "把线索留在这里。" : "先保存，再继续。"}
       onClose={onClose}
     >

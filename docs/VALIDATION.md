@@ -1,172 +1,78 @@
 # PickUp 验证记录
 
-日期：2026-09-12。仅描述当前代码实际通过的检查与仍未验证的内容。
+日期：2026-09-12。本轮 `feature/mvp-p0`：补齐桌面集成与审查 R01—R08，并重新打包。
 
-本轮范围是正式产品前端：主窗口、快速记录、切换、详情、等待、收尾、设置、capture/widget 根组件，以及真实界面端到端。后端能力沿用 2026-09-11 已验证基线，本轮没有改 worker / 数据库。
+审查基线 `aa2064b` 为历史对照。本文件只记录本轮实际执行的检查。
 
-## 1. 本轮执行的检查（全部在本机实际运行）
+## 1. 本轮检查
 
-| 检查 | 命令 | 实际结果 |
+| 检查 | 命令 | 结果 |
 | --- | --- | --- |
-| 类型检查 | `npm run check` 的 `typecheck` | Node/Electron 与 Web 两个配置均通过，strict、`noUnusedLocals`、`noUnusedParameters` 无告警 |
-| 格式 | `npm run check` 的 `format:check` | 全部匹配文件通过 Prettier 检查 |
-| 单元/组件测试 | `npm test` | 5 个文件、44 个用例通过（含 6 个界面用例：失败保留输入并复用 commandId、空标题拦截、草稿恢复、NEED_SWITCH 进入切换、数据库错误页、记录框焦点） |
-| Electron + 真实 SQLite 集成 | `npm run test:integration` | 本轮未重跑；2026-09-11 16 组场景已通过，前端未改 worker |
-| 端到端 | `npx playwright test`（构建产物已存在） | 5 个 Playwright Electron 用例通过：原 3 个桥接用例 + 真实界面闭环（记录→开始→带断点切换→完成→恢复→等待→收尾→重启）+ 视觉截图 |
-| 打包 | `npm run pack` | 通过：`dist/win-unpacked` 于 2026-09-11 重新生成（原生依赖重建、electron 发行包解压、asar 完整性更新完成）。本机默认下载地址（GitHub 构件）超时 `connect ETIMEDOUT`，改用 npmmirror 镜像（`ELECTRON_MIRROR`、`ELECTRON_BUILDER_BINARIES_MIRROR`，仅本次 shell 环境变量，未修改仓库配置）后完成 |
-| 解包产物端到端 | `$env:PICKUP_PACKAGED_EXE=dist/win-unpacked/PickUp.exe; npx playwright test` | 3 个 Playwright 用例全部通过（隔离测试目录，不读取个人开发库） |
+| 类型/格式/单元 | `npm run check` | 通过。6 个文件、54 个测试（原 46 + bounds/收尾分页/桌面相关 UI） |
+| 集成 | `npm run test:integration` | 通过。16 组 Electron+SQLite 场景 |
+| 端到端（源码构建） | `npx playwright test` | 通过。6 个用例（桥接×3、桌面窗口、界面闭环、视觉） |
+| 规模 | `npx playwright test tests/e2e/scale.spec.ts` | 通过。1000 件任务；见 `docs/verification/scale-results.json` |
+| 打包 | `npm run pack`（npmmirror 仅当前 shell） | 通过。`dist/win-unpacked` |
+| 安装包 | `npm run dist` | 通过。`dist/PickUp Setup 0.1.0.exe` |
+| 解包产物 E2E | `PICKUP_PACKAGED_EXE=dist/win-unpacked/PickUp.exe` | 5 通过；视觉用例在 30s 默认超时下失败，加长后源码构建视觉通过 |
+| 安装包内应用 | 静默安装到临时目录后跑 `desktop.spec` | 通过 |
+| 覆盖安装/卸载 | 同一目录再次 `/S`，然后卸载 | 安装与卸载 exit 0；卸载后 `PickUp.exe` 不存在 |
 
-### 1.1 回归测试对原缺陷的证伪运行（临时回退后观察到失败，均已逐项还原）
+### 1.1 产物
 
-先临时回退到审查描述的原始实现，用新增测试观察失败，再还原并重跑全部检查：
+版本 `0.1.0`。SHA-256：
 
-| 问题 | 临时回退的实现 | 观察到的失败 |
+| 文件 | 哈希 | 大小 |
 | --- | --- | --- |
-| 收尾当前任务一致性 | 去掉 `finishDailyReviewTx` 的当前任务守卫 | 集成场景 13 在冲突断言处失败：`expected failure, got {"ok":true,...,"outcome":"pause","pausedTaskId":null,"breakpointSeq":null}`（与审查描述一致：断点未保存却返回成功） |
-| 命令来源状态校验 | 恢复 `requireTransition(task, "todo", …)` | 集成场景 14 失败两次：`waiting` 调用 `reopenTask` 返回 `ok:true`；单独放开 `resolveWaiting` 时 `done` 调用 `resolveWaiting` 得到 `STORAGE_ERROR`（期望 `STATE_CONFLICT`） |
-| 启动阶段退出 | 恢复“先 `stop()` 再判断 `state === "starting"`”的顺序 | 集成场景 16 超时失败：`ready` 与已在等待的 `send()` 都不结算（15 s 有界等待触发断言失败，测试进程本身不挂起） |
-| 午夜夏令时日期归属 | 恢复按偏移迭代三次的 `instantForLocalMidnight` | `tests/local-date.test.ts` 11 个用例中 2 个失败，含 America/Santiago：当天起点被算成本地 `2026-09-05` 而不是 `2026-09-06` |
+| `dist/win-unpacked/PickUp.exe` | `7B132397DBCE487D11D42167041898E4E634DDE17DCC5944CD5B08977F41EB56` | 235128320 |
+| `dist/win-unpacked/resources/app.asar` | `D9A20DFBBDE7826E396A3BB44E00CBE078E914462C3761F610721047F2AFAA50` | 40142095 |
+| `dist/PickUp Setup 0.1.0.exe` | `6CDE93B7627B830EF27667E25B39CF6C2DD62E0114558E345F713CF7077631D6` | 108484170 |
 
-还原后重新运行 `npm run check`、`npm run test:integration`、`npm run test:e2e` 均通过（结果见上表），源码中不残留任何临时回退标记。
+renderer 资源：`out/renderer/assets/index-Bv0xPFRr.js`。上述哈希对应当前工作区构建，提交号以 git 记录为准。
 
-单元/组件测试覆盖：
+设备：Windows 11 x64（build 26200），Electron 42.11.3。测试全程独立临时目录，未访问正式 userData。
 
-| 文件 | 覆盖内容 |
-| --- | --- |
-| `tests/contracts.test.ts`（16） | 标题/备注/断点/等待原因长度边界、空标题拒绝、多余与未知字段拒绝、UUID 与 `expectedVersion` 必填、分页范围与默认值、本地日期区间 schema、偏好补丁非空、默认偏好取值 |
-| `tests/task-rules.test.ts`（7） | 六种状态与中文名称、未结束/已结束/可开始判定、18 条合法转换全部允许、其余转换全部拒绝、空快照无当前任务与推荐 |
-| `tests/local-date.test.ts`（11） | 东八区、美东（夏令时 23 小时与 25 小时当天）、**America/Santiago 2026-09-06 本地午夜不存在（当天起点为 04:00Z，前一天本地 23:30 的记录不进入当天）**、America/Santiago 2026-04-05 午夜回拨（前一天为 25 小时）、America/Havana 2026-11-01 本地零点重复（取较早实例，当天 25 小时）、跨月跨年、左闭右开、相邻区间首尾相接、区间内采样点本地日一致、默认设备时区 |
-| `tests/ipc-contract.test.ts`（4） | preload 方法集合与 main allowlist 完全一致、channel 无重复无多余、channel 前缀固定、事件订阅可取消 |
-| `tests/ui.test.tsx`（1） | 保存失败保留输入并复用同一 `commandId` 重试 |
+### 1.2 性能（本机，n 见 JSON）
 
-日期与时区用例只在隔离测试进程内设置 `TZ`（Node 与 Electron 运行时都生效），**不修改操作系统时区**；夏令时期望值来自平台时区数据库（本机 ICU tz 2025c），时区数据库更新可能改变未来年份的切换日期。
-
-集成场景（`src/main/integration.ts`，在 Electron 中运行真实 worker 与真实 SQLite，测试库位于临时目录）：
-
-1. 新库初始化、创建、100 次重复提交只产生一件、同 ID 不同内容被拒绝、同名独立创建、未知 commandId 回执查询。
-2. 状态转换表与非法转换：需要切换、自我开始、自我切换、暂停非当前任务、非等待任务回到待处理、已结束任务的编辑/断点/等待/开始全部拒绝、重新打开不抢占当前任务、状态历史完整保留。
-3. 切换与暂停事务在 4 个阶段（写入断点后、暂停原任务后、开始目标任务后、写回执前）注入异常后整笔回滚，随后用同一 commandId 与同一 payload 重试成功，重复已提交命令不重复追加断点。
-4. 提交成功但响应丢失：worker 进程结束后用同一 commandId 原样重试，返回原结果与同一 revision，断点只有一条；关闭后继续请求得到 `DB_UNAVAILABLE`。
-5. 两窗口竞争：同一任务同版本并发开始，一个成功、一个 `STATE_CONFLICT`，数据库只有一件进行中；过期版本切换与过期目标版本均整笔拒绝。
-6. 完成、取消、重新打开与 nextUp：命中引用同事务清除、已结束任务不能作为下次开工、重新打开不抢占当前任务。
-7. 草稿：过期版本拒绝保存与清空、提交创建时按 `draftVersion` 清空草稿、草稿已更新时旧提交不清空新输入。
-8. 偏好：默认值、按字段更新、未变化不递增版本、过期版本拒绝、未知字段与非法 `widgetBounds` 拒绝、重启后保留、偏好写入不改变工作区 revision。
-9. 空断点不写库不覆盖历史、编辑标题不改变状态进入时间与状态版本、断点/暂停/已结束排序与分页规则自检、分页不重叠。
-10. 本地日期边界与跨日：收尾查询只统计“当前仍为 done 且 ended_at 在当天”的任务，取消不计入、重新打开后移出；另一天的区间得到空完成列表；**收尾视图突出当前任务并覆盖跨日遗留的暂停与等待事项——夹具全部由合法命令构造（暂停当前任务并补写断点、保留等待事项），明确断言两类事项都在收尾列表中且计数正确**；查询前后任务状态完全一致。
-11. 每日收尾两种结果：保留当前状态不改变任务、收尾期间当前任务版本过期被拒绝、暂停并结束同时提交断点、无当前任务时结束收尾成功。
-12. 启动失败保护与版本守卫：非 SQLite 文件、较新 schema（user_version 99）、缺少版本信息但已有数据表三种情况均明确失败且不覆盖原文件（校验原始字节与版本号），还原版本后可正常读取原数据，重复打开同一库不重复迁移。
-13. **收尾期间当前任务变化**：另一个调用先暂停 / 先完成 / 先标记等待 / 先切换到其他任务后提交 `finishDailyReview`（`pause`，带断点），均返回 `STATE_CONFLICT` 且不写断点、不追加状态历史、不递增 revision、不写成功回执；`keep` 分支同样拒绝已变化的当前任务；已提交回执优先于当前状态校验（提交后状态改变，原请求仍返回原结果且不重复写断点）；收尾时与提交时都没有当前任务时无操作成功，`pausedTaskId`/`breakpointSeq` 为 null、revision 不变、回执可幂等重试。
-14. **命令来源状态校验**：`reopenTask` × 六种状态、`resolveWaiting` × 六种状态共 12 组行为；非法来源（含 `waiting` 调用 `reopenTask`、`done` 调用 `resolveWaiting`）返回 `STATE_CONFLICT` 而不是 `STORAGE_ERROR`，且无任务、历史、revision、回执副作用；合法重新打开保留历史且不抢占当前任务。
-15. **收尾查询日期边界**：`ended_at` 等于区间起点计入当天、等于终点属于次日、区间外不计入、非 24 小时区间同样左闭右开；当天区间包含该完成记录；查询与日期计算都不修改任务状态；Electron 运行时下 America/Santiago 2026-09-06 的本地日区间为 `2026-09-06T04:00:00Z`—`2026-09-07T03:00:00Z`（23 小时）。
-16. **worker 生命周期**：ready 之前退出（无 `fatal`/`error` 事件）时 `ready` 明确失败、已在等待的请求返回 `DB_UNAVAILABLE` 而不是永久挂起、后续请求同样明确失败、数据库文件未被破坏；初始化失败时等待中的请求同样结束并得到 `DB_UNAVAILABLE`；就绪后无应答退出时未完成请求返回 `OUTCOME_UNKNOWN`、后续请求 `DB_UNAVAILABLE`、已提交数据保留；正常关闭后请求 `DB_UNAVAILABLE`、已提交数据保留。所有等待都带超时上限，避免测试自身挂起。
-
-端到端用例：
-
-1. 生产构建下渲染进程隔离仍成立：`window.require` 为 `undefined`，桥接方法存在，`window.pickup` 方法数为 24。
-2. 通过 preload 桥接执行完整业务链路：创建两件任务并校验备注原文与标题 trim、开始、过期版本开始被拒绝、带断点切换、空标题被主进程 schema 拒绝、复用提交标识被拒绝、标记等待、完成当前任务、收尾查询、草稿保存与过期拒绝、偏好更新与过期拒绝、设置下次开工、收尾保留当前状态、`getCommandResult` 确认已提交；同时校验 `onStateChanged` 收到递增 revision。
-3. 关闭应用后用同一数据目录重启，读取到暂停任务及其断点、等待任务、下次开工选择、草稿、当天完成列表与偏好，状态计数与重启前一致。
-
-## 2. 尚未验证或未实现
-
-以下内容本轮**没有**执行或不属于后端范围，不能视为已通过：
-
-- **打包产物复验**：本轮已执行 `npm run pack` 并对新解包产物运行 Playwright（3 个用例通过），但打包依赖本机默认下载地址之外的镜像（见第 5 节），且安装包（`npm run dist` / NSIS）、安装向导、卸载、覆盖升级、断网安装、签名信誉未验收。
-- **真实磁盘写入失败注入**：磁盘写满、文件只读、权限拒绝等实机注入未执行。事务回滚验证使用集成测试的故障注入（`workerData.faults`）与真实的数据库错误路径。
-- **升级前保护副本的实际执行**：`VACUUM INTO` 一致副本、副本校验与轮换逻辑已实现（`src/worker/database.ts`），但当前 schema 仍为版本 1、没有任何待应用迁移，因此无法在本轮真实触发升级路径。等新增第一个迁移时必须在真机补齐这条验证。
-- **真实跨午夜时钟滚动**：日期归属用固定时刻 + 隔离进程内 `TZ` 覆盖（含 America/Santiago 不存在午夜、America/Havana 重复零点），“等待真实午夜到来”与设备时区/系统时间被改动后的行为未执行。
-- **操作系统强杀**：worker 就绪后退出使用确定性测试注入，不是操作系统级强杀（SIGKILL）；强杀后的磁盘数据恢复未验证。
-- **性能与资源门槛**：冷启动、热唤起 P95 ≤ 500 ms、保存/切换 P95 ≤ 1 s、1 000 件任务规模、多窗口内存/CPU 均未测量。
-- **桌面集成**：托盘、全局快捷键注册与冲突、开机启动、独立 capture 与 widget 窗口、隐藏/恢复、多显示器与 DPI、中文输入法 Enter 行为、完全退出流程均未实现或未验证。偏好读写已接入设置页，但明确不会假装操作系统设置已生效。
-- **产品界面**：主窗口正式页面已实现，并用 Playwright 截图保存于 `docs/verification/`。未在真实可见窗口、常用 DPI、小窗口手动缩放和 `prefers-reduced-motion` 系统设置下做人工走查；截图来自 E2E 隐藏窗口。
-- **打包产物复验（本轮）**：未重新执行 `npm run pack` / `npm run dist`。前端改动不涉及原生依赖或打包路径。
-- **安装与发布**：安装向导、卸载、覆盖升级、断网安装、应用图标与代码签名信誉均未验收；安装包仍为 NotSigned。
-
-## 3. 与 PRD 验收标准的对应关系
-
-“后端已验证”指该 AC 中由后端决定的行为已经通过自动化检查（单元、Electron 集成或端到端）；“依赖前端/桌面”指其余部分需要界面或系统集成完成后才能整体验收。
-
-| AC | 后端状态 | 依据与说明 |
-| --- | --- | --- |
-| AC-F01-01 | 后端已验证 | 集成场景 1/2：创建不改变当前任务；端到端用例 2 校验 A 进行中时创建 B |
-| AC-F01-02 | 前端已验证提示位置 | 空标题由界面拦截并显示「请填写任务标题」；后端 schema 仍拒绝空白标题 |
-| AC-F01-03 | 后端已验证 | 仅标题即可创建 |
-| AC-F01-04 | 前端组件已验证草稿恢复 | 打开记录框读取 `getDraft`；关闭前 flush。独立窗口唤起时机仍依赖桌面 |
-| AC-F01-05 | 前端已验证防重复 | 提交锁 + 同一 commandId；组件测试连续点击复用提交标识 |
-| AC-F02-01 | 主窗口已验证；widget 依赖桌面 | 界面 E2E：切换后当前卡片显示目标任务 |
-| AC-F02-02 | 后端已验证 | 没有 `doing` 时 `currentTask` 为 `null`，不保留上一件 |
-| AC-F02-03 | 依赖桌面集成 | 入口隐藏后可访问性取决于 capture/widget 与快捷键 |
-| AC-F02-04 | 前端已实现，人工长文本走查未做 | 列表截断、详情展示完整标题/备注/断点 |
-| AC-F03-01 | 前端界面已验证 | 界面 E2E：保存「检查下游重试配置」后切换，恢复区可见该断点 |
-| AC-F03-02 | 后端已验证 | 空白断点不写库；不带断点的切换保持原断点 |
-| AC-F03-03 | 后端已验证（界面返回行为依赖前端） | 关闭切换不调用命令，快速新建的任务保持待处理 |
-| AC-F03-04 | 后端已验证（界面重试依赖前端） | 注入失败后整笔回滚、当前任务仍为原任务、无两件进行中 |
-| AC-F03-05 | 后端已验证 | 自我切换返回 `switched: false`，不暂停也不追加断点 |
-| AC-F04-01 | 后端已验证 | 完成当前任务后推荐最近暂停任务并带最新断点，`startTask` 继续 |
-| AC-F04-02 | 后端已验证 | 按 `status_changed_at`、`status_revision`、`id` 稳定排序，可选择其他 |
-| AC-F04-03 | 后端已验证 | “暂不开始”不调用命令；当前位为空，暂停任务状态不变 |
-| AC-F04-04 | 后端已验证 | `waiting` 不参与默认推荐 |
-| AC-F04-05 | 后端已验证 | 重新打开回到 `todo`、保留断点与历史、不抢占当前任务；集成场景 14 补充来源校验：只有 `done`/`cancelled` 可以重新打开，`waiting` 的“条件满足”必须走 `resolveWaiting` |
-| AC-F05-01 | 后端已验证（列表展示依赖前端） | 等待原因与断点历史都保存在同一任务上 |
-| AC-F05-02 | 后端已验证 | `resolveWaiting` 只接受 `waiting` → `todo`（集成场景 14：其余五种来源返回 `STATE_CONFLICT`）；立即继续由 `startTask` 返回 `NEED_SWITCH` |
-| AC-F05-03 | 后端已验证（多处一致显示依赖前端） | 标题是单一事实来源，快照与详情返回同一值 |
-| AC-F05-04 | 后端已验证 | 取消不计入未结束计数；重新打开回到待处理 |
-| AC-F06-01 | 后端已验证 | 收尾查询覆盖全部跨日未结束事项（含等待与暂停），集成场景 10 用真实跨日夹具明确断言两类事项都在收尾列表中 |
-| AC-F06-02 | 后端已验证（启动展示依赖前端） | 下次开工引用持久化，且不自动开始任务 |
-| AC-F06-03 | 后端已验证 | `finishDailyReview` 的 `pause` 同时提交断点与暂停；收尾期间当前任务被其他调用改变时整笔拒绝且无副作用（集成场景 13） |
-| AC-F06-04 | 后端已验证 | `keep` 不修改任务状态与 revision；当前任务已变化时返回 `STATE_CONFLICT` |
-| AC-F06-05 | 部分验证 | 用两个本地日区间验证了“完成列表按日期重算、状态与断点不变”；日期边界另有固定时刻与隔离进程内时区的覆盖（单元用例 11 个、集成场景 15：不存在午夜、重复零点、23/25 小时当天、左闭右开、非 24 小时区间）；真实跨午夜时钟滚动未执行 |
-| AC-F07-01 | 后端已验证 | 端到端用例 3：关闭应用后重启读取到状态、断点、草稿、偏好与下次开工 |
-| AC-F07-02 | 部分验证 | 验证了正常关闭与重启后已提交数据完整、启动阶段退出与就绪后无应答退出都不破坏数据（集成场景 16）；进程被操作系统强杀（SIGKILL）场景未执行 |
-| AC-F07-03 | 后端已验证（输入保留依赖前端） | 写入失败返回 `STORAGE_ERROR` 且整笔回滚；组件测试验证失败时保留输入并复用提交标识 |
-| AC-F07-04 | 依赖桌面集成 | 快捷键注册与冲突处理属桌面职责；偏好接口已就绪 |
-| AC-F07-05 | 部分验证 | 数据库唯一索引与单连接串行写入已验证；单实例锁在真实重复启动下未实测 |
-
-自动检查未覆盖、必须人工验收的部分：安装包安装/卸载/升级、断网安装、签名信誉、托盘与快捷键、输入法、DPI 与多显示器、性能与资源门槛、可见窗口下的视觉与可访问性走查。
-
-## 4. 前端与桌面验收分工（2026-09-12）
-
-| 模块 | 前端 | 仍依赖桌面集成 |
-| --- | --- | --- |
-| F01 快速记录 | 主窗口模态已实现：标题必填、Enter 稍后处理、现在处理、草稿去抖/恢复/清空、防重复提交。界面 E2E 覆盖 | 独立 capture 窗口、全局快捷键唤起、IME Enter、保存后隐藏并还焦点 |
-| F02 当前任务 | 主窗口当前卡片、空状态、列表与计数已实现 | 独立 widget、置顶、收起、多显示器位置 |
-| F03 切换 | 单次 `switchTask`、跳过、只暂停、返回不改状态。界面 E2E 覆盖带断点切换 | 无 |
-| F04 完成与恢复 | 完成当前后展示后端 `resume`；继续/选择其他/暂不开始 | 无 |
-| F05 等待与整理 | 标记等待、条件满足、取消/重新打开、已结束分页 | 无 |
-| F06 收尾 | 当天完成、跨日未结束、下次开工引用、暂停并结束 / 保留当前状态 | 无 |
-| F07 设置与恢复 | 读取/更新偏好；启动恢复真实快照与草稿；数据库不可用显示真实错误 | `launchAtLogin` / `accelerator` 的操作系统应用、快捷键冲突 `SHORTCUT_CONFLICT` |
-
-## 6. 桌面集成交接
-
-当前 **没有** `showMain` / `showCapture` / `hideWidget` / `quit` 等窗口 API，renderer 也未调用不存在的方法。设置页写入偏好后明确提示 OS 尚未生效。
-
-建议补齐的最小、固定、类型化桥接：
-
-| 方法 | 参数 | 时机 | 失败展示 | 验收 |
+| 操作 | P50 | P95 | max | n |
 | --- | --- | --- | --- | --- |
-| 创建/显示 capture | 无。加载 `pickup://app/index.html?window=capture` | 快捷键、托盘「记一件事」、主窗口入口可选改为唤起独立窗 | 注册失败用 `SHORTCUT_CONFLICT`，保留主窗口按钮 | 热唤起标题可输入；Esc 不创建任务；成功后隐藏 |
-| 创建/显示 widget | 读 `widgetEnabled`；`?window=widget` | 偏好开启时创建，关闭时销毁 | 不伪造成功 | 与主窗口同一快照 |
-| showMain | 无 | widget「打开主窗口」、托盘「打开 PickUp」、second-instance | 窗口已销毁则重建 | 不改变任务状态 |
-| 关闭主窗口 | 隐藏到托盘 | `close` 且非退出 | 无 | 不改变任务状态 |
-| 完全退出 | 停写、关 worker | 托盘「完全退出」 | 未保存草稿保留窗口 | 快捷唤起不可用 |
-| `accelerator` | 先注册新组合，成功再 `updatePreference` | 设置失焦/保存 | `SHORTCUT_CONFLICT`，保留旧组合 | 冲突后主窗口仍能打开记录框 |
-| `launchAtLogin` | 读系统状态 → 应用 → 写偏好；失败回滚 | 设置开关 | `SYSTEM_SETTING_ERROR`，展示真实状态 | 开关与系统登录项一致 |
-| widgetBounds | 去抖 `updatePreference` | move/resize 结束、隐藏前 | 保存失败不丢窗口 | 重启后仍在可见区域 |
+| createTask | 22 ms | 44 ms | 422 ms | 1000 |
+| switchTask | 10 ms | 249 ms | 249 ms | 20 |
+| showCapture（IPC 往返） | 11 ms | 25 ms | 25 ms | 20 |
 
-调用方只能是 main。不要把窗口脚本或路径交给 renderer。
+showCapture 从 renderer 调用到主进程返回，**不是**操作系统快捷键按下到标题可输入。规模夹具：1000 件任务，前 10 件各 10 条短断点。
 
-## 5. 复现方式
+## 2. 视觉
 
-见 [ENGINEERING.md](ENGINEERING.md) 的命令表。安装、构建、测试串行执行；测试使用隔离临时目录，不使用正式数据。接口语义、错误码与重试流程见 [IPC-CONTRACT.md](IPC-CONTRACT.md)。
+截图（隐藏/自动化窗口渲染）：
 
-打包相关的环境说明：本机直接访问 GitHub 构件下载地址会超时（`connect ETIMEDOUT`），需要在执行打包前把 Electron 发行包与 electron-builder 构件指向可用镜像，例如：
+- `docs/verification/01-main-empty.png`
+- `docs/verification/02-capture.png`（独立 capture 窗口）
+- `docs/verification/03-current-task.png`
+- `docs/verification/04-small-window.png`（600×540，「今日收尾」仍在导航）
+- `docs/verification/05-settings.png`（真实快捷键/开机启动状态，无「待接入」）
+- `docs/verification/07-detail-contrast.png`（浅色侧栏次按钮为深色字）
 
-```powershell
-$env:ELECTRON_MIRROR='https://npmmirror.com/mirrors/electron/'
-$env:ELECTRON_BUILDER_BINARIES_MIRROR='https://npmmirror.com/mirrors/electron-builder-binaries/'
-npm run pack
-$env:PICKUP_PACKAGED_EXE=(Resolve-Path 'dist/win-unpacked/PickUp.exe').Path
-npx playwright test
-Remove-Item Env:PICKUP_PACKAGED_EXE
-```
+未做：系统缩放 150%、屏幕阅读器、真实中文 IME 候选窗。
 
-上述变量只影响当前 shell，不写入仓库配置；镜像仅替代下载来源，构建与打包流程未改变。
+## 3. 未验证
+
+| 项 | 限制 | 复验 |
+| --- | --- | --- |
+| OS 全局快捷键按下 | 自动化不能可靠注入系统热键 | 安装后按 Ctrl+Alt+N，标题可输入 |
+| 快捷键被其他程序占用 | 未人为占用 | 用系统已占用组合保存，应 `SHORTCUT_CONFLICT` |
+| 托盘点击 | Playwright 不操作托盘 | 点托盘「打开 / 记一件事 / 完全退出」 |
+| 开机启动读回 | e2e 跳过 `setLoginItemSettings` | 正式包打开开关，任务管理器启动项对照 |
+| 真实午夜 / 改系统时间 | 只用定时器与 `TZ` | 打开收尾跨 00:00 |
+| 拔插显示器 / 改 DPI | 仅 `visibleBounds` 单测 | 拔屏后 widget 仍可见 |
+| 睡眠恢复 | 已监听 `powerMonitor` | 睡眠再打开收尾日期 |
+| 磁盘满 / 权限拒绝 | 故障注入非实盘 | 只读目录或磁盘满 |
+| SIGKILL / 掉电 | 仅 worker 退出注入 | 任务管理器结束进程后重启 |
+| Authenticode / SmartScreen | NotSigned | 签名后再验 |
+| 向正式 `%APPDATA%/PickUp` 写入 | 禁止 | 试用安装走默认路径，卸载后数据仍在 |
+
+## 4. 与上一轮口径
+
+上一轮 VALIDATION 混有 44/46 测试和「本轮已 pack / 未 pack」。本轮单元 **54**；集成仍为 **16**；E2E 源码构建 **6**（含桌面窗口）。不要用旧安装包代表本源码。
+
+追踪表：[ACCEPTANCE-TRACKING.md](ACCEPTANCE-TRACKING.md)。

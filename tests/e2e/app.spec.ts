@@ -1,8 +1,14 @@
-import { test, expect, _electron } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PickupAPI } from "../../src/shared/contracts";
+import {
+  captureTask,
+  launch,
+  launchEnvironment,
+  windowByKind,
+} from "./helpers";
 
 declare global {
   interface Window {
@@ -18,56 +24,41 @@ const EXPECTED_BRIDGE_METHODS = [
   "finishDailyReview",
   "getCommandResult",
   "getDailyReview",
+  "getDesktopState",
   "getDraft",
   "getPreferences",
   "getTaskDetail",
   "getWorkspaceSnapshot",
+  "hideCapture",
+  "hideWidget",
   "listTasks",
   "markWaiting",
+  "onCaptureShown",
+  "onDayInvalidated",
+  "onPrepareClose",
   "onStateChanged",
   "pauseTask",
+  "quit",
   "reopenTask",
   "resolveWaiting",
   "saveBreakpoint",
   "saveDraft",
   "setNextUp",
+  "showCapture",
+  "showMain",
   "startTask",
   "switchTask",
   "updatePreference",
   "updateTask",
 ];
 
-function launchEnvironment(directory: string): Record<string, string> {
-  const env: Record<string, string> = {
-    ...Object.fromEntries(
-      Object.entries(process.env).filter(
-        (entry): entry is [string, string] => entry[1] !== undefined,
-      ),
-    ),
-    PICKUP_E2E: "1",
-    PICKUP_TEST_DATA: directory,
-  };
-  delete env.ELECTRON_RUN_AS_NODE;
-  return env;
-}
-
-function launch(env: Record<string, string>) {
-  return _electron.launch({
-    args: process.env.PICKUP_PACKAGED_EXE ? [] : ["."],
-    executablePath: process.env.PICKUP_PACKAGED_EXE,
-    env,
-  });
-}
-
 test("secure renderer creates a persisted task", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pickup-e2e-"));
   const application = await launch(launchEnvironment(directory));
   try {
-    const page = await application.firstWindow();
+    const page = await windowByKind(application, "main");
     await expect(page.getByRole("heading", { name: /别让工作/ })).toBeVisible();
-    await page.getByRole("button", { name: "记一件事" }).first().click();
-    await page.getByLabel("标题", { exact: true }).fill("验证真实桌面保存");
-    await page.getByRole("button", { name: "稍后处理" }).click();
+    await captureTask(application, page, "验证真实桌面保存");
     await expect(
       page.getByText("验证真实桌面保存", { exact: true }).first(),
     ).toBeVisible();

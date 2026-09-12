@@ -8,6 +8,7 @@ import {
   createTaskSchema,
   dailyReviewSchema,
   finishDailyReviewSchema,
+  getDailyReviewQuerySchema,
   listTasksSchema,
   markWaitingSchema,
   preferencesSchema,
@@ -221,6 +222,18 @@ describe("查询输入边界", () => {
     });
     expect(parsed.success).toBe(true);
     expect(parsed.success && parsed.data.completedLimit).toBe(100);
+  });
+
+  it("收尾分页不能指定日期，只接受完成清单偏移", () => {
+    const parsed = getDailyReviewQuerySchema.parse({});
+    expect(parsed.completedOffset).toBe(0);
+    expect(parsed.completedLimit).toBe(50);
+    expect(
+      getDailyReviewQuerySchema.safeParse({
+        completedOffset: 50,
+        dayKey: "2026-09-12",
+      }).success,
+    ).toBe(false);
   });
 });
 

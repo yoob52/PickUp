@@ -1,6 +1,6 @@
 # PickUp 工程说明
 
-状态：本地业务后端已实现；正式产品前端已接入真实 IPC（2026-09-12）。日期：2026-09-12。产品架构以 [ARCHITECTURE.md](ARCHITECTURE.md) 为目标，接口语义见 [IPC-CONTRACT.md](IPC-CONTRACT.md)，本文件描述当前代码实际状态。
+状态：本地业务后端、正式产品界面与 Windows 桌面集成（托盘、全局快捷键、capture/widget、关闭到托盘、开机启动协调）已实现（2026-09-12）。产品架构以 [ARCHITECTURE.md](ARCHITECTURE.md) 为目标，接口语义见 [IPC-CONTRACT.md](IPC-CONTRACT.md)，验收见 [VALIDATION.md](VALIDATION.md) 与 [ACCEPTANCE-TRACKING.md](ACCEPTANCE-TRACKING.md)。
 
 ## 1. 环境及依赖锁定
 
@@ -55,8 +55,10 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
   - `errors.ts`：领域错误、schema/迁移/一致性/连接错误与启动诊断文案。
   - `migrations/`：`001.sql` 初始结构 + `index.ts` 顺序迁移清单（当前 schema 版本 1）。
 - `src/main/`
-  - `index.ts`：单实例、生命周期、资源协议、窗口与 worker 装配。
-  - `ipc.ts`：固定命令 allowlist、来源与主 frame 校验、参数校验、变更广播、日期边界计算。
+  - `index.ts`：单实例、生命周期、资源协议、桌面宿主与 worker 装配。
+  - `desktop.ts`：主窗口/唯一 capture/widget、托盘、全局快捷键、登录项、关闭隐藏、完全退出与草稿 flush。
+  - `bounds.ts`：widget 工作区可见性校正（纯函数，可单测）。
+  - `ipc.ts`：固定命令 allowlist、来源与主 frame 校验、参数校验、变更广播、日期边界与窗口 API。
   - `worker-client.ts`：请求关联、超时、pending 清理、启动/退出/关闭处理与诊断（含 ready 前退出的初始化结算）。
   - `integration.ts`：Electron 内的真实 worker + SQLite 集成验证（含故障注入与版本守卫）。
 - `src/preload/index.ts`：暴露固定的 `window.pickup` 业务方法与 `onStateChanged` 订阅。
@@ -79,12 +81,12 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
 | `npm run check` | 类型 + 格式 + 单元/组件测试 |
 | `npm run build` | 输出 main/preload/worker/renderer 到 out |
 | `npm run test:integration` | 构建后通过 Electron 运行真实 worker/SQLite 的 16 组集成场景 |
-| `npm run test:e2e` | 构建后运行 Playwright Electron 自动化（含桥接业务链路、真实界面闭环与重启恢复） |
+| `npm run test:e2e` | 构建后运行 Playwright Electron 自动化（桥接、独立 capture、界面闭环、视觉、规模） |
 | `npm run rebuild:native` | 为锁定 Electron/架构准备 better-sqlite3 原生模块 |
 | `npm run pack` | 输出 dist/win-unpacked |
 | `npm run dist` | 输出 dist/PickUp Setup 0.1.0.exe |
 
-禁止同时执行安装/重建和构建/打包，它们共享依赖目录。不要用开发 Node.js 直接加载已经按 Electron ABI 准备的原生库；数据库集成测试刻意在 Electron 中执行。`scripts/run-integration.mjs` 的进程级超时为 120 秒，覆盖当前 16 组场景（含多次 worker 重启）。
+禁止同时执行安装/重建和构建/打包，它们共享依赖目录。不要用开发 Node.js 直接加载已经按 Electron ABI 准备的原生库；数据库集成测试刻意在 Electron 中执行。`scripts/run-integration.mjs` 的进程级超时为 120 秒，覆盖当前 16 组场景（含多次 worker 重启）。单元/组件测试数量以最近一次 `npm test` 为准，不要沿用旧轮次的 44/46。
 
 验证解包后的应用：
 
@@ -120,6 +122,6 @@ renderer 禁止 Node 集成并开启 contextIsolation/sandbox；IPC 检查已登
 
 ## 6. 发布边界
 
-NSIS 配置为用户级完整安装包、卸载保留数据，原生模块按需从 ASAR 解包。当前默认图标，Authenticode 检查为 NotSigned。安装包已生成，解包产物已验证，安装向导/卸载/升级/签名信誉尚未验收。托盘、全局快捷键、开机启动、capture/widget 窗口与主窗口隐藏行为仍属桌面集成待办。
+NSIS 配置为用户级完整安装包、卸载保留数据，原生模块按需从 ASAR 解包。当前默认图标，Authenticode 为 NotSigned。本轮已静默安装到临时目录、对安装后的 exe 跑桌面 E2E、覆盖安装并卸载。签名信誉与向正式 `%APPDATA%/PickUp` 路径的手工试用未做。e2e 环境不调用 `setLoginItemSettings`，避免污染开发机启动项。
 
 本地 Git 管理于 2026-09-11 初始化，默认分支为 `main`。源码、文档、配置、测试和依赖锁文件纳入版本控制；依赖目录、构建产物、测试结果、本地数据库和签名证书由 `.gitignore` 排除。文本换行由 `.gitattributes` 统一管理。远程仓库和远程 CI 尚未配置，构建、测试与诊断均在本机执行。

@@ -1,12 +1,19 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { PickupAPI } from "../shared/contracts";
 
+function subscribe(channel: string, listener: (...args: unknown[]) => void) {
+  const handler = (_event: unknown, ...args: unknown[]) => listener(...args);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler);
+}
+
 /** 只暴露固定业务方法；不透传任意 channel，也不暴露原始 ipcRenderer。 */
 const api: PickupAPI = {
   getWorkspaceSnapshot: () => ipcRenderer.invoke("pickup:getWorkspaceSnapshot"),
   listTasks: (input) => ipcRenderer.invoke("pickup:listTasks", input),
   getTaskDetail: (input) => ipcRenderer.invoke("pickup:getTaskDetail", input),
-  getDailyReview: () => ipcRenderer.invoke("pickup:getDailyReview"),
+  getDailyReview: (input) =>
+    ipcRenderer.invoke("pickup:getDailyReview", input ?? {}),
   getCommandResult: (input) =>
     ipcRenderer.invoke("pickup:getCommandResult", input),
   createTask: (input) => ipcRenderer.invoke("pickup:createTask", input),
@@ -29,10 +36,31 @@ const api: PickupAPI = {
   getPreferences: () => ipcRenderer.invoke("pickup:getPreferences"),
   updatePreference: (input) =>
     ipcRenderer.invoke("pickup:updatePreference", input),
+  showMain: () => ipcRenderer.invoke("pickup:showMain"),
+  showCapture: () => ipcRenderer.invoke("pickup:showCapture"),
+  hideCapture: () => ipcRenderer.invoke("pickup:hideCapture"),
+  hideWidget: () => ipcRenderer.invoke("pickup:hideWidget"),
+  quit: () => ipcRenderer.invoke("pickup:quit"),
+  getDesktopState: () => ipcRenderer.invoke("pickup:getDesktopState"),
   onStateChanged(listener) {
-    const handler = (_event: unknown, revision: number) => listener(revision);
-    ipcRenderer.on("pickup:changed", handler);
-    return () => ipcRenderer.removeListener("pickup:changed", handler);
+    return subscribe("pickup:changed", (revision) =>
+      listener(revision as number),
+    );
+  },
+  onDayInvalidated(listener) {
+    return subscribe("pickup:day-invalidated", () => listener());
+  },
+  onCaptureShown(listener) {
+    return subscribe("pickup:capture-shown", () => listener());
+  },
+  onPrepareClose(handler) {
+    const onRequest = () => {
+      void handler()
+        .catch(() => false)
+        .then((ok) => ipcRenderer.send("pickup:prepare-close-result", ok));
+    };
+    ipcRenderer.on("pickup:prepare-close", onRequest);
+    return () => ipcRenderer.removeListener("pickup:prepare-close", onRequest);
   },
 };
 

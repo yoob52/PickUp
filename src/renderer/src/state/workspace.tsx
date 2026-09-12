@@ -68,6 +68,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const unsubscribe = window.pickup.onStateChanged((next) => {
       if (next >= revision.current) void refresh();
     });
+    const unsubDay = window.pickup.onDayInvalidated(() => {
+      void refresh();
+    });
     void refresh();
     const onVisible = () => {
       if (document.visibilityState === "visible") void refresh();
@@ -76,6 +79,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     window.addEventListener("focus", onVisible);
     return () => {
       unsubscribe();
+      unsubDay();
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
     };

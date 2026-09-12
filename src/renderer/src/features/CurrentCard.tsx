@@ -25,7 +25,7 @@ export function CurrentCard({
       <article className="current-card">
         <div className="card-topline">
           <div className="card-kicker">NOW / OPEN SLOT</div>
-          <div className="card-id">F02 / CURRENT</div>
+          <div className="card-id">当前</div>
         </div>
         <div className="current-content">
           <h2>现在准备做什么？</h2>
@@ -55,7 +55,7 @@ export function CurrentCard({
     <article className="current-card">
       <div className="card-topline">
         <div className="card-kicker">CURRENT / IN PROGRESS</div>
-        <div className="card-id">F02 / LIVE</div>
+        <div className="card-id">进行中</div>
       </div>
       <div className="current-content">
         <h2>{current.title}</h2>

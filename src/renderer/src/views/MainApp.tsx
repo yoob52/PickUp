@@ -5,9 +5,7 @@ import { createPending, invokeCommand } from "../lib/command";
 import { useWorkspace } from "../state/workspace";
 import { Button, NoticeBar } from "../ui/primitives";
 import { useToast } from "../ui/Toast";
-import { Modal } from "../ui/Modal";
 import { AppShell } from "../features/AppShell";
-import { CaptureForm, type CaptureFormHandle } from "../features/CaptureForm";
 import { CurrentCard } from "../features/CurrentCard";
 import { DailyReviewDialog } from "../features/DailyReview";
 import { ResumePanel } from "../features/ResumePanel";
@@ -21,7 +19,6 @@ import { TaskDetailDialog } from "../features/TaskDetail";
 import { WaitDialog } from "../features/WaitDialog";
 
 type Overlay =
-  | { type: "capture" }
   | {
       type: "switch";
       from: TaskSummary;
@@ -30,20 +27,19 @@ type Overlay =
     }
   | { type: "detail"; taskId: string }
   | { type: "wait"; task: TaskSummary }
-  | { type: "review" }
   | { type: "settings" };
 
 export function MainApp() {
   const { snapshot, phase, error, notice, refresh } = useWorkspace();
   const notify = useToast();
   const [overlay, setOverlay] = useState<Overlay | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [filter, setFilter] = useState<BoardFilter>("unfinished");
   const [ended, setEnded] = useState<Page<TaskSummary> | null>(null);
   const [endedLoading, setEndedLoading] = useState(false);
   const [resumeHighlight, setResumeHighlight] = useState(false);
   const [savedUnsynced, setSavedUnsynced] = useState(false);
   const boardRef = useRef<HTMLElement | null>(null);
-  const captureRef = useRef<CaptureFormHandle>(null);
   const endedGen = useRef(0);
   const completePending =
     useRef(
@@ -89,7 +85,7 @@ export function MainApp() {
         return;
       if (event.key.toLowerCase() === "n") {
         event.preventDefault();
-        setOverlay({ type: "capture" });
+        void window.pickup.showCapture();
       }
     }
     window.addEventListener("keydown", onKey);
@@ -185,19 +181,6 @@ export function MainApp() {
     );
   }
 
-  async function onCreated(taskId: string, intent: "later" | "now") {
-    const refreshed = await refresh();
-    await afterWrite(refreshed, "已收下这件事，当前工作保持不变。");
-    setOverlay(null);
-    if (intent !== "now") return;
-    const snapshotResult = await window.pickup.getWorkspaceSnapshot();
-    if (!snapshotResult.ok) return;
-    const created = snapshotResult.value.unfinished.find(
-      (item) => item.id === taskId,
-    );
-    if (created) await startTask(created);
-  }
-
   async function loadMoreEnded() {
     if (!ended || !ended.hasMore) return;
     const gen = endedGen.current;
@@ -226,7 +209,7 @@ export function MainApp() {
   if (phase === "unavailable") {
     return (
       <main className="fatal-screen">
-        <p className="eyebrow">DATABASE</p>
+        <p className="eyebrow">本地数据</p>
         <h1>本地数据不可用</h1>
         <p>{error?.message || "数据库无法打开。"}</p>
         <Button onClick={() => void refresh()}>重新读取</Button>
@@ -243,7 +226,7 @@ export function MainApp() {
       filter={filter}
       connection={connection}
       onFilter={focusBoard}
-      onReview={() => setOverlay({ type: "review" })}
+      onReview={() => setReviewOpen(true)}
       onSettings={() => setOverlay({ type: "settings" })}
     >
       {notice ? (
@@ -275,7 +258,7 @@ export function MainApp() {
       ) : null}
       <div className="main-head">
         <div>
-          <div className="eyebrow">The thread keeper / 01</div>
+          <div className="eyebrow">接着工作的线索</div>
           <h1 className="main-title">
             别让工作
             <br />
@@ -292,7 +275,7 @@ export function MainApp() {
           </Button>
           <Button
             icon={<Plus size={15} />}
-            onClick={() => setOverlay({ type: "capture" })}
+            onClick={() => void window.pickup.showCapture()}
           >
             记一件事
           </Button>
@@ -301,7 +284,7 @@ export function MainApp() {
       <section className="dashboard-grid" aria-label="当前工作">
         <CurrentCard
           current={snapshot.currentTask}
-          onCapture={() => setOverlay({ type: "capture" })}
+          onCapture={() => void window.pickup.showCapture()}
           onChoose={() => focusBoard("todo")}
           onPause={() => {
             if (snapshot.currentTask)
@@ -324,13 +307,13 @@ export function MainApp() {
           <div>
             <div className="card-topline">
               <h3>收件入口</h3>
-              <span className="card-id">F01 / CAPTURE</span>
+              <span className="card-id">先收下</span>
             </div>
             <p>先收下，不必现在决定。标题就是一条可以回来的线索。</p>
             <button
               type="button"
               className="capture-trigger"
-              onClick={() => setOverlay({ type: "capture" })}
+              onClick={() => void window.pickup.showCapture()}
             >
               <span className="capture-placeholder">输入新事项</span>
               <span className="capture-key">N</span>
@@ -369,24 +352,10 @@ export function MainApp() {
           onContinue={(task) => void startTask(task)}
           onChooseOther={() => focusBoard("paused")}
           onDefer={() => setResumeHighlight(false)}
-          onPickNext={() => setOverlay({ type: "review" })}
-          onChangeNext={() => setOverlay({ type: "review" })}
+          onPickNext={() => setReviewOpen(true)}
+          onChangeNext={() => setReviewOpen(true)}
         />
       </section>
-      {overlay?.type === "capture" ? (
-        <Modal
-          eyebrow="Quick capture / F01"
-          title="记下新一件事。"
-          onClose={() => void captureRef.current?.tryClose()}
-        >
-          <CaptureForm
-            ref={captureRef}
-            onCreated={onCreated}
-            onCancel={() => setOverlay(null)}
-            onNotice={notify}
-          />
-        </Modal>
-      ) : null}
       {overlay?.type === "switch" ? (
         <SwitchFlow
           mode={overlay.mode}
@@ -407,6 +376,7 @@ export function MainApp() {
           taskId={overlay.taskId}
           revision={snapshot.revision}
           onClose={() => setOverlay(null)}
+          stacked={reviewOpen}
           onStart={(task) => {
             setOverlay(null);
             void startTask(task);
@@ -428,9 +398,9 @@ export function MainApp() {
           onNotice={notify}
         />
       ) : null}
-      {overlay?.type === "review" ? (
+      {reviewOpen ? (
         <DailyReviewDialog
-          onClose={() => setOverlay(null)}
+          onClose={() => setReviewOpen(false)}
           onOpenTask={(task) => setOverlay({ type: "detail", taskId: task.id })}
           onRefresh={refresh}
           onNotice={notify}
