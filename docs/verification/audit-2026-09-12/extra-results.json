@@ -1,0 +1,22 @@
+{
+  "keyboardStart": {
+    "dialogCount": 0,
+    "state": null
+  },
+  "detailButton": {
+    "color": "rgb(242, 240, 233)",
+    "background": "rgba(0, 0, 0, 0)",
+    "parent": "rgba(18, 19, 19, 0.055)",
+    "disabled": false
+  },
+  "nativeCloseElapsedMs": 145,
+  "draftAfterNativeClose": {
+    "ok": true,
+    "value": {
+      "title": "",
+      "note": "",
+      "version": 0
+    },
+    "revision": 1
+  }
+}

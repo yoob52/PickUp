@@ -1,0 +1,45 @@
+{
+  "windows": 1,
+  "seed": {
+    "currentId": "dddbc476-72d9-4af4-bd2f-9de84200d683",
+    "total": 101,
+    "items": 100,
+    "hasMore": true,
+    "dayKey": "2026-09-12"
+  },
+  "reviewList": {
+    "rows": 100,
+    "hint": "仅列出 100 / 101 条当天完成记录。",
+    "buttons": 100
+  },
+  "midnight": {
+    "staleLabel": 1,
+    "freshQuery": {
+      "dayKey": "2026-09-13",
+      "total": 0
+    }
+  },
+  "reviewDraftAfterInspect": "",
+  "smallWindow": {
+    "width": 588,
+    "height": 478,
+    "scrollWidth": 573,
+    "reviewButtonVisible": false,
+    "nextStartButtonVisible": true
+  },
+  "settings": "PREFERENCES / F07\n让入口安静。\n\n偏好保存在本地数据库。托盘、全局快捷键、开机启动和独立窗口仍待桌面集成接入，开关不会假装已经对操作系统生效。\n\n显示桌面入口\n已写入偏好。独立 widget 窗口尚未创建，打开后不会出现悬浮窗。\n入口置顶\n仅保存期望值。置顶行为由桌面窗口接管后才会生效。\n开机启动\n默认关闭。当前只保存偏好，不会向系统注册启动项。\n快速记录快捷键\n当前未向系统注册全局快捷键。主窗口内仍可用“记一件事”打开记录框。\n完成",
+  "longTitle": {
+    "ok": true,
+    "value": {
+      "type": "updateTask",
+      "taskId": "dddbc476-72d9-4af4-bd2f-9de84200d683",
+      "changed": true
+    },
+    "revision": 207
+  },
+  "longDetail": {
+    "client": 705,
+    "scroll": 705,
+    "headingWidth": 589.176025390625
+  }
+}
