@@ -35,6 +35,8 @@ export function SwitchFlow({
   onDone,
   onNotice,
 }: Props) {
+  const [fromTask, setFromTask] = useState(from);
+  const [toTask, setToTask] = useState(to);
   const [draft, setDraft] = useState<BreakpointDraft>(emptyBreakpoint);
   const [openMore, setOpenMore] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -63,6 +65,26 @@ export function SwitchFlow({
     setError("");
   }
 
+  async function refreshTasks() {
+    const snapshot = await window.pickup.getWorkspaceSnapshot();
+    if (!snapshot.ok) {
+      setError(snapshot.message);
+      return;
+    }
+    const latestFrom =
+      snapshot.value.unfinished.find((item) => item.id === fromTask.id) ??
+      (snapshot.value.currentTask?.id === fromTask.id
+        ? snapshot.value.currentTask
+        : null);
+    if (latestFrom) setFromTask(latestFrom);
+    if (toTask) {
+      const latestTo =
+        snapshot.value.unfinished.find((item) => item.id === toTask.id) ?? null;
+      if (latestTo) setToTask(latestTo);
+    }
+    setError("任务已更新。已保留断点，请确认后再次提交。");
+  }
+
   async function submit(skip: boolean) {
     if (busy) return;
     setBusy(true);
@@ -72,12 +94,12 @@ export function SwitchFlow({
         const input = pendingPause.take(
           (commandId) => ({
             commandId,
-            task: taskRef(from),
+            task: taskRef(fromTask),
             breakpoint,
           }),
           (current) =>
-            current.task.taskId === from.id &&
-            current.task.expectedVersion === from.version &&
+            current.task.taskId === fromTask.id &&
+            current.task.expectedVersion === fromTask.version &&
             JSON.stringify(current.breakpoint) === JSON.stringify(breakpoint),
         );
         const result = await invokeCommand(input.commandId, () =>
@@ -86,7 +108,10 @@ export function SwitchFlow({
         if (!result.ok) {
           setError(result.message);
           onNotice(result.message, "error");
-          if (result.code === "STATE_CONFLICT") pendingPause.clear();
+          if (result.code === "STATE_CONFLICT") {
+            pendingPause.clear();
+            await refreshTasks();
+          }
           return;
         }
         pendingPause.clear();
@@ -94,20 +119,20 @@ export function SwitchFlow({
         onNotice("已暂停。回来时从这条线索继续。");
         return;
       }
-      if (!to) {
+      if (!toTask) {
         setError("没有可切换的目标任务。");
         return;
       }
       const input = pendingSwitch.take(
         (commandId) => ({
           commandId,
-          from: taskRef(from),
-          to: taskRef(to),
+          from: taskRef(fromTask),
+          to: taskRef(toTask),
           breakpoint,
         }),
         (current) =>
-          current.from.expectedVersion === from.version &&
-          current.to.expectedVersion === to.version &&
+          current.from.expectedVersion === fromTask.version &&
+          current.to.expectedVersion === toTask.version &&
           JSON.stringify(current.breakpoint) === JSON.stringify(breakpoint),
       );
       const result = await invokeCommand(input.commandId, () =>
@@ -116,7 +141,10 @@ export function SwitchFlow({
       if (!result.ok) {
         setError(result.message);
         onNotice(result.message, "error");
-        if (result.code === "STATE_CONFLICT") pendingSwitch.clear();
+        if (result.code === "STATE_CONFLICT") {
+          pendingSwitch.clear();
+          await refreshTasks();
+        }
         return;
       }
       pendingSwitch.clear();
@@ -131,7 +159,7 @@ export function SwitchFlow({
     }
   }
 
-  const previous = breakpointLine(from.latestBreakpoint);
+  const previous = breakpointLine(fromTask.latestBreakpoint);
 
   return (
     <Modal
@@ -142,14 +170,14 @@ export function SwitchFlow({
       <div className="switch-context">
         <div className="context-box">
           <span>{mode === "pause" ? "正在暂停" : "当前任务"}</span>
-          <strong>{from.title}</strong>
+          <strong>{fromTask.title}</strong>
         </div>
         <div className="context-arrow" aria-hidden="true">
           <ArrowRight size={18} />
         </div>
         <div className="context-box">
           <span>{mode === "pause" ? "当前位" : "下一件事"}</span>
-          <strong>{to ? to.title : "暂时空着"}</strong>
+          <strong>{toTask ? toTask.title : "暂时空着"}</strong>
         </div>
       </div>
       <Field id="breakpoint-next" label="下一步">

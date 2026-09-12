@@ -28,11 +28,13 @@ export function Modal({
 }) {
   const dialog = useRef<HTMLElement>(null);
   const opener = useRef<Element | null>(null);
+  if (opener.current === null && typeof document !== "undefined") {
+    opener.current = document.activeElement;
+  }
   const headingId = useId();
   const labelId = labelledBy ?? headingId;
 
   useEffect(() => {
-    opener.current = document.activeElement;
     const node = dialog.current;
     const focusables = () =>
       node ? [...node.querySelectorAll<HTMLElement>(FOCUSABLE)] : [];
@@ -43,7 +45,8 @@ export function Modal({
     (preferred ?? focusables()[0])?.focus();
     return () => {
       const previous = opener.current;
-      if (previous instanceof HTMLElement) previous.focus();
+      if (previous instanceof HTMLElement && previous.isConnected)
+        previous.focus();
     };
   }, []);
 
