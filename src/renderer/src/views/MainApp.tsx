@@ -7,7 +7,7 @@ import { Button, NoticeBar } from "../ui/primitives";
 import { useToast } from "../ui/Toast";
 import { Modal } from "../ui/Modal";
 import { AppShell } from "../features/AppShell";
-import { CaptureForm } from "../features/CaptureForm";
+import { CaptureForm, type CaptureFormHandle } from "../features/CaptureForm";
 import { CurrentCard } from "../features/CurrentCard";
 import { DailyReviewDialog } from "../features/DailyReview";
 import { ResumePanel } from "../features/ResumePanel";
@@ -43,6 +43,8 @@ export function MainApp() {
   const [resumeHighlight, setResumeHighlight] = useState(false);
   const [savedUnsynced, setSavedUnsynced] = useState(false);
   const boardRef = useRef<HTMLElement | null>(null);
+  const captureRef = useRef<CaptureFormHandle>(null);
+  const endedGen = useRef(0);
   const completePending =
     useRef(
       createPending<{
@@ -62,19 +64,16 @@ export function MainApp() {
 
   useEffect(() => {
     if (filter !== "ended") return;
-    let active = true;
+    const gen = ++endedGen.current;
     setEndedLoading(true);
     void window.pickup
       .listTasks({ statuses: ["done", "cancelled"], offset: 0, limit: 50 })
       .then((result) => {
-        if (!active) return;
+        if (gen !== endedGen.current) return;
         setEndedLoading(false);
         if (result.ok) setEnded(result.value);
         else notify(result.message, "error");
       });
-    return () => {
-      active = false;
-    };
   }, [filter, snapshot.revision, notify]);
 
   useEffect(() => {
@@ -201,18 +200,21 @@ export function MainApp() {
 
   async function loadMoreEnded() {
     if (!ended || !ended.hasMore) return;
+    const gen = endedGen.current;
+    const page = ended;
     const result = await window.pickup.listTasks({
       statuses: ["done", "cancelled"],
-      offset: ended.offset + ended.limit,
-      limit: ended.limit,
+      offset: page.offset + page.limit,
+      limit: page.limit,
     });
+    if (gen !== endedGen.current) return;
     if (!result.ok) {
       notify(result.message, "error");
       return;
     }
     setEnded({
       ...result.value,
-      items: [...ended.items, ...result.value.items],
+      items: [...page.items, ...result.value.items],
     });
   }
 
@@ -375,9 +377,10 @@ export function MainApp() {
         <Modal
           eyebrow="Quick capture / F01"
           title="记下新一件事。"
-          onClose={() => setOverlay(null)}
+          onClose={() => void captureRef.current?.tryClose()}
         >
           <CaptureForm
+            ref={captureRef}
             onCreated={onCreated}
             onCancel={() => setOverlay(null)}
             onNotice={notify}
@@ -402,6 +405,7 @@ export function MainApp() {
       {overlay?.type === "detail" ? (
         <TaskDetailDialog
           taskId={overlay.taskId}
+          revision={snapshot.revision}
           onClose={() => setOverlay(null)}
           onStart={(task) => {
             setOverlay(null);

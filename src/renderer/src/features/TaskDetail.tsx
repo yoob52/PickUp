@@ -1,19 +1,31 @@
 import { useEffect, useRef, useState } from "react";
 import { ArchiveX, Check, Clock3, Pencil, Play, RotateCcw } from "lucide-react";
-import type { TaskDetail as TaskDetailDto } from "../../../shared/contracts";
+import type {
+  BreakpointDraft,
+  BreakpointRecord,
+  BreakpointSummary,
+  TaskDetail as TaskDetailDto,
+} from "../../../shared/contracts";
 import {
+  BREAKPOINT_FIELD_MAX_LENGTH,
   NOTE_MAX_LENGTH,
   TITLE_MAX_LENGTH,
   type TaskSummary,
 } from "../../../shared/contracts";
 import { TASK_STATUS_LABEL } from "../../../shared/task";
-import { createPending, invokeCommand, taskRef } from "../lib/command";
+import {
+  createPending,
+  emptyBreakpoint,
+  invokeCommand,
+  taskRef,
+} from "../lib/command";
 import { formatDateTime } from "../lib/format";
 import { Button, Field, StatusDot } from "../ui/primitives";
 import { Modal } from "../ui/Modal";
 
 type Props = {
   taskId: string;
+  revision: number;
   onClose: () => void;
   onStart: (task: TaskSummary) => void;
   onWait: (task: TaskSummary) => void;
@@ -24,6 +36,7 @@ type Props = {
 
 export function TaskDetailDialog({
   taskId,
+  revision,
   onClose,
   onStart,
   onWait,
@@ -37,7 +50,11 @@ export function TaskDetailDialog({
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [bp, setBp] = useState<BreakpointDraft>(emptyBreakpoint());
   const seq = useRef(0);
+  const editingRef = useRef(false);
+  const detailRef = useRef<TaskDetailDto | null>(null);
+  editingRef.current = editing;
   const pendingUpdate =
     useRef(
       createPending<{
@@ -49,16 +66,30 @@ export function TaskDetailDialog({
       }>(),
     );
   const pendingAction = useRef(createPending<{ commandId: string }>());
+  const pendingBreakpoint =
+    useRef(
+      createPending<{
+        commandId: string;
+        taskId: string;
+        expectedVersion: number;
+        breakpoint: BreakpointDraft;
+      }>(),
+    );
 
-  async function load(offset = 0, more = false) {
+  async function load(kind: "full" | "breakpoints" | "transitions" = "full") {
     const current = ++seq.current;
+    const prev = detailRef.current;
     const result = await window.pickup.getTaskDetail({
       taskId,
-      breakpointOffset: more
-        ? (detail?.breakpoints.offset ?? 0) + (detail?.breakpoints.limit ?? 10)
-        : offset,
+      breakpointOffset:
+        kind === "breakpoints" && prev
+          ? prev.breakpoints.offset + prev.breakpoints.limit
+          : 0,
       breakpointLimit: 10,
-      transitionOffset: 0,
+      transitionOffset:
+        kind === "transitions" && prev
+          ? prev.transitions.offset + prev.transitions.limit
+          : 0,
       transitionLimit: 20,
     });
     if (current !== seq.current) return;
@@ -67,27 +98,48 @@ export function TaskDetailDialog({
       return;
     }
     setError("");
-    setDetail((prev) => {
-      if (!more || !prev) return result.value;
-      return {
-        ...result.value,
-        breakpoints: {
-          ...result.value.breakpoints,
-          items: [...prev.breakpoints.items, ...result.value.breakpoints.items],
-          offset: result.value.breakpoints.offset,
-        },
-      };
+    setDetail((currentDetail) => {
+      let next = result.value;
+      if (kind === "breakpoints" && currentDetail) {
+        next = {
+          ...result.value,
+          breakpoints: {
+            ...result.value.breakpoints,
+            items: [
+              ...currentDetail.breakpoints.items,
+              ...result.value.breakpoints.items,
+            ],
+          },
+          transitions: currentDetail.transitions,
+        };
+      } else if (kind === "transitions" && currentDetail) {
+        next = {
+          ...result.value,
+          transitions: {
+            ...result.value.transitions,
+            items: [
+              ...currentDetail.transitions.items,
+              ...result.value.transitions.items,
+            ],
+          },
+          breakpoints: currentDetail.breakpoints,
+        };
+      }
+      detailRef.current = next;
+      return next;
     });
-    setTitle(result.value.task.title);
-    setNote(result.value.task.note);
+    if (!editingRef.current) {
+      setTitle(result.value.task.title);
+      setNote(result.value.task.note);
+    }
   }
 
   useEffect(() => {
-    void load();
+    void load("full");
     return () => {
       seq.current += 1;
     };
-  }, [taskId]);
+  }, [taskId, revision]);
 
   async function saveEdit() {
     if (!detail || busy) return;
@@ -117,15 +169,69 @@ export function TaskDetailDialog({
       if (!result.ok) {
         setError(result.message);
         onNotice(result.message, "error");
-        if (result.code === "STATE_CONFLICT") await load();
+        if (result.code === "STATE_CONFLICT") {
+          pendingUpdate.current.clear();
+          await load("full");
+        }
         return;
       }
       pendingUpdate.current.clear();
       setEditing(false);
+      editingRef.current = false;
       const refreshed = await onRefresh();
-      await load();
+      await load("full");
       onNotice(
         refreshed ? "任务内容已更新，状态保持不变。" : "已保存，但界面未刷新。",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function savePoint() {
+    if (!detail || busy) return;
+    setBusy(true);
+    const input = pendingBreakpoint.current.take(
+      (commandId) => ({
+        commandId,
+        taskId: detail.task.id,
+        expectedVersion: detail.task.version,
+        breakpoint: bp,
+      }),
+      (current) =>
+        current.expectedVersion === detail.task.version &&
+        JSON.stringify(current.breakpoint) === JSON.stringify(bp),
+    );
+    try {
+      const result = await invokeCommand(input.commandId, () =>
+        window.pickup.saveBreakpoint({
+          commandId: input.commandId,
+          task: {
+            taskId: input.taskId,
+            expectedVersion: input.expectedVersion,
+          },
+          breakpoint: input.breakpoint,
+        }),
+      );
+      if (!result.ok) {
+        setError(result.message);
+        onNotice(result.message, "error");
+        if (result.code === "STATE_CONFLICT") {
+          pendingBreakpoint.current.clear();
+          await load("full");
+        }
+        return;
+      }
+      pendingBreakpoint.current.clear();
+      setBp(emptyBreakpoint());
+      const refreshed = await onRefresh();
+      await load("full");
+      onNotice(
+        result.value.saved
+          ? refreshed
+            ? "已保存断点。"
+            : "已保存，但界面未刷新。"
+          : "空断点未写入，历史保持不变。",
       );
     } finally {
       setBusy(false);
@@ -162,7 +268,7 @@ export function TaskDetailDialog({
       if (!result.ok) {
         setError(result.message);
         onNotice(result.message, "error");
-        if (result.code === "STATE_CONFLICT") await load();
+        if (result.code === "STATE_CONFLICT") await load("full");
         pendingAction.current.clear();
         return;
       }
@@ -182,6 +288,8 @@ export function TaskDetailDialog({
   }
 
   const task = detail?.task;
+  const unfinished =
+    task && task.status !== "done" && task.status !== "cancelled";
 
   return (
     <Modal
@@ -209,13 +317,19 @@ export function TaskDetailDialog({
             <section className="detail-section">
               <div className="detail-section-head">
                 <h4>{editing ? "编辑内容" : "备注"}</h4>
-                {task &&
-                task.status !== "done" &&
-                task.status !== "cancelled" ? (
+                {unfinished ? (
                   <button
                     type="button"
                     className="expand-link"
-                    onClick={() => setEditing((value) => !value)}
+                    onClick={() => {
+                      const next = !editing;
+                      setEditing(next);
+                      editingRef.current = next;
+                      if (!next && detail) {
+                        setTitle(detail.task.title);
+                        setNote(detail.task.note);
+                      }
+                    }}
                   >
                     <Pencil size={13} />
                     {editing ? "返回" : "编辑"}
@@ -253,14 +367,61 @@ export function TaskDetailDialog({
             <section className="detail-section">
               <h4>最新断点</h4>
               {task?.latestBreakpoint ? (
-                <p className="detail-copy">
-                  {task.latestBreakpoint.nextStep ||
-                    task.latestBreakpoint.progress}
-                </p>
+                <BreakpointCopy point={task.latestBreakpoint} />
               ) : (
                 <p className="detail-copy">尚未留下断点。</p>
               )}
             </section>
+            {unfinished ? (
+              <section className="detail-section">
+                <h4>补一条断点</h4>
+                <Field id="detail-next" label="下一步">
+                  <textarea
+                    id="detail-next"
+                    maxLength={BREAKPOINT_FIELD_MAX_LENGTH}
+                    value={bp.nextStep}
+                    disabled={busy}
+                    onChange={(event) =>
+                      setBp((current) => ({
+                        ...current,
+                        nextStep: event.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Field id="detail-progress" label="已做进展">
+                  <textarea
+                    id="detail-progress"
+                    maxLength={BREAKPOINT_FIELD_MAX_LENGTH}
+                    value={bp.progress}
+                    disabled={busy}
+                    onChange={(event) =>
+                      setBp((current) => ({
+                        ...current,
+                        progress: event.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Field id="detail-ref" label="参考文本">
+                  <textarea
+                    id="detail-ref"
+                    maxLength={BREAKPOINT_FIELD_MAX_LENGTH}
+                    value={bp.referenceText}
+                    disabled={busy}
+                    onChange={(event) =>
+                      setBp((current) => ({
+                        ...current,
+                        referenceText: event.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Button onClick={() => void savePoint()} disabled={busy}>
+                  保存断点
+                </Button>
+              </section>
+            ) : null}
             <section className="detail-section">
               <h4>断点历史</h4>
               {detail.breakpoints.items.length === 0 ? (
@@ -273,15 +434,7 @@ export function TaskDetailDialog({
                     <div className="breakpoint-time">
                       {formatDateTime(item.savedAt)}
                     </div>
-                    <div className="breakpoint-text">
-                      {item.nextStep || item.progress}
-                      {item.referenceText ? (
-                        <>
-                          <br />
-                          <span className="muted">{item.referenceText}</span>
-                        </>
-                      ) : null}
-                    </div>
+                    <BreakpointCopy point={item} />
                   </div>
                 ))
               )}
@@ -289,7 +442,7 @@ export function TaskDetailDialog({
                 <button
                   type="button"
                   className="expand-link"
-                  onClick={() => void load(0, true)}
+                  onClick={() => void load("breakpoints")}
                 >
                   加载更早的断点（{detail.breakpoints.items.length} /{" "}
                   {detail.breakpoints.total}）
@@ -308,10 +461,14 @@ export function TaskDetailDialog({
                 </p>
               ))}
               {detail.transitions.hasMore ? (
-                <p className="helper">
-                  仅显示最近 {detail.transitions.items.length} /{" "}
-                  {detail.transitions.total} 条状态变化。
-                </p>
+                <button
+                  type="button"
+                  className="expand-link"
+                  onClick={() => void load("transitions")}
+                >
+                  加载更早的状态变化（{detail.transitions.items.length} /{" "}
+                  {detail.transitions.total}）
+                </button>
               ) : null}
             </section>
           </div>
@@ -332,7 +489,7 @@ export function TaskDetailDialog({
               </div>
             ) : null}
             <div className="detail-actions">
-              {task && task.status !== "done" && task.status !== "cancelled" ? (
+              {unfinished ? (
                 <>
                   {task.status !== "doing" ? (
                     <Button
@@ -390,5 +547,33 @@ export function TaskDetailDialog({
         </div>
       )}
     </Modal>
+  );
+}
+
+function BreakpointCopy({
+  point,
+}: {
+  point: BreakpointSummary | BreakpointRecord;
+}) {
+  const reference = "referenceText" in point ? point.referenceText : undefined;
+  if (!point.nextStep && !point.progress && !reference) {
+    return <p className="detail-copy">尚未留下断点。</p>;
+  }
+  return (
+    <div className="detail-copy">
+      {point.nextStep ? (
+        <p>
+          <strong>下一步：</strong>
+          {point.nextStep}
+        </p>
+      ) : null}
+      {point.progress ? (
+        <p>
+          <strong>进展：</strong>
+          {point.progress}
+        </p>
+      ) : null}
+      {reference ? <p className="muted">{reference}</p> : null}
+    </div>
   );
 }

@@ -64,12 +64,6 @@ export function CurrentCard({
           {next || "还没有保存断点。完成一小步，再回来留下一句。"}
         </p>
       </div>
-      <div className="wave-art" aria-hidden="true">
-        {Array.from({ length: 14 }, (_, index) => (
-          <span key={index} />
-        ))}
-        <div className="wave-axis" />
-      </div>
       <div className="current-actions">
         <Button kind="secondary" icon={<Pause size={15} />} onClick={onPause}>
           暂停并留线索

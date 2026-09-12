@@ -220,11 +220,85 @@ it("moves focus into the capture dialog and closes it with Escape", async () => 
   });
   render(<App />);
   await screen.findByText("本地已保存");
-  fireEvent.click(screen.getAllByRole("button", { name: "记一件事" })[0]);
+  const opener = screen.getAllByRole("button", { name: "记一件事" })[0];
+  opener.focus();
+  fireEvent.click(opener);
   const title = await screen.findByLabelText("标题");
   await waitFor(() => expect(title).toHaveFocus());
   fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
+  expect(opener).toHaveFocus();
+});
+
+it("keeps the same create command when outcome is unknown", async () => {
+  let draftVersion = 0;
+  const createTask = vi.fn().mockResolvedValue({
+    ok: false,
+    code: "OUTCOME_UNKNOWN",
+    message: "保存结果待确认，请保留内容并重试。",
+    retryable: true,
+  });
+  window.pickup = createApi({
+    getWorkspaceSnapshot: vi
+      .fn()
+      .mockResolvedValue(ok(emptyWorkspaceSnapshot(), 0)),
+    saveDraft: vi.fn().mockImplementation(async (input) => {
+      draftVersion += 1;
+      return ok(
+        {
+          type: "saveDraft",
+          draft: {
+            title: input.title,
+            note: input.note,
+            version: draftVersion,
+          },
+        },
+        0,
+      );
+    }),
+    getCommandResult: vi.fn().mockResolvedValue(ok({ status: "unknown" }, 0)),
+    createTask,
+  });
+  render(<App />);
+  await screen.findByText("本地已保存");
+  await openCapture();
+  fireEvent.change(screen.getByLabelText("标题"), {
+    target: { value: "待确认的事项" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "稍后处理" }));
+  await screen.findByText("保存结果待确认，请保留内容并重试。");
+  fireEvent.click(screen.getByRole("button", { name: "稍后处理" }));
+  await waitFor(() => expect(createTask.mock.calls.length).toBeGreaterThan(1));
+  const ids = createTask.mock.calls.map((call) => call[0].commandId);
+  expect(new Set(ids).size).toBe(1);
+  expect(createTask.mock.calls[0][0].draftVersion).toBe(
+    createTask.mock.calls.at(-1)?.[0].draftVersion,
+  );
+});
+
+it("keeps capture open when draft save fails on close", async () => {
+  window.pickup = createApi({
+    getWorkspaceSnapshot: vi
+      .fn()
+      .mockResolvedValue(ok(emptyWorkspaceSnapshot(), 0)),
+    saveDraft: vi.fn().mockResolvedValue({
+      ok: false,
+      code: "STORAGE_ERROR",
+      message: "草稿未保存",
+      retryable: true,
+    }),
+  });
+  render(<App />);
+  await screen.findByText("本地已保存");
+  const opener = screen.getAllByRole("button", { name: "记一件事" })[0];
+  opener.focus();
+  fireEvent.click(opener);
+  const title = await screen.findByLabelText("标题");
+  fireEvent.change(title, { target: { value: "不能丢掉" } });
+  fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+  expect(await screen.findByText("草稿未保存")).toBeInTheDocument();
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(screen.getByLabelText("标题")).toHaveValue("不能丢掉");
 });

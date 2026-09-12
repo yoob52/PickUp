@@ -34,6 +34,7 @@ export function optionalBreakpoint(
 
 export type PendingCommand<T> = {
   take(make: (commandId: string) => T, same: (current: T) => boolean): T;
+  peek(): T | null;
   clear(): void;
 };
 
@@ -42,6 +43,9 @@ export function createPending<T>(): PendingCommand<T> {
   return {
     take(make, same) {
       if (!current || !same(current)) current = make(newCommandId());
+      return current;
+    },
+    peek() {
       return current;
     },
     clear() {
