@@ -64,13 +64,12 @@ test("secure renderer creates a persisted task", async () => {
   const application = await launch(launchEnvironment(directory));
   try {
     const page = await application.firstWindow();
-    await expect(
-      page.getByRole("heading", { name: "从记下这一件开始。" }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: /别让工作/ })).toBeVisible();
+    await page.getByRole("button", { name: "记一件事" }).first().click();
     await page.getByLabel("标题", { exact: true }).fill("验证真实桌面保存");
-    await page.getByRole("button", { name: "保存为待处理" }).click();
+    await page.getByRole("button", { name: "稍后处理" }).click();
     await expect(
-      page.getByText("验证真实桌面保存", { exact: true }),
+      page.getByText("验证真实桌面保存", { exact: true }).first(),
     ).toBeVisible();
     const isolation = await page.evaluate(() => ({
       node: typeof (window as unknown as { require?: unknown }).require,

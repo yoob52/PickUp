@@ -1,6 +1,6 @@
 # PickUp 工程说明
 
-状态：工程初始化基线已验证；本地业务后端（任务命令、查询、草稿/偏好、收尾、迁移与故障处理）已实现并通过 Electron 集成与端到端检查；本轮补齐代码审查发现的 4 项后端缺陷修复与回归测试；日期：2026-09-11。产品架构以 [ARCHITECTURE.md](ARCHITECTURE.md) 为目标，接口语义见 [IPC-CONTRACT.md](IPC-CONTRACT.md)，本文件描述当前代码实际状态。
+状态：本地业务后端已实现；正式产品前端已接入真实 IPC（2026-09-12）。日期：2026-09-12。产品架构以 [ARCHITECTURE.md](ARCHITECTURE.md) 为目标，接口语义见 [IPC-CONTRACT.md](IPC-CONTRACT.md)，本文件描述当前代码实际状态。
 
 ## 1. 环境及依赖锁定
 
@@ -60,7 +60,7 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
   - `worker-client.ts`：请求关联、超时、pending 清理、启动/退出/关闭处理与诊断（含 ready 前退出的初始化结算）。
   - `integration.ts`：Electron 内的真实 worker + SQLite 集成验证（含故障注入与版本守卫）。
 - `src/preload/index.ts`：暴露固定的 `window.pickup` 业务方法与 `onStateChanged` 订阅。
-- `src/renderer/`：React 工程验证界面（业务页面由前端职责继续开发）。
+- `src/renderer/`：正式产品界面。主窗口覆盖当前任务、列表、恢复、记录、切换、详情、等待、收尾与设置；`?window=capture` / `?window=widget` 挂载独立窗口根组件。业务只通过 `window.pickup`。
 - `tests/`：契约/状态规则/日期计算的单元测试、IPC 契约一致性、组件行为、Playwright 端到端。
 - `scripts/`：官方运行时下载入口及 Electron 集成测试启动器。
 
@@ -79,7 +79,7 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
 | `npm run check` | 类型 + 格式 + 单元/组件测试 |
 | `npm run build` | 输出 main/preload/worker/renderer 到 out |
 | `npm run test:integration` | 构建后通过 Electron 运行真实 worker/SQLite 的 16 组集成场景 |
-| `npm run test:e2e` | 构建后运行 Playwright Electron 自动化（含桥接业务链路与重启恢复） |
+| `npm run test:e2e` | 构建后运行 Playwright Electron 自动化（含桥接业务链路、真实界面闭环与重启恢复） |
 | `npm run rebuild:native` | 为锁定 Electron/架构准备 better-sqlite3 原生模块 |
 | `npm run pack` | 输出 dist/win-unpacked |
 | `npm run dist` | 输出 dist/PickUp Setup 0.1.0.exe |
