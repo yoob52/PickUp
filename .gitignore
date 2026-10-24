@@ -23,3 +23,6 @@ Thumbs.db
 
 # Local UI reference templates
 /template/
+
+# Local verification screenshots, reports and historical probes
+/docs/verification/
