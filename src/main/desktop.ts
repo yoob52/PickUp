@@ -136,10 +136,11 @@ export function createDesktop(options: Options): DesktopHost {
   ): Promise<BrowserWindow> {
     const win = new BrowserWindow({
       show: false,
-      backgroundColor: kind === "main" ? "#121313" : "#f2f0e9",
+      backgroundColor: kind === "main" ? "#e9eae6" : "#f7f7f1",
       webPreferences,
       ...extra,
     });
+    win.setMenu(null);
     kinds.set(win, kind);
     attachGuards(win);
     await loadURL(win, kind);
@@ -220,6 +221,8 @@ export function createDesktop(options: Options): DesktopHost {
       minWidth: 600,
       minHeight: 540,
       title: "接着 PickUp",
+      titleBarStyle: "hidden",
+      titleBarOverlay: { color: "#e9eae6", symbolColor: "#182023", height: 72 },
     });
     main.on("close", (event) => {
       if (quitting) return;
@@ -238,6 +241,8 @@ export function createDesktop(options: Options): DesktopHost {
       minHeight: 320,
       skipTaskbar: true,
       title: "记下新一件事",
+      titleBarStyle: "hidden",
+      titleBarOverlay: { color: "#f7f7f1", symbolColor: "#182023", height: 40 },
     });
     capture.on("close", (event) => {
       if (quitting) return;

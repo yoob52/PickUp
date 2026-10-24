@@ -12,7 +12,10 @@ export function App() {
     <WorkspaceProvider>
       <ToastProvider>
         {kind === "capture" ? (
-          <CaptureApp />
+          <>
+            <header className="capture-titlebar">PickUp / 快速记录</header>
+            <CaptureApp />
+          </>
         ) : kind === "widget" ? (
           <WidgetApp />
         ) : (

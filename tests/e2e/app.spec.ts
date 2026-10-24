@@ -57,7 +57,7 @@ test("secure renderer creates a persisted task", async () => {
   const application = await launch(launchEnvironment(directory));
   try {
     const page = await windowByKind(application, "main");
-    await expect(page.getByRole("heading", { name: /别让工作/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /接上思路/ })).toBeVisible();
     await captureTask(application, page, "验证真实桌面保存");
     await expect(
       page.getByText("验证真实桌面保存", { exact: true }).first(),

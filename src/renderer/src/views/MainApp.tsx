@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { ListFilter, Plus } from "lucide-react";
+import { ArrowDownRight, Plus, Sunset } from "lucide-react";
 import type { Page, TaskSummary } from "../../../shared/contracts";
 import { createPending, invokeCommand } from "../lib/command";
 import { useWorkspace } from "../state/workspace";
 import { Button, NoticeBar } from "../ui/primitives";
 import { useToast } from "../ui/Toast";
 import { AppShell } from "../features/AppShell";
+import { ChromeSculpture } from "../features/ChromeSculpture";
 import { CurrentCard } from "../features/CurrentCard";
 import { DailyReviewDialog } from "../features/DailyReview";
 import { ResumePanel } from "../features/ResumePanel";
@@ -226,6 +227,7 @@ export function MainApp() {
       filter={filter}
       connection={connection}
       onFilter={focusBoard}
+      onCapture={() => void window.pickup.showCapture()}
       onReview={() => setReviewOpen(true)}
       onSettings={() => setOverlay({ type: "settings" })}
     >
@@ -256,31 +258,32 @@ export function MainApp() {
           内容已保存。界面刷新失败，不会重复提交。
         </NoticeBar>
       ) : null}
-      <div className="main-head">
-        <div>
-          <div className="eyebrow">接着工作的线索</div>
-          <h1 className="main-title">
-            别让工作
-            <br />
-            <em>断在半路。</em>
-          </h1>
-        </div>
-        <div className="head-actions">
-          <Button
-            kind="secondary"
-            icon={<ListFilter size={15} />}
-            onClick={() => focusBoard("unfinished")}
-          >
-            查看任务
-          </Button>
-          <Button
-            icon={<Plus size={15} />}
-            onClick={() => void window.pickup.showCapture()}
-          >
-            记一件事
-          </Button>
-        </div>
+      <div className="workspace-caption">
+        <span>PERSONAL CONTINUITY ENGINE</span>
+        <span>LOCAL WORKSPACE / 01</span>
       </div>
+      <section className="chrome-opening" aria-label="工作台概览">
+        <div className="chrome-heading">
+          <div className="industrial-label">把思路接上，把事情推进。</div>
+          <div className="chrome-display" aria-hidden="true">
+            ON
+            <br />
+            <span>TRACK.</span>
+          </div>
+          <h1>接上思路，继续推进。</h1>
+          <p>把临时的事收好，把未完的事接上。</p>
+        </div>
+        <ChromeSculpture />
+        <div className="object-index" aria-hidden="true">
+          <span>OBJECT.08</span>
+          <ArrowDownRight size={28} />
+          <span>
+            INTERRUPTED,
+            <br />
+            NEVER LOST.
+          </span>
+        </div>
+      </section>
       <section className="dashboard-grid" aria-label="当前工作">
         <CurrentCard
           current={snapshot.currentTask}
@@ -303,38 +306,28 @@ export function MainApp() {
               setOverlay({ type: "detail", taskId: snapshot.currentTask.id });
           }}
         />
-        <article className="capture-card">
-          <div>
-            <div className="card-topline">
-              <h3>收件入口</h3>
-              <span className="card-id">先收下</span>
-            </div>
-            <p>先收下，不必现在决定。标题就是一条可以回来的线索。</p>
-            <button
-              type="button"
-              className="capture-trigger"
-              onClick={() => void window.pickup.showCapture()}
-            >
-              <span className="capture-placeholder">输入新事项</span>
-              <span className="capture-key">N</span>
-            </button>
-          </div>
-          <div className="metrics">
-            <div>
-              <span className="metric-value">{snapshot.counts.unfinished}</span>
-              <span className="metric-label">未结束事项</span>
-            </div>
-            <div>
-              <span className="metric-value">{snapshot.counts.paused}</span>
-              <span className="metric-label">已暂停</span>
-            </div>
-            <div>
-              <span className="metric-value">{snapshot.counts.waiting}</span>
-              <span className="metric-label">等待中</span>
-            </div>
-          </div>
-        </article>
+        <ResumePanel
+          snapshot={snapshot}
+          highlight={resumeHighlight && !snapshot.currentTask}
+          onContinue={(task) => void startTask(task)}
+          onChooseOther={() => focusBoard("paused")}
+          onDefer={() => setResumeHighlight(false)}
+          onPickNext={() => setReviewOpen(true)}
+          onChangeNext={() => setReviewOpen(true)}
+        />
       </section>
+      <button
+        type="button"
+        className="capture-trigger"
+        onClick={() => void window.pickup.showCapture()}
+      >
+        <Plus size={17} aria-hidden="true" />
+        <span className="capture-placeholder">
+          有件新事？先记在这里，不打断当前工作。
+        </span>
+        <kbd className="capture-key">N</kbd>
+        <span className="capture-cta">记一件事</span>
+      </button>
       <section className="lower-grid" aria-label="任务与恢复" ref={boardRef}>
         <TaskBoard
           filter={filter}
@@ -346,16 +339,44 @@ export function MainApp() {
           onStart={(task) => void startTask(task)}
           onLoadMore={() => void loadMoreEnded()}
         />
-        <ResumePanel
-          snapshot={snapshot}
-          highlight={resumeHighlight && !snapshot.currentTask}
-          onContinue={(task) => void startTask(task)}
-          onChooseOther={() => focusBoard("paused")}
-          onDefer={() => setResumeHighlight(false)}
-          onPickNext={() => setReviewOpen(true)}
-          onChangeNext={() => setReviewOpen(true)}
-        />
+        <aside className="workspace-aside">
+          <div className="metrics" aria-label="工作区统计">
+            <div>
+              <span className="metric-label">未结束</span>
+              <span className="metric-value">
+                {snapshot.counts.unfinished.toString().padStart(2, "0")}
+              </span>
+            </div>
+            <div>
+              <span className="metric-label">可接回</span>
+              <span className="metric-value">
+                {snapshot.counts.paused.toString().padStart(2, "0")}
+              </span>
+            </div>
+            <div>
+              <span className="metric-label">等待中</span>
+              <span className="metric-value">
+                {snapshot.counts.waiting.toString().padStart(2, "0")}
+              </span>
+            </div>
+          </div>
+          <div className="review-card">
+            <Sunset size={22} aria-hidden="true" />
+            <div>
+              <span className="eyebrow">给今天一个从容的句点</span>
+              <h3>做完的放心放下，未完的留个入口。</h3>
+              <p>整理今天的线索，选好下次开工的第一件事。</p>
+            </div>
+            <Button kind="secondary" onClick={() => setReviewOpen(true)}>
+              开始收尾
+            </Button>
+          </div>
+        </aside>
       </section>
+      <footer className="workspace-footer">
+        <span>PickUp / 接着</span>
+        <span>记下新事，接回未完的事。</span>
+      </footer>
       {overlay?.type === "switch" ? (
         <SwitchFlow
           mode={overlay.mode}

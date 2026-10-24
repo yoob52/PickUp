@@ -21,12 +21,29 @@ export function launchEnvironment(directory: string): Record<string, string> {
   return env;
 }
 
-export function launch(env: Record<string, string>) {
-  return _electron.launch({
+export async function launch(env: Record<string, string>) {
+  const application = await _electron.launch({
     args: process.env.PICKUP_PACKAGED_EXE ? [] : ["."],
     executablePath: process.env.PICKUP_PACKAGED_EXE,
     env,
   });
+  // Main IPC becomes available before desktop.start finishes creating its windows.
+  // Wait for the preheated surfaces so a quick restart cannot quit mid-startup.
+  const main = await windowByKind(application, "main");
+  await main.waitForFunction(
+    () => typeof window.pickup?.getPreferences === "function",
+  );
+  const preferences = await main.evaluate(() => window.pickup.getPreferences());
+  if (!preferences.ok) throw new Error(preferences.message);
+  const capture = await windowByKind(application, "capture");
+  await capture
+    .getByLabel("标题", { exact: true })
+    .waitFor({ state: "attached" });
+  if (preferences.value.values.widgetEnabled) {
+    const widget = await windowByKind(application, "widget");
+    await widget.locator(".widget-window").waitFor({ state: "attached" });
+  }
+  return application;
 }
 
 export async function tempData(): Promise<string> {

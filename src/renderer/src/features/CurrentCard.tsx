@@ -58,7 +58,7 @@ export function CurrentCard({
         <div className="card-id">进行中</div>
       </div>
       <div className="current-content">
-        <h2>{current.title}</h2>
+        <h2 title={current.title}>{current.title}</h2>
         <p className="next-line">
           <strong>下一步：</strong>
           {next || "还没有保存断点。完成一小步，再回来留下一句。"}
@@ -68,11 +68,7 @@ export function CurrentCard({
         <Button kind="secondary" icon={<Pause size={15} />} onClick={onPause}>
           暂停并留线索
         </Button>
-        <Button
-          kind="secondary"
-          icon={<Check size={15} />}
-          onClick={onComplete}
-        >
+        <Button icon={<Check size={15} />} onClick={onComplete}>
           完成
         </Button>
         <IconButton label="查看当前任务详情" onClick={onDetail}>

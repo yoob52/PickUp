@@ -5,12 +5,13 @@ import {
   Inbox,
   LayoutDashboard,
   PauseCircle,
+  Plus,
   SlidersHorizontal,
   Sunset,
 } from "lucide-react";
 import type { StatusCounts } from "../../../shared/task";
 import { formatStamp } from "../lib/format";
-import { IconButton } from "../ui/primitives";
+import { Button, IconButton } from "../ui/primitives";
 import type { ListFilter } from "./TaskBoard";
 
 type Props = {
@@ -18,6 +19,7 @@ type Props = {
   filter: ListFilter;
   connection: string;
   onFilter: (filter: ListFilter) => void;
+  onCapture: () => void;
   onReview: () => void;
   onSettings: () => void;
   children: ReactNode;
@@ -28,6 +30,7 @@ export function AppShell({
   filter,
   connection,
   onFilter,
+  onCapture,
   onReview,
   onSettings,
   children,
@@ -47,6 +50,9 @@ export function AppShell({
         <div className="topbar-right">
           <span className="quiet-chip">{connection}</span>
           <span className="date-stamp">{formatStamp(Date.now())}</span>
+          <Button icon={<Plus size={15} />} onClick={onCapture}>
+            记一件事
+          </Button>
           <IconButton label="打开设置" onClick={onSettings}>
             <SlidersHorizontal size={16} />
           </IconButton>
@@ -117,7 +123,7 @@ export function AppShell({
             </p>
           </div>
         </aside>
-        <div className="main">{children}</div>
+        <main className="main">{children}</main>
       </div>
     </div>
   );
@@ -140,6 +146,7 @@ function NavItem({
     <button
       type="button"
       className={active ? "nav-item active" : "nav-item"}
+      aria-current={active ? "page" : undefined}
       onClick={onClick}
     >
       <span className="nav-left">

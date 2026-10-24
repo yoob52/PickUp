@@ -13,7 +13,7 @@ test("独立 capture 窗口与桌面状态桥接可用", async () => {
   const application = await launch(launchEnvironment(directory));
   try {
     const main = await windowByKind(application, "main");
-    await expect(main.getByRole("heading", { name: /别让工作/ })).toBeVisible();
+    await expect(main.getByRole("heading", { name: /接上思路/ })).toBeVisible();
     const desktop = await main.evaluate(async () => {
       const shown = await window.pickup.showCapture();
       const state = await window.pickup.getDesktopState();

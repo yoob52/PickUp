@@ -15,7 +15,7 @@ function percentile(values: number[], p: number): number {
 test("1,000 件任务规模与热唤起、保存耗时", async () => {
   test.setTimeout(300_000);
   const directory = await tempData();
-  const out = join("docs", "verification");
+  const out = join("docs", "verification", "chrome-ui");
   await mkdir(out, { recursive: true });
   const application = await launch(launchEnvironment(directory));
   try {
@@ -40,7 +40,13 @@ test("1,000 件任务规模与热唤起、保存耗时", async () => {
         ids.push(created.value.taskId);
       }
       for (let i = 0; i < 10; i += 1) {
-        const task = await window.pickup.getTaskDetail({ taskId: ids[i] });
+        const task = await window.pickup.getTaskDetail({
+          taskId: ids[i],
+          breakpointOffset: 0,
+          breakpointLimit: 20,
+          transitionOffset: 0,
+          transitionLimit: 20,
+        });
         if (!task.ok) return { error: task.message };
         for (let n = 0; n < 10; n += 1) {
           const saved = await window.pickup.saveBreakpoint({
@@ -58,8 +64,20 @@ test("1,000 件任务规模与热唤起、保存耗时", async () => {
           if (!saved.ok) return { error: saved.message };
         }
       }
-      const first = await window.pickup.getTaskDetail({ taskId: ids[0] });
-      const second = await window.pickup.getTaskDetail({ taskId: ids[1] });
+      const first = await window.pickup.getTaskDetail({
+        taskId: ids[0],
+        breakpointOffset: 0,
+        breakpointLimit: 20,
+        transitionOffset: 0,
+        transitionLimit: 20,
+      });
+      const second = await window.pickup.getTaskDetail({
+        taskId: ids[1],
+        breakpointOffset: 0,
+        breakpointLimit: 20,
+        transitionOffset: 0,
+        transitionLimit: 20,
+      });
       if (!first.ok || !second.ok) return { error: "无法读取用于切换的任务" };
       const start = await window.pickup.startTask({
         commandId: crypto.randomUUID(),
@@ -71,9 +89,17 @@ test("1,000 件任务规模与热唤起、保存耗时", async () => {
       if (!start.ok) return { error: start.message };
       const latestSecond = await window.pickup.getTaskDetail({
         taskId: ids[1],
+        breakpointOffset: 0,
+        breakpointLimit: 20,
+        transitionOffset: 0,
+        transitionLimit: 20,
       });
       const latestFirst = await window.pickup.getTaskDetail({
         taskId: ids[0],
+        breakpointOffset: 0,
+        breakpointLimit: 20,
+        transitionOffset: 0,
+        transitionLimit: 20,
       });
       if (!latestSecond.ok || !latestFirst.ok)
         return { error: "切换前读取失败" };
@@ -84,8 +110,18 @@ test("1,000 件任务规模与热唤起、保存耗时", async () => {
           i % 2 === 0 ? latestSecond.value.task : latestFirst.value.task;
         const freshFrom = await window.pickup.getTaskDetail({
           taskId: from.id,
+          breakpointOffset: 0,
+          breakpointLimit: 20,
+          transitionOffset: 0,
+          transitionLimit: 20,
         });
-        const freshTo = await window.pickup.getTaskDetail({ taskId: to.id });
+        const freshTo = await window.pickup.getTaskDetail({
+          taskId: to.id,
+          breakpointOffset: 0,
+          breakpointLimit: 20,
+          transitionOffset: 0,
+          transitionLimit: 20,
+        });
         if (!freshFrom.ok || !freshTo.ok) return { error: "切换刷新失败" };
         const t0 = performance.now();
         const switched = await window.pickup.switchTask({
@@ -121,6 +157,7 @@ test("1,000 件任务规模与热唤起、保存耗时", async () => {
       };
     });
     expect(result.error).toBeNull();
+    if (result.error !== null) throw new Error(result.error);
     expect(result.unfinished).toBe(1000);
     const summary = {
       device: "Windows 11 x64",

@@ -44,7 +44,9 @@ export function ResumePanel({
             </p>
             <div className="recommend-card">
               <div className="recommend-label">推荐恢复</div>
-              <div className="recommend-title">{resume.task.title}</div>
+              <div className="recommend-title" title={resume.task.title}>
+                {resume.task.title}
+              </div>
               <div className="recommend-note">
                 {nextStepText(resume.task) || "尚未记录断点，可以直接继续。"}
               </div>
@@ -76,7 +78,9 @@ export function ResumePanel({
             </p>
             <div className="recommend-card">
               <div className="recommend-label">可开始</div>
-              <div className="recommend-title">{todo.title}</div>
+              <div className="recommend-title" title={todo.title}>
+                {todo.title}
+              </div>
               <div className="recommend-actions">
                 <Button
                   icon={<Play size={14} />}

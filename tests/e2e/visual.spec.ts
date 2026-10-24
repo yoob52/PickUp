@@ -6,7 +6,7 @@ import { launch, launchEnvironment, tempData, windowByKind } from "./helpers";
 test("保存主窗口、快速记录与当前任务的视觉记录", async () => {
   test.setTimeout(90_000);
   const directory = await tempData();
-  const out = join("docs", "verification");
+  const out = join("docs", "verification", "chrome-ui", "flows");
   await mkdir(out, { recursive: true });
   const application = await launch(launchEnvironment(directory));
   try {
@@ -58,7 +58,10 @@ test("保存主窗口、快速记录与当前任务的视觉记录", async () =>
       path: join(out, "05-settings.png"),
       fullPage: true,
     });
-    await page.getByRole("dialog").getByRole("button", { name: "完成" }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "完成" })
+      .click();
 
     await page.setViewportSize({ width: 600, height: 540 });
     await expect(page.getByRole("button", { name: "今日收尾" })).toBeVisible();

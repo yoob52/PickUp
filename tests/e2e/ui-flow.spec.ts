@@ -15,7 +15,7 @@ test("界面走完记录到收尾并在重启后恢复", async () => {
   const first = await launch(env);
   try {
     const page = await windowByKind(first, "main");
-    await expect(page.getByRole("heading", { name: /别让工作/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /接上思路/ })).toBeVisible();
     await expect(page.getByText("现在准备做什么？")).toBeVisible();
 
     await captureTask(first, page, "排查接口超时");
@@ -56,7 +56,9 @@ test("界面走完记录到收尾并在重启后恢复", async () => {
     ).toBeVisible();
 
     await captureTask(first, page, "等同事补日志");
-    const waitingRow = page.getByText("等同事补日志", { exact: true }).first();
+    const waitingRow = page
+      .locator(".task-row")
+      .getByText("等同事补日志", { exact: true });
     await waitingRow.click();
     await page.getByRole("button", { name: "标记等待" }).click();
     await page.getByLabel("等待原因").fill("等同事补日志");
