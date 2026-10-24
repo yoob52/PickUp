@@ -130,4 +130,25 @@ python -c "from PIL import Image; Image.open('docs/logo.png').convert('RGBA').sa
 
 Authenticode 为 NotSigned。历史版本已静默安装到临时目录、对安装后的 exe 跑桌面 E2E、覆盖安装并卸载；本次品牌更新的验证范围见 [VALIDATION.md](VALIDATION.md)。签名信誉与向正式 `%APPDATA%/PickUp` 路径的手工试用未做。e2e 环境不调用 `setLoginItemSettings`，避免污染开发机启动项。
 
-本地 Git 管理于 2026-09-11 初始化，默认分支为 `main`。源码、文档、配置、测试和依赖锁文件纳入版本控制；依赖目录、构建产物、测试结果、本地数据库和签名证书由 `.gitignore` 排除。文本换行由 `.gitattributes` 统一管理。远程仓库和远程 CI 尚未配置，构建、测试与诊断均在本机执行。
+本地 Git 管理于 2026-09-11 初始化，默认分支为 `main`。源码、文档、配置、测试和依赖锁文件纳入版本控制；依赖目录、构建产物、测试结果、本地数据库和签名证书由 `.gitignore` 排除。文本换行由 `.gitattributes` 统一管理。已配置 GitHub origin；远程自动打包与发版由 [release.yml](../.github/workflows/release.yml) 定义，首次 GitHub 执行结果以 Actions 页面为准。
+
+### GitHub Actions 打包与发版
+
+- 手动试打包：先将工作流推送到默认分支，在 GitHub 的 **Actions → Build and release Windows → Run workflow** 选择分支运行。成功后下载 `pickup-windows-x64` artifact，其中包含 NSIS 安装器和 `SHA256SUMS.txt`；手动触发仅生成 artifact，不创建 Release。
+- 标签发版：推送 `v<package.json version>` 标签，检查及包内冒烟全部通过后，自动创建 GitHub Release，上传安装器和 SHA-256 校验文件并生成发布说明。标签与包版本必须完全一致；例如 `v0.2.0-beta.1` 对应包版本 `0.2.0-beta.1`，含预发布标识的版本创建为 prerelease，且不设为 latest。
+- 发布示例（先确认工作区、发布内容和版本）：
+
+  ```powershell
+  npm version 0.1.1 --no-git-tag-version
+  git add package.json package-lock.json
+  git commit -m "chore: release v0.1.1"
+  git tag v0.1.1
+  git push origin main
+  git push origin v0.1.1
+  ```
+
+- Runner 使用 Windows 2022 x64，Node.js 读取 `.node-version`，npm 沿用工程锁定版本。依次执行 `npm ci`（包含 Electron 下载和原生模块准备）、`npm run check`、工作流格式检查、Electron SQLite 集成测试、`npm run dist -- --publish never` 和包内冒烟。安装、原生重建和打包顺序执行，electron-builder 不自行发布。
+- 包内冒烟覆盖品牌资源及桌面入口展开/收起、独立 capture 桥接、完整业务链路和重启持久化。未将全量视觉 E2E 设为发布门禁：既有旧标题断言和透明窗口截图超时见 [VALIDATION.md](VALIDATION.md)，本工作流不代表这些项目已通过。
+- 构建 job 只读仓库；仅发布 job 获得 `contents: write`，使用 GitHub 自动提供的 `GITHUB_TOKEN`，无需额外 PAT。仓库需启用 Actions，并允许工作流获得发布所需写权限。第三方执行入口使用官方 Actions 并锁定提交 SHA。
+- 成功产物保留 14 天，失败诊断保留 7 天。发布 job 失败时可在 Actions 中仅重跑失败 job；已存在同名 Release 时创建操作会报错，不覆盖已发布文件。
+- 当前仍为未签名的 Windows x64 安装器；工作流没有配置代码签名、自动更新或 macOS/Linux 产物。上线前仍需安装/升级/卸载及 Windows 专项验收。

@@ -1,5 +1,17 @@
 # PickUp 验证记录
 
+## 2026-10-24 · GitHub Actions Windows 打包发版
+
+新增 `.github/workflows/release.yml`：手动运行生成 Windows x64 NSIS 安装器 artifact；推送与 package.json 版本一致的 `v*` 标签时，验证完成后创建 GitHub Release，上传安装器及 SHA-256 校验文件。预发布版本标记为 prerelease。构建与发布分开授权，官方 Actions 固定提交 SHA，使用内置 `GITHUB_TOKEN`；具体操作见 [ENGINEERING.md](ENGINEERING.md#github-actions-打包与发版)。
+
+- `actionlint 1.7.12` 工作流检查通过（本机未启用可选 ShellCheck/Pyflakes）；YAML 解析和 Prettier 检查通过。实际执行版本检查脚本，确认匹配标签通过、错误版本标签失败、手动分支通过。
+- `npm run check` 通过：类型、格式、6 个文件 / 59 项单元与组件测试。
+- `npm run test:integration` 通过：Electron 中真实 SQLite/worker 的 16 组集成场景。
+- `npm run dist -- --publish never` 通过，生成 `dist/PickUp Setup 0.1.0.exe`；实际执行工作流的校验文件脚本，重新计算 SHA-256 核对通过。
+- 设置 `PICKUP_PACKAGED_EXE` 指向本次解包产物后，工作流选择的 4 项包内冒烟通过：品牌资源及桌面入口展开/收起、独立 capture 桥接、完整业务链路、重启持久化。首次运行发现 `tests/e2e/app.spec.ts` 的桥接预期清单落后于现有契约，补齐 `controlMainWindow` / `moveWidget` / `setWidgetExpanded` 后复测通过；未修改应用 API 或业务逻辑。
+
+本轮完成本地验证，尚未推送工作流、标签或创建远端 Release；GitHub 托管 runner 的首次清洁安装、Actions artifact 上传和 Release 权限需在实际运行中确认。未运行全量视觉 E2E，既有旧标题断言与透明窗口截图问题仍保留；未签名、安装升级及 Windows 专项边界沿用原记录。
+
 ## 2026-10-24 · 统一品牌 Logo
 
 使用 `docs/logo.png` 替换主窗口左上角、桌面圆形入口及展开卡片标识，保留原图色彩和比例；图片禁用浏览器原生拖动，桌面入口仍使用原有整球拖动、键盘展开和收起逻辑。原生窗口和系统托盘共用同一 PNG；`resources/icon.ico` 包含 16 / 24 / 32 / 48 / 64 / 128 / 256 像素，electron-builder 用于 Windows EXE、NSIS 安装器、卸载器和快捷方式。未增加应用依赖。
