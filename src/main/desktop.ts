@@ -8,8 +8,8 @@ import {
   nativeImage,
   powerMonitor,
   screen,
-  type NativeImage,
 } from "electron";
+import logo from "../../docs/logo.png?asset";
 import type {
   DesktopState,
   MainWindowAction,
@@ -75,24 +75,6 @@ function asError(
   return { ok: false, code, message, retryable };
 }
 
-function trayImage(): NativeImage {
-  const size = 16;
-  const buffer = Buffer.alloc(size * size * 4);
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const dx = x - 7.5;
-      const dy = y - 7.5;
-      const on = dx * dx + dy * dy <= 36;
-      const i = (y * size + x) * 4;
-      buffer[i] = on ? 0x5c : 0;
-      buffer[i + 1] = on ? 0xff : 0;
-      buffer[i + 2] = on ? 0xd8 : 0;
-      buffer[i + 3] = on ? 255 : 0;
-    }
-  }
-  return nativeImage.createFromBitmap(buffer, { width: size, height: size });
-}
-
 function normalizeAccelerator(value: string): string {
   return value
     .trim()
@@ -104,6 +86,7 @@ function normalizeAccelerator(value: string): string {
 
 export function createDesktop(options: Options): DesktopHost {
   const { store, e2eMode, preload, loadURL } = options;
+  const appIcon = nativeImage.createFromPath(logo);
   const skipOs = e2eMode;
   let quitting = false;
   let main: BrowserWindow | undefined;
@@ -141,6 +124,7 @@ export function createDesktop(options: Options): DesktopHost {
   ): Promise<BrowserWindow> {
     const win = new BrowserWindow({
       show: false,
+      icon: appIcon,
       backgroundColor: kind === "main" ? "#e9eae6" : "#f7f7f1",
       webPreferences,
       ...extra,
@@ -465,7 +449,7 @@ export function createDesktop(options: Options): DesktopHost {
 
   function createTray(): void {
     if (tray) return;
-    tray = new Tray(trayImage());
+    tray = new Tray(appIcon.resize({ width: 32, height: 32 }));
     tray.setToolTip("接着 PickUp");
     tray.setContextMenu(
       Menu.buildFromTemplate([

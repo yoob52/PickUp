@@ -166,13 +166,10 @@ html[data-window="main"] #root {
 .brand-mark {
   width: 34px;
   height: 34px;
-  display: grid;
-  place-items: center;
-  color: var(--paper);
-  background: var(--ink);
+  display: block;
+  object-fit: contain;
   border-radius: 2px;
-  font-size: 19px;
-  font-weight: 800;
+  flex-shrink: 0;
 }
 
 .brand-name {
@@ -1470,10 +1467,19 @@ html[data-window="main"] #root {
 }
 
 .widget-kicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: #5e615d;
   font-size: 10px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+}
+
+.widget-kicker img {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
 }
 
 .widget-window h1 {
@@ -1808,10 +1814,11 @@ html[data-window="widget"] #root {
   place-items: center;
   width: 56px;
   height: 56px;
+  padding: 0;
   border: 1px solid #ffffff70;
   border-radius: 50%;
   color: #f7f7f1;
-  background: radial-gradient(circle at 30% 20%, #597365, #243d32 72%);
+  background: #f7f7f1;
   box-shadow:
     0 2px 4px #18202330,
     inset 0 1px 1px #ffffff40;
@@ -1819,7 +1826,16 @@ html[data-window="widget"] #root {
 
 .widget-orb:focus-visible {
   outline-offset: -4px;
-  outline-color: #ffffff;
+  outline-color: var(--ink);
+}
+
+.widget-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 .widget-orb:active {

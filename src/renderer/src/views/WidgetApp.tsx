@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import logo from "../../../../docs/logo.png";
 import {
   Check,
   ChevronsDownUp,
-  ArrowUpRight,
   Maximize2,
   Pin,
   Plus,
@@ -143,7 +143,7 @@ export function WidgetApp() {
               if (event.detail === 0 || !drag.current?.moved) void expand(true);
             }}
           >
-            <ArrowUpRight size={26} strokeWidth={1.6} aria-hidden="true" />
+            <img className="widget-logo" src={logo} alt="" draggable={false} />
             <span
               className={`widget-orb-status${current ? " is-active" : ""}`}
             />
@@ -152,7 +152,10 @@ export function WidgetApp() {
       ) : (
         <>
           <div className="widget-toolbar">
-            <div className="widget-kicker">接着 PickUp</div>
+            <div className="widget-kicker">
+              <img src={logo} alt="" draggable={false} />
+              接着 PickUp
+            </div>
             <div className="widget-tools">
               <IconButton
                 label="收起桌面入口"

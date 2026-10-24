@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import logo from "../../../../docs/logo.png";
 import {
   Archive,
   Clock3,
@@ -51,9 +52,7 @@ export function AppShell({
     <div className="app-shell">
       <header className="topbar">
         <div className="brand-lockup">
-          <div className="brand-mark" aria-hidden="true">
-            接
-          </div>
+          <img className="brand-mark" src={logo} alt="" draggable={false} />
           <div>
             <div className="brand-name">接着 PickUp</div>
             <div className="brand-meta">记下新事，接回未完的事</div>

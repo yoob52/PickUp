@@ -122,6 +122,12 @@ renderer 禁止 Node 集成并开启 contextIsolation/sandbox；IPC 检查已登
 
 ## 6. 发布边界
 
-NSIS 配置为用户级完整安装包、卸载保留数据，原生模块按需从 ASAR 解包。当前默认图标，Authenticode 为 NotSigned。本轮已静默安装到临时目录、对安装后的 exe 跑桌面 E2E、覆盖安装并卸载。签名信誉与向正式 `%APPDATA%/PickUp` 路径的手工试用未做。e2e 环境不调用 `setLoginItemSettings`，避免污染开发机启动项。
+NSIS 配置为用户级完整安装包、卸载保留数据，原生模块按需从 ASAR 解包。品牌原图为 `docs/logo.png`：主窗口、桌面入口、原生窗口和托盘统一引用，electron-vite 将运行时图片打入 out；Windows EXE、安装器及快捷方式使用 `resources/icon.ico`（16 / 24 / 32 / 48 / 64 / 128 / 256 像素）。替换原图时同步重建 ICO 后重新打包。ICO 可在有 Pillow 的维护环境中生成，不增加应用运行依赖：
+
+```powershell
+python -c "from PIL import Image; Image.open('docs/logo.png').convert('RGBA').save('resources/icon.ico', sizes=[(n,n) for n in (16,24,32,48,64,128,256)])"
+```
+
+Authenticode 为 NotSigned。历史版本已静默安装到临时目录、对安装后的 exe 跑桌面 E2E、覆盖安装并卸载；本次品牌更新的验证范围见 [VALIDATION.md](VALIDATION.md)。签名信誉与向正式 `%APPDATA%/PickUp` 路径的手工试用未做。e2e 环境不调用 `setLoginItemSettings`，避免污染开发机启动项。
 
 本地 Git 管理于 2026-09-11 初始化，默认分支为 `main`。源码、文档、配置、测试和依赖锁文件纳入版本控制；依赖目录、构建产物、测试结果、本地数据库和签名证书由 `.gitignore` 排除。文本换行由 `.gitattributes` 统一管理。远程仓库和远程 CI 尚未配置，构建、测试与诊断均在本机执行。

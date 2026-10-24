@@ -1,5 +1,17 @@
 # PickUp 验证记录
 
+## 2026-10-24 · 统一品牌 Logo
+
+使用 `docs/logo.png` 替换主窗口左上角、桌面圆形入口及展开卡片标识，保留原图色彩和比例；图片禁用浏览器原生拖动，桌面入口仍使用原有整球拖动、键盘展开和收起逻辑。原生窗口和系统托盘共用同一 PNG；`resources/icon.ico` 包含 16 / 24 / 32 / 48 / 64 / 128 / 256 像素，electron-builder 用于 Windows EXE、NSIS 安装器、卸载器和快捷方式。未增加应用依赖。
+
+- `npm run check`：类型、格式、59 项单元/组件测试通过。
+- 源码构建后相关 Electron E2E：Logo 原图字节一致性、展开/收起、整球拖动/四角定位、独立 capture/桌面桥接共 3 项通过。已实际查看 [主窗口](verification/logo/main.png)、[圆形入口](verification/logo/orb.png) 和 [展开卡片](verification/logo/expanded.png) 截图。
+- `npm run dist` 通过，更新 `dist/win-unpacked/PickUp.exe` 和 `dist/PickUp Setup 0.1.0.exe`。从 Windows `ExtractAssociatedIcon` 提取应用 EXE 和安装器的 32px 图标，与 ICO 对应尺寸逐像素一致；记录见 [EXE 图标](verification/logo/windows-exe.png)、[安装器图标](verification/logo/windows-installer.png)。
+- 解包产物运行：Logo 原图字节一致性、桌面入口展开/收起、独立 capture/桌面桥接 2 项通过。首轮含截图测试在隐藏/透明窗口截图调用处达到 30 秒超时；新增 Logo 行为测试移除截图采集后通过，视觉验收使用已取得的源码运行截图。原有四角截图用例在包内的截图超时保留为未通过项。
+- 同轮额外运行的 `chrome-ui.spec.ts` 在首个断言失败：用例仍引用当前页面已移除的“接上思路，继续推进。”标题，尚未进入 Logo 或布局交互。该测试与当前界面的既有差异留待单独修正。
+
+本次未执行安装/覆盖安装/卸载，也未重新做多 DPI、Windows 图标缓存刷新和托盘点击的手工验收；已安装版本需要使用本次安装包更新后才应用新的 EXE 与快捷方式图标。
+
 ## 2026-10-24 · 主窗口独立滚动
 
 主窗口固定为视口高度，通过两行 Grid 保持 72px 顶栏和左侧导航在各自区域；仅 `main.main` 承担核心内容的纵向滚动。移除侧栏、顶栏对整页 sticky 的依赖，侧栏在极小高度下保留自身溢出访问。快速记录和桌面入口不采用主窗口的页面滚动限制。任务筛选继续使用原有 `scrollIntoView`，滚动目标留白调整为内容区内的 20px。
