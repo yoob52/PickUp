@@ -90,7 +90,7 @@ html[data-window="main"] #root {
   align-items: center;
   justify-content: space-between;
   padding: 0 28px;
-  padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 24px);
+  padding-right: 162px;
   -webkit-app-region: drag;
   user-select: none;
   border-bottom: 1px solid var(--line);
@@ -101,6 +101,38 @@ html[data-window="main"] #root {
 }
 
 .topbar button {
+  -webkit-app-region: no-drag;
+}
+
+.window-controls {
+  position: absolute;
+  inset: 0 0 0 auto;
+  display: flex;
+  -webkit-app-region: no-drag;
+}
+
+.window-controls button {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  padding: 0;
+  border: 0;
+  color: var(--ink);
+  background: transparent;
+}
+
+.window-controls button:hover {
+  background: #26353715;
+}
+
+.window-controls button:last-child:hover {
+  color: white;
+  background: #c42b1c;
+}
+
+.app-shell:has(.modal-backdrop) .topbar,
+.modal-backdrop,
+.modal-backdrop * {
   -webkit-app-region: no-drag;
 }
 
@@ -1015,6 +1047,7 @@ html[data-window="main"] #root {
 }
 
 .modal .icon-button {
+  flex-shrink: 0;
   color: var(--ink);
   border-color: var(--line-dark);
 }
@@ -1672,7 +1705,7 @@ html[data-window="main"] #root {
 @media (max-width: 720px) {
   .topbar {
     padding-left: 16px;
-    padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 16px);
+    padding-right: 154px;
   }
   .brand-meta,
   .date-stamp {
@@ -1813,7 +1846,7 @@ html[data-window="main"] #root {
 @media (max-width: 460px) {
   .topbar {
     padding-left: 12px;
-    padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 10px);
+    padding-right: 148px;
   }
   .topbar .brand-lockup > div:last-child {
     display: none;

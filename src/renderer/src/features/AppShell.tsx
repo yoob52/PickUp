@@ -4,14 +4,19 @@ import {
   Clock3,
   Inbox,
   LayoutDashboard,
+  Minus,
   PauseCircle,
   Plus,
   SlidersHorizontal,
+  Square,
   Sunset,
+  X,
 } from "lucide-react";
 import type { StatusCounts } from "../../../shared/task";
 import { formatStamp } from "../lib/format";
 import { Button, IconButton } from "../ui/primitives";
+import { useToast } from "../ui/Toast";
+import type { MainWindowAction } from "../../../shared/contracts";
 import type { ListFilter } from "./TaskBoard";
 
 type Props = {
@@ -35,6 +40,13 @@ export function AppShell({
   onSettings,
   children,
 }: Props) {
+  const notify = useToast();
+
+  async function controlWindow(action: MainWindowAction) {
+    const result = await window.pickup.controlMainWindow(action);
+    if (!result.ok) notify(result.message, "error");
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -56,6 +68,29 @@ export function AppShell({
           <IconButton label="打开设置" onClick={onSettings}>
             <SlidersHorizontal size={16} />
           </IconButton>
+        </div>
+        <div className="window-controls" role="group" aria-label="窗口控制">
+          <button
+            type="button"
+            aria-label="最小化"
+            onClick={() => void controlWindow("minimize")}
+          >
+            <Minus size={14} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            aria-label="最大化或还原"
+            onClick={() => void controlWindow("toggleMaximize")}
+          >
+            <Square size={12} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            aria-label="关闭主窗口"
+            onClick={() => void controlWindow("close")}
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
         </div>
       </header>
       <div className="layout">

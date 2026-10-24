@@ -10,6 +10,7 @@ import {
   getDailyReviewQuerySchema,
   listTasksSchema,
   markWaitingSchema,
+  mainWindowActionSchema,
   pauseTaskSchema,
   reopenTaskSchema,
   resolveWaitingSchema,
@@ -195,6 +196,12 @@ export function registerIpcHandlers(
     (_client, input) => desktop.applyPreferencePatch(input),
   );
   register("pickup:showMain", noInput, false, () => desktop.showMain());
+  register(
+    "pickup:controlMainWindow",
+    mainWindowActionSchema,
+    false,
+    (_client, action) => desktop.controlMainWindow(action),
+  );
   register("pickup:showCapture", noInput, false, () => desktop.showCapture());
   register("pickup:hideCapture", noInput, false, () => desktop.hideCapture());
   register("pickup:hideWidget", noInput, false, () => desktop.hideWidget());

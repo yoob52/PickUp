@@ -37,6 +37,8 @@ const api: PickupAPI = {
   updatePreference: (input) =>
     ipcRenderer.invoke("pickup:updatePreference", input),
   showMain: () => ipcRenderer.invoke("pickup:showMain"),
+  controlMainWindow: (action) =>
+    ipcRenderer.invoke("pickup:controlMainWindow", action),
   showCapture: () => ipcRenderer.invoke("pickup:showCapture"),
   hideCapture: () => ipcRenderer.invoke("pickup:hideCapture"),
   hideWidget: () => ipcRenderer.invoke("pickup:hideWidget"),

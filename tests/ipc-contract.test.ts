@@ -66,6 +66,7 @@ beforeAll(() => {
     start: async () => undefined,
     isQuitting: () => false,
     showMain: () => windowOk("showMain"),
+    controlMainWindow: (action) => windowOk(action),
     showCapture: () => windowOk("showCapture"),
     hideCapture: () => windowOk("hideCapture"),
     hideWidget: () => windowOk("hideWidget"),

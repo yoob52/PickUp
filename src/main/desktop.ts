@@ -12,6 +12,7 @@ import {
 } from "electron";
 import type {
   DesktopState,
+  MainWindowAction,
   PreferenceState,
   Preferences,
   Result,
@@ -30,6 +31,9 @@ export type DesktopHost = {
   start(): Promise<void>;
   isQuitting(): boolean;
   showMain(): Promise<Result<WindowActionValue>>;
+  controlMainWindow(
+    action: MainWindowAction,
+  ): Promise<Result<WindowActionValue>>;
   showCapture(): Promise<Result<WindowActionValue>>;
   hideCapture(): Promise<Result<WindowActionValue>>;
   hideWidget(): Promise<Result<WindowActionValue>>;
@@ -221,8 +225,7 @@ export function createDesktop(options: Options): DesktopHost {
       minWidth: 600,
       minHeight: 540,
       title: "接着 PickUp",
-      titleBarStyle: "hidden",
-      titleBarOverlay: { color: "#e9eae6", symbolColor: "#182023", height: 72 },
+      frame: false,
     });
     main.on("close", (event) => {
       if (quitting) return;
@@ -604,6 +607,15 @@ export function createDesktop(options: Options): DesktopHost {
     start,
     isQuitting: () => quitting,
     showMain,
+    async controlMainWindow(action) {
+      const win = await ensureMain();
+      if (action === "minimize") win.minimize();
+      else if (action === "toggleMaximize") {
+        if (win.isMaximized()) win.unmaximize();
+        else win.maximize();
+      } else win.close();
+      return windowResult(action);
+    },
     showCapture,
     hideCapture,
     hideWidget,

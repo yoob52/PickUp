@@ -445,8 +445,20 @@ export type UpdatePreferenceValue = {
   preferences: PreferenceState;
 };
 
+export const mainWindowActionSchema = z.enum([
+  "minimize",
+  "toggleMaximize",
+  "close",
+]);
+export type MainWindowAction = z.infer<typeof mainWindowActionSchema>;
+
 export type WindowAction =
-  "showMain" | "showCapture" | "hideCapture" | "hideWidget" | "quit";
+  | "showMain"
+  | "showCapture"
+  | "hideCapture"
+  | "hideWidget"
+  | "quit"
+  | MainWindowAction;
 
 export type WindowActionValue = { type: "window"; action: WindowAction };
 
@@ -521,6 +533,9 @@ export type PickupAPI = {
     input: UpdatePreferenceInput,
   ): Promise<Result<UpdatePreferenceValue>>;
   showMain(): Promise<Result<WindowActionValue>>;
+  controlMainWindow(
+    action: MainWindowAction,
+  ): Promise<Result<WindowActionValue>>;
   showCapture(): Promise<Result<WindowActionValue>>;
   hideCapture(): Promise<Result<WindowActionValue>>;
   hideWidget(): Promise<Result<WindowActionValue>>;

@@ -145,6 +145,7 @@ type Result<T> =
 | `getPreferences()` | `pickup:getPreferences` | `PreferenceState`（`{ values, version }`） |
 | `onStateChanged(listener)` | 事件 `pickup:changed` | 返回取消订阅函数 |
 | `showMain()` | `pickup:showMain` | `{ type: "window", action: "showMain" }` |
+| `controlMainWindow(action)` | `pickup:controlMainWindow` | 仅接受 `minimize` / `toggleMaximize` / `close`；关闭沿用隐藏到托盘行为 |
 | `showCapture()` | `pickup:showCapture` | 显示唯一记录窗口并聚焦标题 |
 | `hideCapture()` | `pickup:hideCapture` | 隐藏记录窗口，尽量把焦点交还系统 |
 | `hideWidget()` | `pickup:hideWidget` | 隐藏入口并写入 `widgetEnabled: false` |
