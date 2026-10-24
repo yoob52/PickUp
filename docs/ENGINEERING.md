@@ -84,7 +84,7 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
 | `npm run test:e2e` | 构建后运行 Playwright Electron 自动化（桥接、独立 capture、界面闭环、视觉、规模） |
 | `npm run rebuild:native` | 为锁定 Electron/架构准备 better-sqlite3 原生模块 |
 | `npm run pack` | 输出 dist/win-unpacked |
-| `npm run dist` | 输出 dist/PickUp Setup 0.1.0.exe |
+| `npm run dist` | 输出 dist/PickUp Setup 0.2.0.exe（版本读取 package.json） |
 
 禁止同时执行安装/重建和构建/打包，它们共享依赖目录。不要用开发 Node.js 直接加载已经按 Electron ABI 准备的原生库；数据库集成测试刻意在 Electron 中执行。`scripts/run-integration.mjs` 的进程级超时为 120 秒，覆盖当前 16 组场景（含多次 worker 重启）。单元/组件测试数量以最近一次 `npm test` 为准，不要沿用旧轮次的 44/46。
 
@@ -136,15 +136,15 @@ Authenticode 为 NotSigned。历史版本已静默安装到临时目录、对安
 
 - 手动试打包：先将工作流推送到默认分支，在 GitHub 的 **Actions → Build and release Windows → Run workflow** 选择分支运行。成功后下载 `pickup-windows-x64` artifact，其中包含 NSIS 安装器和 `SHA256SUMS.txt`；手动触发仅生成 artifact，不创建 Release。
 - 标签发版：推送 `v<package.json version>` 标签，检查及包内冒烟全部通过后，自动创建 GitHub Release，上传安装器和 SHA-256 校验文件并生成发布说明。标签与包版本必须完全一致；例如 `v0.2.0-beta.1` 对应包版本 `0.2.0-beta.1`，含预发布标识的版本创建为 prerelease，且不设为 latest。
-- 发布示例（先确认工作区、发布内容和版本）：
+- 后续发布示例（以 `0.2.1` 为例，先确认工作区、发布内容和版本）：
 
   ```powershell
-  npm version 0.1.1 --no-git-tag-version
+  npm version 0.2.1 --no-git-tag-version
   git add package.json package-lock.json
-  git commit -m "chore: release v0.1.1"
-  git tag v0.1.1
+  git commit -m "chore: release v0.2.1"
+  git tag -a v0.2.1 -m "Release v0.2.1"
   git push origin main
-  git push origin v0.1.1
+  git push origin v0.2.1
   ```
 
 - Runner 使用 Windows 2022 x64，Node.js 读取 `.node-version`，npm 沿用工程锁定版本。依次执行 `npm ci`（包含 Electron 下载和原生模块准备）、`npm run check`、工作流格式检查、Electron SQLite 集成测试、`npm run dist -- --publish never` 和包内冒烟。安装、原生重建和打包顺序执行，electron-builder 不自行发布。

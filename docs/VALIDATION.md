@@ -1,5 +1,11 @@
 # PickUp 验证记录
 
+## 2026-10-24 · 0.2.0 发版版本更新
+
+将 package.json、package-lock.json 顶层及根包版本统一为 `0.2.0`，同步更新工程说明中的安装器名称和后续发版示例。标签发版使用 `v0.2.0`；历史审查和验证记录中的 `0.1.0` 保留为当时实际版本，不回写为新版本。
+
+版本一致性断言通过；`npm run check` 通过（类型、格式、6 个文件 / 59 项单元与组件测试）。本轮仅修改版本元数据和文档，本机未重新打包或运行集成/E2E；`0.2.0` 的打包、集成测试、包内冒烟与 Release 结果以标签触发的 GitHub Actions 为准。
+
 ## 2026-10-24 · GitHub Actions Windows 打包发版
 
 新增 `.github/workflows/release.yml`：手动运行生成 Windows x64 NSIS 安装器 artifact；推送与 package.json 版本一致的 `v*` 标签时，验证完成后创建 GitHub Release，上传安装器及 SHA-256 校验文件。预发布版本标记为 prerelease。构建与发布分开授权，官方 Actions 固定提交 SHA，使用内置 `GITHUB_TOKEN`；具体操作见 [ENGINEERING.md](ENGINEERING.md#github-actions-打包与发版)。
