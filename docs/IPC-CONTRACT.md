@@ -438,3 +438,7 @@ OS 状态与数据库偏好的协调边界（由 main 负责，不在 worker 内
 5. 窗口位置写入使用 `updatePreference({ patch: { widgetBounds } })`，由桌面侧去抖，避免高频写库。
 
 窗口方法由 main 实现：`showMain` / `showCapture` / `hideCapture` / `hideWidget` / `quit` / `getDesktopState`。不接受任意窗口脚本或文件路径。`PICKUP_E2E=1` 时不写入系统登录项。`quit` 先让 capture 落盘草稿，失败则重新显示记录窗口。
+
+`setWidgetExpanded(expanded: boolean)` → `Result<boolean>`：临时展开或收起圆形桌面入口，由 main 以圆球位置为锚点，选择左/右、上/下方向调整透明窗口边界并限制到当前显示器工作区。不修改任务、revision 或偏好版本。`widgetBounds` 继续保存展开卡片的坐标和尺寸，收起时原生窗口缩小为 64×64 DIP；旧 `widgetCollapsed` 字段保留以兼容已有偏好数据，展示状态由本次点击/键盘交互决定。
+
+`moveWidget({ x, y })` → `Result<boolean>`：圆球拖动的屏幕 DIP 坐标，main 校验整数范围并按当前显示器工作区限制圆球边界；只在收起状态执行。位置去抖保存，`widgetBounds` 的右上 64×64 区域持续表示圆球锚点，展开/收起不改写锚点或偏好版本。

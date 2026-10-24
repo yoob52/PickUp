@@ -188,6 +188,14 @@ export type ClearDraftInput = z.infer<typeof clearDraftSchema>;
 
 /* --------------------------------------------------------- 偏好与窗口 */
 
+export const moveWidgetSchema = z
+  .object({
+    x: z.number().int().min(-1_000_000).max(1_000_000),
+    y: z.number().int().min(-1_000_000).max(1_000_000),
+  })
+  .strict();
+export type MoveWidgetInput = z.infer<typeof moveWidgetSchema>;
+
 export const widgetBoundsSchema = z
   .object({
     x: z.number().int(),
@@ -539,6 +547,8 @@ export type PickupAPI = {
   showCapture(): Promise<Result<WindowActionValue>>;
   hideCapture(): Promise<Result<WindowActionValue>>;
   hideWidget(): Promise<Result<WindowActionValue>>;
+  setWidgetExpanded(expanded: boolean): Promise<Result<boolean>>;
+  moveWidget(input: MoveWidgetInput): Promise<Result<boolean>>;
   quit(): Promise<Result<WindowActionValue>>;
   getDesktopState(): Promise<Result<DesktopState>>;
   onStateChanged(listener: (revision: number) => void): () => void;

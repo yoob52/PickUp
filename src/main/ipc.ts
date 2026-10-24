@@ -11,6 +11,7 @@ import {
   listTasksSchema,
   markWaitingSchema,
   mainWindowActionSchema,
+  moveWidgetSchema,
   pauseTaskSchema,
   reopenTaskSchema,
   resolveWaitingSchema,
@@ -205,6 +206,15 @@ export function registerIpcHandlers(
   register("pickup:showCapture", noInput, false, () => desktop.showCapture());
   register("pickup:hideCapture", noInput, false, () => desktop.hideCapture());
   register("pickup:hideWidget", noInput, false, () => desktop.hideWidget());
+  register("pickup:moveWidget", moveWidgetSchema, false, (_client, input) =>
+    desktop.moveWidget(input),
+  );
+  register(
+    "pickup:setWidgetExpanded",
+    z.boolean(),
+    false,
+    (_client, expanded) => desktop.setWidgetExpanded(expanded),
+  );
   register("pickup:quit", noInput, false, () => desktop.quit());
   register("pickup:getDesktopState", noInput, false, () =>
     desktop.getDesktopState(),

@@ -13,6 +13,7 @@ import {
 import type {
   DesktopState,
   MainWindowAction,
+  MoveWidgetInput,
   PreferenceState,
   Preferences,
   Result,
@@ -23,7 +24,12 @@ import type {
 } from "../shared/contracts";
 import { DEFAULT_PREFERENCES } from "../shared/contracts";
 import type { StoreClient } from "./worker-client";
-import { defaultWidgetBounds, visibleBounds, type Rect } from "./bounds";
+import {
+  defaultWidgetBounds,
+  floatingWidgetBounds,
+  WIDGET_ORB_SIZE as ORB_SIZE,
+  type Rect,
+} from "./bounds";
 
 export type WindowKind = "main" | "capture" | "widget";
 
@@ -37,6 +43,8 @@ export type DesktopHost = {
   showCapture(): Promise<Result<WindowActionValue>>;
   hideCapture(): Promise<Result<WindowActionValue>>;
   hideWidget(): Promise<Result<WindowActionValue>>;
+  setWidgetExpanded(expanded: boolean): Promise<Result<boolean>>;
+  moveWidget(input: MoveWidgetInput): Promise<Result<boolean>>;
   quit(): Promise<Result<WindowActionValue>>;
   getDesktopState(): Promise<Result<DesktopState>>;
   applyPreferencePatch(
@@ -53,7 +61,6 @@ type Options = {
 
 const PREPARE_CLOSE_TIMEOUT_MS = 2_500;
 const BOUNDS_SAVE_MS = 400;
-const COLLAPSED_HEIGHT = 76;
 const EXPANDED_HEIGHT = 248;
 
 function windowResult(action: WindowAction): Result<WindowActionValue> {
@@ -86,15 +93,6 @@ function trayImage(): NativeImage {
   return nativeImage.createFromBitmap(buffer, { width: size, height: size });
 }
 
-function workAreas(): Rect[] {
-  return screen.getAllDisplays().map((display) => ({
-    x: Math.round(display.workArea.x),
-    y: Math.round(display.workArea.y),
-    width: Math.round(display.workArea.width),
-    height: Math.round(display.workArea.height),
-  }));
-}
-
 function normalizeAccelerator(value: string): string {
   return value
     .trim()
@@ -111,6 +109,9 @@ export function createDesktop(options: Options): DesktopHost {
   let main: BrowserWindow | undefined;
   let capture: BrowserWindow | undefined;
   let widget: BrowserWindow | undefined;
+  let widgetExpanded = false;
+  let widgetCardBounds: Rect | undefined;
+  let widgetLayoutBounds: Rect | undefined;
   let tray: Tray | undefined;
   let registeredAccelerator = "";
   let acceleratorRegistered = false;
@@ -262,42 +263,67 @@ export function createDesktop(options: Options): DesktopHost {
     return capture;
   }
 
-  function currentWidgetRect(collapsed: boolean): Rect {
-    const area = screen.getPrimaryDisplay().workArea;
-    if (widget && !widget.isDestroyed()) {
-      const [x, y] = widget.getPosition();
-      const [width] = widget.getSize();
-      return visibleBounds(
-        {
-          x,
-          y,
-          width,
-          height: collapsed ? COLLAPSED_HEIGHT : EXPANDED_HEIGHT,
-        },
-        workAreas(),
-      );
-    }
-    return defaultWidgetBounds(
-      {
-        x: area.x,
-        y: area.y,
-        width: area.width,
-        height: area.height,
-      },
-      collapsed,
-    );
-  }
-
   function applyWidgetChrome(values: Preferences): void {
     if (!widget || widget.isDestroyed()) return;
     widget.setAlwaysOnTop(values.widgetPinned);
-    const stored = values.widgetBounds;
-    const next = visibleBounds(
-      stored ?? currentWidgetRect(values.widgetCollapsed),
-      workAreas(),
+    if (!widgetCardBounds) {
+      const stored = values.widgetBounds;
+      widgetCardBounds = stored
+        ? {
+            ...stored,
+            width: Math.max(360, stored.width),
+            height: Math.max(EXPANDED_HEIGHT, stored.height),
+          }
+        : {
+            ...defaultWidgetBounds(screen.getPrimaryDisplay().workArea, false),
+            width: 360,
+          };
+    }
+    layoutWidget();
+  }
+
+  function layoutWidget(): void {
+    if (!widget || widget.isDestroyed() || !widgetCardBounds) return;
+    const anchor = {
+      x: widgetCardBounds.x + widgetCardBounds.width - ORB_SIZE,
+      y: widgetCardBounds.y,
+      width: ORB_SIZE,
+      height: ORB_SIZE,
+    };
+    const area = screen.getDisplayMatching(anchor).workArea;
+    const orb = floatingWidgetBounds(widgetCardBounds, area, false);
+    widgetCardBounds = {
+      ...widgetCardBounds,
+      x: orb.x + ORB_SIZE - widgetCardBounds.width,
+      y: orb.y,
+    };
+    widgetLayoutBounds = floatingWidgetBounds(
+      widgetCardBounds,
+      area,
+      widgetExpanded,
     );
-    const height = values.widgetCollapsed ? COLLAPSED_HEIGHT : next.height;
-    widget.setBounds({ ...next, height });
+    widget.setBounds(widgetLayoutBounds);
+  }
+
+  async function moveWidget(input: MoveWidgetInput): Promise<Result<boolean>> {
+    if (!widget || widget.isDestroyed() || !widgetCardBounds || widgetExpanded)
+      return { ok: true, value: false, revision: 0 };
+    widgetCardBounds = {
+      ...widgetCardBounds,
+      x: input.x + ORB_SIZE - widgetCardBounds.width,
+      y: input.y,
+    };
+    layoutWidget();
+    queueBoundsSave();
+    return { ok: true, value: true, revision: 0 };
+  }
+
+  async function setWidgetExpanded(
+    expanded: boolean,
+  ): Promise<Result<boolean>> {
+    widgetExpanded = expanded;
+    layoutWidget();
+    return { ok: true, value: expanded, revision: 0 };
   }
 
   function queueBoundsSave(): void {
@@ -310,7 +336,8 @@ export function createDesktop(options: Options): DesktopHost {
 
   async function persistWidgetBounds(): Promise<void> {
     if (!widget || widget.isDestroyed()) return;
-    const bounds = widget.getBounds();
+    const bounds = widgetCardBounds;
+    if (!bounds) return;
     const prefs = await readPreferences();
     const next = {
       x: Math.round(bounds.x),
@@ -341,31 +368,45 @@ export function createDesktop(options: Options): DesktopHost {
       return;
     }
     if (!widget || widget.isDestroyed()) {
+      widgetExpanded = false;
+      widgetCardBounds = undefined;
       const bounds =
         values.widgetBounds ??
         defaultWidgetBounds(
           screen.getPrimaryDisplay().workArea,
           values.widgetCollapsed,
         );
-      const placed = visibleBounds(bounds, workAreas());
       widget = await createWindow("widget", {
-        x: placed.x,
-        y: placed.y,
-        width: placed.width,
-        height: values.widgetCollapsed ? COLLAPSED_HEIGHT : placed.height,
-        minWidth: 240,
-        minHeight: 72,
+        x: bounds.x,
+        y: bounds.y,
+        width: ORB_SIZE,
+        height: ORB_SIZE,
+        transparent: true,
+        backgroundColor: "#00000000",
+        hasShadow: false,
         frame: false,
         skipTaskbar: true,
-        resizable: true,
+        resizable: false,
         minimizable: false,
         maximizable: false,
         fullscreenable: false,
         title: "接着 PickUp",
       });
       widget.setAlwaysOnTop(values.widgetPinned);
-      widget.on("moved", queueBoundsSave);
-      widget.on("resized", queueBoundsSave);
+      widget.on("moved", () => {
+        if (!widget || !widgetCardBounds || !widgetLayoutBounds) return;
+        const bounds = widget.getBounds();
+        const dx = bounds.x - widgetLayoutBounds.x;
+        const dy = bounds.y - widgetLayoutBounds.y;
+        if (!dx && !dy) return;
+        widgetCardBounds = {
+          ...widgetCardBounds,
+          x: widgetCardBounds.x + dx,
+          y: widgetCardBounds.y + dy,
+        };
+        widgetLayoutBounds = bounds;
+        queueBoundsSave();
+      });
       widget.on("close", (event) => {
         if (quitting) return;
         event.preventDefault();
@@ -619,6 +660,8 @@ export function createDesktop(options: Options): DesktopHost {
     showCapture,
     hideCapture,
     hideWidget,
+    setWidgetExpanded,
+    moveWidget,
     quit,
     getDesktopState,
     applyPreferencePatch,

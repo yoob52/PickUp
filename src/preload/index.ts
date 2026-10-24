@@ -42,6 +42,9 @@ const api: PickupAPI = {
   showCapture: () => ipcRenderer.invoke("pickup:showCapture"),
   hideCapture: () => ipcRenderer.invoke("pickup:hideCapture"),
   hideWidget: () => ipcRenderer.invoke("pickup:hideWidget"),
+  moveWidget: (input) => ipcRenderer.invoke("pickup:moveWidget", input),
+  setWidgetExpanded: (expanded) =>
+    ipcRenderer.invoke("pickup:setWidgetExpanded", expanded),
   quit: () => ipcRenderer.invoke("pickup:quit"),
   getDesktopState: () => ipcRenderer.invoke("pickup:getDesktopState"),
   onStateChanged(listener) {

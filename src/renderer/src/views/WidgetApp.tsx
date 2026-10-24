@@ -1,6 +1,8 @@
+import { useEffect, useRef, useState } from "react";
 import {
   Check,
   ChevronsDownUp,
+  ArrowUpRight,
   Maximize2,
   Pin,
   Plus,
@@ -17,6 +19,27 @@ export function WidgetApp() {
   const { snapshot, phase, error, notice, refresh } = useWorkspace();
   const notify = useToast();
   const current = snapshot.currentTask;
+  const [expanded, setExpanded] = useState(false);
+  const surface = useRef<HTMLElement>(null);
+  useEffect(() => {
+    surface.current?.focus();
+  }, [expanded]);
+  const drag = useRef<{
+    x: number;
+    y: number;
+    startX: number;
+    startY: number;
+    moved: boolean;
+  } | null>(null);
+
+  async function expand(value: boolean) {
+    const result = await window.pickup.setWidgetExpanded(value);
+    if (!result.ok) {
+      notify(result.message, "error");
+      return;
+    }
+    setExpanded(result.value);
+  }
 
   async function complete() {
     if (!current) return;
@@ -55,100 +78,161 @@ export function WidgetApp() {
     notify(success);
   }
 
-  if (phase === "unavailable") {
-    return (
-      <main className="widget-window fatal-screen">
-        <p>{error?.message}</p>
-      </main>
-    );
-  }
-
   return (
-    <main className="widget-window">
-      <div className="widget-toolbar">
-        <div className="widget-kicker">接着 PickUp</div>
-        <div className="widget-tools">
-          <IconButton
-            label="收起或展开"
-            onClick={() =>
-              void window.pickup.getPreferences().then((prefs) => {
-                if (!prefs.ok) return;
-                void patchPreference(
-                  { widgetCollapsed: !prefs.value.values.widgetCollapsed },
-                  prefs.value.values.widgetCollapsed
-                    ? "已展开入口。"
-                    : "已收起入口。",
-                );
-              })
-            }
+    <main
+      ref={surface}
+      tabIndex={-1}
+      className={`widget-window ${expanded ? "is-expanded" : "is-orb"}`}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          (document.activeElement as HTMLElement)?.blur();
+          void expand(false);
+        }
+      }}
+    >
+      {!expanded ? (
+        <>
+          <button
+            className="widget-orb"
+            aria-label="展开桌面入口"
+            title="点击展开，按住拖动"
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              drag.current = {
+                x: event.clientX,
+                y: event.clientY,
+                startX: event.screenX,
+                startY: event.screenY,
+                moved: false,
+              };
+              event.currentTarget.setPointerCapture(event.pointerId);
+            }}
+            onPointerMove={(event) => {
+              const active = drag.current;
+              if (
+                !active ||
+                !event.currentTarget.hasPointerCapture(event.pointerId)
+              )
+                return;
+              if (
+                !active.moved &&
+                Math.hypot(
+                  event.screenX - active.startX,
+                  event.screenY - active.startY,
+                ) < 5
+              )
+                return;
+              active.moved = true;
+              void window.pickup
+                .moveWidget({
+                  x: Math.round(event.screenX - active.x),
+                  y: Math.round(event.screenY - active.y),
+                })
+                .then((result) => {
+                  if (!result.ok) notify(result.message, "error");
+                });
+            }}
+            onPointerUp={(event) => {
+              if (event.currentTarget.hasPointerCapture(event.pointerId))
+                event.currentTarget.releasePointerCapture(event.pointerId);
+            }}
+            onPointerCancel={() => {
+              drag.current = null;
+            }}
+            onClick={(event) => {
+              if (event.detail === 0 || !drag.current?.moved) void expand(true);
+            }}
           >
-            <ChevronsDownUp size={14} />
-          </IconButton>
-          <IconButton
-            label="切换置顶"
-            onClick={() =>
-              void window.pickup.getPreferences().then((prefs) => {
-                if (!prefs.ok) return;
-                void patchPreference(
-                  { widgetPinned: !prefs.value.values.widgetPinned },
-                  prefs.value.values.widgetPinned
-                    ? "已取消置顶。"
-                    : "入口已置顶。",
-                );
-              })
-            }
-          >
-            <Pin size={14} />
-          </IconButton>
-          <IconButton
-            label="隐藏桌面入口"
-            onClick={() => void window.pickup.hideWidget()}
-          >
-            <X size={14} />
-          </IconButton>
-        </div>
-      </div>
-      {notice ? <NoticeBar tone="error">{notice}</NoticeBar> : null}
-      <h1>{current ? current.title : "现在准备做什么？"}</h1>
-      <p className="widget-next">
-        {current
-          ? nextStepText(current) || "还没有保存断点"
-          : "主窗口里选择一件事，或先记下一件新事。"}
-      </p>
-      <p className="widget-counts">
-        已暂停 {snapshot.counts.paused} · 待处理 {snapshot.counts.todo}
-      </p>
-      <div className="widget-actions">
-        <Button
-          kind="primary"
-          icon={<Plus size={14} />}
-          onClick={() => void window.pickup.showCapture()}
-        >
-          记一件事
-        </Button>
-        <Button
-          kind="secondary"
-          icon={<Repeat size={14} />}
-          onClick={() => void window.pickup.showMain()}
-        >
-          切换
-        </Button>
-        {current ? (
-          <Button
-            kind="secondary"
-            icon={<Check size={14} />}
-            onClick={() => void complete()}
-          >
-            完成
-          </Button>
-        ) : null}
-        <IconButton
-          label="打开主窗口"
-          onClick={() => void window.pickup.showMain()}
-        >
-          <Maximize2 size={16} />
-        </IconButton>
-      </div>
+            <ArrowUpRight size={26} strokeWidth={1.6} aria-hidden="true" />
+            <span
+              className={`widget-orb-status${current ? " is-active" : ""}`}
+            />
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="widget-toolbar">
+            <div className="widget-kicker">接着 PickUp</div>
+            <div className="widget-tools">
+              <IconButton
+                label="收起桌面入口"
+                onClick={() => {
+                  (document.activeElement as HTMLElement)?.blur();
+                  void expand(false);
+                }}
+              >
+                <ChevronsDownUp size={14} />
+              </IconButton>
+              <IconButton
+                label="切换置顶"
+                onClick={() =>
+                  void window.pickup.getPreferences().then((prefs) => {
+                    if (!prefs.ok) return;
+                    void patchPreference(
+                      { widgetPinned: !prefs.value.values.widgetPinned },
+                      prefs.value.values.widgetPinned
+                        ? "已取消置顶。"
+                        : "入口已置顶。",
+                    );
+                  })
+                }
+              >
+                <Pin size={14} />
+              </IconButton>
+              <IconButton
+                label="隐藏桌面入口"
+                onClick={() => void window.pickup.hideWidget()}
+              >
+                <X size={14} />
+              </IconButton>
+            </div>
+          </div>
+          {phase === "unavailable" ? (
+            <NoticeBar tone="error">{error?.message}</NoticeBar>
+          ) : null}
+          {notice ? <NoticeBar tone="error">{notice}</NoticeBar> : null}
+          <h1>{current ? current.title : "现在准备做什么？"}</h1>
+          <p className="widget-next">
+            {current
+              ? nextStepText(current) || "还没有保存断点"
+              : "主窗口里选择一件事，或先记下一件新事。"}
+          </p>
+          <p className="widget-counts">
+            已暂停 {snapshot.counts.paused} · 待处理 {snapshot.counts.todo}
+          </p>
+          <div className="widget-actions">
+            <Button
+              kind="primary"
+              icon={<Plus size={14} />}
+              onClick={() => void window.pickup.showCapture()}
+            >
+              记一件事
+            </Button>
+            <Button
+              kind="secondary"
+              icon={<Repeat size={14} />}
+              onClick={() => void window.pickup.showMain()}
+            >
+              切换
+            </Button>
+            {current ? (
+              <Button
+                kind="secondary"
+                icon={<Check size={14} />}
+                onClick={() => void complete()}
+              >
+                完成
+              </Button>
+            ) : null}
+            <IconButton
+              label="打开主窗口"
+              onClick={() => void window.pickup.showMain()}
+            >
+              <Maximize2 size={16} />
+            </IconButton>
+          </div>
+        </>
+      )}
     </main>
   );
 }

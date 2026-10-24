@@ -70,6 +70,12 @@ beforeAll(() => {
     showCapture: () => windowOk("showCapture"),
     hideCapture: () => windowOk("hideCapture"),
     hideWidget: () => windowOk("hideWidget"),
+    moveWidget: async () => ({ ok: true, value: true, revision: 0 }),
+    setWidgetExpanded: async (expanded) => ({
+      ok: true,
+      value: expanded,
+      revision: 0,
+    }),
     quit: () => windowOk("quit"),
     getDesktopState: async () => ({
       ok: true,

@@ -79,7 +79,7 @@ export function SettingsDialog({ onClose, onNotice }: Props) {
         title="显示桌面入口"
         detail={
           values?.widgetEnabled
-            ? "轻量入口在桌面上。可移动、收起或隐藏。"
+            ? "点击圆球展开，按住圆球拖动；靠近屏幕边缘自动调整展开方向。"
             : "入口已隐藏。仍可用快捷键和主窗口记录。"
         }
         on={values?.widgetEnabled ?? true}

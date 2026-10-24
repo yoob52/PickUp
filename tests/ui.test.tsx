@@ -92,6 +92,8 @@ function createApi(overrides: Partial<PickupAPI> = {}): PickupAPI {
     hideCapture: vi
       .fn()
       .mockResolvedValue(ok({ type: "window", action: "hideCapture" }, 0)),
+    setWidgetExpanded: unused,
+    moveWidget: unused,
     hideWidget: unused,
     controlMainWindow: unused,
     quit: unused,
