@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowDownRight, Plus, Sunset } from "lucide-react";
+import { Plus, Sunset } from "lucide-react";
 import type { Page, TaskSummary } from "../../../shared/contracts";
 import { createPending, invokeCommand } from "../lib/command";
 import { useWorkspace } from "../state/workspace";
 import { Button, NoticeBar } from "../ui/primitives";
 import { useToast } from "../ui/Toast";
 import { AppShell } from "../features/AppShell";
-import { ChromeSculpture } from "../features/ChromeSculpture";
 import { CurrentCard } from "../features/CurrentCard";
 import { DailyReviewDialog } from "../features/DailyReview";
 import { ResumePanel } from "../features/ResumePanel";
@@ -258,32 +257,6 @@ export function MainApp() {
           内容已保存。界面刷新失败，不会重复提交。
         </NoticeBar>
       ) : null}
-      <div className="workspace-caption">
-        <span>PERSONAL CONTINUITY ENGINE</span>
-        <span>LOCAL WORKSPACE / 01</span>
-      </div>
-      <section className="chrome-opening" aria-label="工作台概览">
-        <div className="chrome-heading">
-          <div className="industrial-label">把思路接上，把事情推进。</div>
-          <div className="chrome-display" aria-hidden="true">
-            ON
-            <br />
-            <span>TRACK.</span>
-          </div>
-          <h1>接上思路，继续推进。</h1>
-          <p>把临时的事收好，把未完的事接上。</p>
-        </div>
-        <ChromeSculpture />
-        <div className="object-index" aria-hidden="true">
-          <span>OBJECT.08</span>
-          <ArrowDownRight size={28} />
-          <span>
-            INTERRUPTED,
-            <br />
-            NEVER LOST.
-          </span>
-        </div>
-      </section>
       <section className="dashboard-grid" aria-label="当前工作">
         <CurrentCard
           current={snapshot.currentTask}

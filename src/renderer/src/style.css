@@ -1510,8 +1510,7 @@ html[data-window="main"] #root {
   }
 }
 
-/* Chrome / continuity engine. Local artwork adapted from template 08. */
-.workspace-caption,
+/* Workspace details. */
 .workspace-footer {
   display: flex;
   justify-content: space-between;
@@ -1522,71 +1521,6 @@ html[data-window="main"] #root {
     "Microsoft YaHei",
     monospace;
   letter-spacing: 0.1em;
-}
-.workspace-caption > span:first-child::before {
-  content: "";
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  margin-right: 8px;
-  background: var(--accent);
-}
-.chrome-opening {
-  display: grid;
-  grid-template-columns: 1fr 1fr 75px;
-  align-items: center;
-  min-height: 310px;
-  gap: 8px;
-  padding: 15px 0 22px;
-}
-.chrome-heading {
-  min-width: 0;
-}
-.industrial-label {
-  margin-bottom: 17px;
-  color: var(--muted);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-}
-.chrome-display {
-  color: #192427;
-  font:
-    900 clamp(62px, 6.6vw, 100px)/0.88 "Arial Black",
-    Arial,
-    sans-serif;
-  letter-spacing: -0.085em;
-}
-.chrome-display span {
-  color: #687274;
-}
-.chrome-heading h1 {
-  margin: 23px 0 8px;
-  font-size: 20px;
-  font-weight: 500;
-  letter-spacing: -0.04em;
-}
-.chrome-heading p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.8;
-}
-.sculpture {
-  display: block;
-  width: 100%;
-  max-height: 300px;
-  pointer-events: none;
-}
-.object-index {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 24px;
-  color: var(--muted);
-  font:
-    7px/1.8 Consolas,
-    monospace;
-  text-align: right;
 }
 .capture-cta {
   font-size: 11px;
@@ -1647,16 +1581,6 @@ html[data-window="main"] #root {
   .main {
     padding: 20px 24px;
   }
-  .chrome-opening {
-    grid-template-columns: 1fr 0.85fr;
-    min-height: 280px;
-  }
-  .object-index {
-    display: none;
-  }
-  .chrome-display {
-    font-size: 76px;
-  }
   .lower-grid {
     grid-template-columns: minmax(0, 1fr) 230px;
   }
@@ -1688,15 +1612,6 @@ html[data-window="main"] #root {
   }
   .review-card {
     padding: 18px;
-  }
-  .chrome-display {
-    font-size: 64px;
-  }
-  .chrome-heading h1 {
-    font-size: 18px;
-  }
-  .workspace-caption > span:last-child {
-    display: none;
   }
   .current-content h2 {
     font-size: 28px;
@@ -1746,34 +1661,6 @@ html[data-window="main"] #root {
   }
   .main {
     padding: 20px 16px;
-  }
-  .chrome-opening {
-    min-height: 260px;
-    grid-template-columns: 1fr;
-    position: relative;
-  }
-  .chrome-heading {
-    position: relative;
-    z-index: 1;
-  }
-  .industrial-label {
-    font-size: 9px;
-  }
-  .chrome-display {
-    font-size: 63px;
-  }
-  .chrome-heading h1 {
-    font-size: 17px;
-  }
-  .chrome-heading p {
-    max-width: 175px;
-    font-size: 10px;
-  }
-  .sculpture {
-    position: absolute;
-    width: 42%;
-    right: -8px;
-    top: 50px;
   }
   .current-card {
     padding: 22px;
@@ -1887,13 +1774,6 @@ html[data-window="main"] #root {
   }
   .quiet-chip {
     display: none;
-  }
-  .sculpture {
-    width: 40%;
-    top: 63px;
-  }
-  .chrome-display {
-    font-size: 60px;
   }
   .main {
     padding: 18px 14px;
