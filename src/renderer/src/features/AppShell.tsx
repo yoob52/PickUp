@@ -1,30 +1,21 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import logo from "../../../../docs/logo.png";
 import {
-  Archive,
-  Clock3,
-  Inbox,
   LayoutDashboard,
   Minus,
-  PauseCircle,
   Plus,
   SlidersHorizontal,
   Square,
   Sunset,
   X,
 } from "lucide-react";
-import type { StatusCounts } from "../../../shared/task";
 import { formatStamp } from "../lib/format";
 import { Button, IconButton } from "../ui/primitives";
 import { useToast } from "../ui/Toast";
 import type { MainWindowAction } from "../../../shared/contracts";
-import type { ListFilter } from "./TaskBoard";
 
 type Props = {
-  counts: StatusCounts;
-  filter: ListFilter;
   connection: string;
-  onFilter: (filter: ListFilter) => void;
   onCapture: () => void;
   onReview: () => void;
   onSettings: () => void;
@@ -32,16 +23,14 @@ type Props = {
 };
 
 export function AppShell({
-  counts,
-  filter,
   connection,
-  onFilter,
   onCapture,
   onReview,
   onSettings,
   children,
 }: Props) {
   const notify = useToast();
+  const mainRef = useRef<HTMLElement>(null);
 
   async function controlWindow(action: MainWindowAction) {
     const result = await window.pickup.controlMainWindow(action);
@@ -97,46 +86,18 @@ export function AppShell({
           <div>
             <div className="side-label">工作区</div>
             <nav className="side-nav" aria-label="主导航">
-              <NavItem
-                icon={<LayoutDashboard size={16} />}
-                label="工作台"
-                count={counts.unfinished}
-                active={filter === "unfinished"}
-                onClick={() => onFilter("unfinished")}
-              />
-              <NavItem
-                icon={<Inbox size={16} />}
-                label="待处理"
-                count={counts.todo}
-                active={filter === "todo"}
-                onClick={() => onFilter("todo")}
-              />
-              <NavItem
-                icon={<PauseCircle size={16} />}
-                label="已暂停"
-                count={counts.paused}
-                active={filter === "paused"}
-                onClick={() => onFilter("paused")}
-              />
-              <NavItem
-                icon={<Clock3 size={16} />}
-                label="等待中"
-                count={counts.waiting}
-                active={filter === "waiting"}
-                onClick={() => onFilter("waiting")}
-              />
-              <NavItem
-                icon={<Archive size={16} />}
-                label="已结束"
-                count={counts.done + counts.cancelled}
-                active={filter === "ended"}
-                onClick={() => onFilter("ended")}
-              />
               <button
                 type="button"
-                className="nav-item review-nav"
-                onClick={onReview}
+                className="nav-item active"
+                aria-current="page"
+                onClick={() => mainRef.current?.scrollTo({ top: 0 })}
               >
+                <span className="nav-left">
+                  <LayoutDashboard size={16} />
+                  工作台
+                </span>
+              </button>
+              <button type="button" className="nav-item" onClick={onReview}>
                 <span className="nav-left">
                   <Sunset size={16} />
                   今日收尾
@@ -157,37 +118,10 @@ export function AppShell({
             </p>
           </div>
         </aside>
-        <main className="main">{children}</main>
+        <main className="main" ref={mainRef}>
+          {children}
+        </main>
       </div>
     </div>
-  );
-}
-
-function NavItem({
-  icon,
-  label,
-  count,
-  active,
-  onClick,
-}: {
-  icon: ReactNode;
-  label: string;
-  count: number;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={active ? "nav-item active" : "nav-item"}
-      aria-current={active ? "page" : undefined}
-      onClick={onClick}
-    >
-      <span className="nav-left">
-        {icon}
-        {label}
-      </span>
-      <span className="nav-count">{count}</span>
-    </button>
   );
 }

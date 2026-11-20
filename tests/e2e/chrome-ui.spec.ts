@@ -18,14 +18,15 @@ test("铬白工作台保留侧栏、窄窗口导航和长任务操作", async ()
   try {
     const page = await windowByKind(application, "main");
     await expect(
-      page.getByRole("heading", { name: "接上思路，继续推进。" }),
+      page.getByRole("heading", { name: "现在准备做什么？" }),
     ).toBeVisible();
-    await expect(page.locator(".sculpture")).toBeVisible();
     const nav = page.getByRole("navigation", { name: "主导航" });
-    await expect(nav.getByRole("button", { name: /工作台/ })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    const workbench = nav.getByRole("button", { name: "工作台" });
+    const filters = page.getByRole("tablist", { name: "任务筛选" });
+    const waiting = filters.getByRole("tab", { name: "等待", exact: true });
+    await expect(nav.getByRole("button")).toHaveCount(2);
+    await expect(workbench).toHaveAttribute("aria-current", "page");
+    await expect(nav.getByRole("button", { name: "今日收尾" })).toBeVisible();
     await page.screenshot({ path: join(out, "empty.png"), fullPage: true });
     const title =
       "跟进交付接口与客户端重试配置，核对中断后的上下文和下一步。".repeat(4);
@@ -76,14 +77,13 @@ test("铬白工作台保留侧栏、窄窗口导航和长任务操作", async ()
       expect(await page.locator(".sidebar").boundingBox()).toEqual(sidebar);
       expect(await page.evaluate(() => window.scrollY)).toBe(0);
       await page.screenshot({ path: join(out, `scrolled-${width}.png`) });
-      await nav.getByRole("button", { name: /等待中/ }).click();
-      await expect(
-        page.getByRole("tab", { name: "等待", exact: true }),
-      ).toHaveAttribute("aria-selected", "true");
-      await nav.getByRole("button", { name: /工作台/ }).click();
-      const board = await page.locator(".lower-grid").boundingBox();
-      expect(board!.y).toBeGreaterThanOrEqual(72);
-      expect(board!.y).toBeLessThan(900);
+      await waiting.click();
+      await expect(waiting).toHaveAttribute("aria-selected", "true");
+      await workbench.click();
+      await expect
+        .poll(() => page.locator("main.main").evaluate((el) => el.scrollTop))
+        .toBe(0);
+      await expect(waiting).toHaveAttribute("aria-selected", "true");
       expect(await page.locator(".topbar").boundingBox()).toEqual(topbar);
       expect(await page.evaluate(() => window.scrollY)).toBe(0);
     }

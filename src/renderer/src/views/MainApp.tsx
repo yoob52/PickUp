@@ -231,10 +231,7 @@ export function MainApp() {
 
   return (
     <AppShell
-      counts={snapshot.counts}
-      filter={filter}
       connection={connection}
-      onFilter={focusBoard}
       onCapture={() => void window.pickup.showCapture()}
       onReview={() => setReviewOpen(true)}
       onSettings={() => setOverlay({ type: "settings" })}
