@@ -137,6 +137,25 @@ adb -s emulator-5554 shell am start -n com.yoob52.pickup/.MainActivity
 
 `android:sync` 每次先构建共享 Web 产物再同步；修改 Web 代码后需重新同步和构建 APK。`android:apk` 使用工程 Gradle wrapper 生成 debug APK（Windows 可在 `android` 下运行 `gradlew.bat assembleDebug`）。Gradle/SDK 首次构建需要下载依赖，应用运行不需要网络：Manifest 不申请 INTERNET 权限，所有脚本、图片、WASM 均随 APK 打包，无远程 server URL。
 
+#### Android CI 与发布签名
+
+[android.yml](../.github/workflows/android.yml) 在 main 推送、涉及应用/Android/移动构建配置的 PR、`v*` 标签和手动触发时运行。使用 `.node-version` 的 Node 24.12.0、Temurin JDK 21、SDK 35，依次 `npm ci`、`npm run android:sync`、Gradle `:app:assembleRelease`，用 build-tools 的 `apksigner verify --verbose --print-certs` 验证并输出证书 SHA-256。APK 作为 `pickup-android-apk` artifact 保留 14 天。
+
+在 GitHub 仓库的 Actions secrets 中一起设置以下四项，不要提交 keystore 或密码：
+
+- `ANDROID_KEYSTORE_BASE64`：正式 keystore 文件的 base64，例如 `base64 -w 0 pickup-release.keystore`（macOS 可用 `base64 < pickup-release.keystore | tr -d '\n'`），输出只写入 secret，不贴到日志或聊天。
+- `ANDROID_KEYSTORE_PASSWORD`：keystore 密码。
+- `ANDROID_KEY_PASSWORD`：签名私钥密码。
+- `ANDROID_KEY_ALIAS`：签名条目的 alias。
+
+非 fork PR 且四项完整时，工作流将 keystore 解码到 `$RUNNER_TEMP`，以环境变量 `ANDROID_KEYSTORE_FILE` 加三个密码/alias 变量交给 Gradle，构建结束即删除临时 keystore。缺少全部 secrets 时，release variant 使用 Android debug keystore 签名（不是未签名 APK）；job summary 明确显示 `release-signed` 或 `debug-signed: secrets missing`，并附证书 SHA-256。fork PR 永远走无 secrets 的 fallback。只设置部分 secrets 明确失败，不会悄悄降级。
+
+本地 `assembleRelease` 使用相同规则：同时设置 `ANDROID_KEYSTORE_FILE`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_PASSWORD`、`ANDROID_KEY_ALIAS` 即为正式签名；全部不设置则 debug 签名；部分设置立即报错。不要在命令行传密码或打开 shell tracing。debug 签名只用于测试，runner 的 debug key 不保证跨次构建一致，不能用于长期分发或升级。
+
+标签必须为 `vX.Y.Z`；CI 传入 `-PpickupVersionName=X.Y.Z -PpickupVersionCode=$GITHUB_RUN_NUMBER`。非标签构建保留 Gradle 默认版本，不因 run number 改变。Android 的 run number 只在该工作流内单调增加，发布前核对 versionCode 高于所有已分发版本。标签成功构建后，仅 publish job 获取 `contents: write`，通过 gh CLI 上传 `app-release.apk` 到同名 GitHub Release。现有 Windows 工作流负责创建共享 Release，标签仍须匹配根 package.json 版本；Android 最多等待 30 分钟，避免并发创建冲突。若 Windows 发版失败，修复其 Release 后仅重跑 Android publish job。同名 APK 已存在时上传失败，不覆盖已发布产物；下载前务必检查该 run summary 的签名模式，标签本身不保证已设置正式密钥。
+
+正式分发前创建并妥善备份唯一的长期私钥：keystore 加密保存到至少两个独立离线/受控位置，密码与 alias 存入单独的密码管理器，限制 Actions secrets 管理权限，并记录公开证书 SHA-256。不要依赖 GitHub secret 导出作为备份，不要用测试生成的临时 key 发正式版本。丢失或更换密钥通常不能覆盖安装旧版本；debug 与 release 证书不同也不能直接覆盖安装，卸载会删除应用私有数据，应先保护已有数据。轮换需要单独规划 Android 签名继承策略，本工作流不提供密钥找回。
+
 WebView 固定加载 `https://localhost`，这是 OPFS 所需安全上下文；不要更改 scheme/hostname，否则相当于更换数据 origin。Capacitor 本地资源处理器将 `.wasm` 返回为 `application/wasm`，不需要 COOP/COEP。需要支持 OPFS 同步句柄的 WebView；不支持时沿用 `DB_UNAVAILABLE` 明确失败。OPFS 数据位于应用的 WebView 私有存储；force-stop 不清除它，卸载/清除应用数据会清除。直接点击主界面的“记一件事”完成记录与开始，无需调试导航。
 
 持久性验收：记录并开始任务后执行 `adb shell am force-stop com.yoob52.pickup`，再用上述 `am start` 重启，确认标题及进行中状态保留。用 `adb exec-out screencap -p > before.png` / `after.png` 保存屏幕，`adb logcat -d` 检查 Capacitor/Chromium/JS 错误；仅 debug APK 开启 WebView 远程调试。不要用 `pm clear` 或卸载重装模拟重启。
