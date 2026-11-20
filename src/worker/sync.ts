@@ -1,7 +1,9 @@
+import { sha256 } from "@noble/hashes/sha256";
+import { bytesToHex } from "@noble/hashes/utils";
 import { z } from "zod";
 import { DomainError } from "./errors";
 import { hlcSchema, receive, tick } from "./hlc";
-import { bumpRevision, insertTransition, readRevision } from "./rows";
+import { bumpRevision, readRevision } from "./rows";
 import type { SqliteDatabase } from "./sqlite";
 
 const timestamp = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -160,6 +162,11 @@ export function initializeSync(db: SqliteDatabase): void {
 
 /** Called inside the business transaction, before its receipt is committed. */
 export function recordLocalChanges(db: SqliteDatabase, now: number): void {
+  flushLocalChanges(db, now);
+  materializeDoing(db, now);
+}
+
+function flushLocalChanges(db: SqliteDatabase, now: number): void {
   const dirty = db
     .prepare(
       `SELECT entity, entity_id FROM sync_dirty ORDER BY entity,
@@ -286,10 +293,15 @@ function materializeTasks(db: SqliteDatabase, ids: Set<string>): void {
     if (!title || !state) continue;
     const prior = db
       .prepare(
-        "SELECT content_hlc, status_hlc, updated_at FROM tasks WHERE id = ?",
+        "SELECT content_hlc, status_hlc, updated_at, status FROM tasks WHERE id = ?",
       )
       .get(id) as
-      | { content_hlc: string; status_hlc: string; updated_at: number }
+      | {
+          content_hlc: string;
+          status_hlc: string;
+          updated_at: number;
+          status: string;
+        }
       | undefined;
     const { updated_at: updatedAt } = db
       .prepare(
@@ -301,7 +313,11 @@ function materializeTasks(db: SqliteDatabase, ids: Set<string>): void {
     )`,
       )
       .get(id, id) as { updated_at: number };
-    if (prior?.content_hlc === title.hlc && prior.status_hlc === state.hlc) {
+    if (
+      prior?.content_hlc === title.hlc &&
+      prior.status_hlc === state.hlc &&
+      prior.status === state.payload.status
+    ) {
       if (prior.updated_at !== updatedAt)
         db.prepare(
           "UPDATE tasks SET updated_at = ?, version = version + 1 WHERE id = ?",
@@ -409,6 +425,83 @@ function materializeNextUp(db: SqliteDatabase): boolean {
   return invalid;
 }
 
+function materializeDoing(db: SqliteDatabase, now: number): void {
+  db.exec("DROP INDEX ux_one_doing");
+  const ids = new Set(
+    (
+      db
+        .prepare(
+          "SELECT DISTINCT entity_id FROM sync_changes WHERE entity IN ('task-content','task-status')",
+        )
+        .all() as { entity_id: string }[]
+    ).map((row) => row.entity_id),
+  );
+  materializeTasks(db, ids);
+  materializeAppendOnly(db, ids);
+  const doing = db
+    .prepare(
+      "SELECT id, status_hlc, status_changed_at, status_revision FROM tasks WHERE status = 'doing' ORDER BY status_changed_at DESC, status_hlc DESC, id ASC",
+    )
+    .all() as {
+    id: string;
+    status_hlc: string;
+    status_changed_at: number;
+    status_revision: number;
+  }[];
+  const winner = doing[0];
+  for (const loser of doing.slice(1)) {
+    db.prepare(
+      "UPDATE tasks SET status = 'paused', status_changed_at = ?, status_revision = ?, version = version + 1 WHERE id = ?",
+    ).run(winner.status_changed_at, winner.status_revision, loser.id);
+    const hash = bytesToHex(
+      sha256(
+        new TextEncoder().encode(
+          JSON.stringify([
+            "doing-conflict",
+            loser.id,
+            loser.status_hlc,
+            winner.id,
+            winner.status_hlc,
+          ]),
+        ),
+      ),
+    );
+    const id = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+    const payload = {
+      task_id: loser.id,
+      from_status: "doing" as const,
+      to_status: "paused" as const,
+      changed_at: winner.status_changed_at,
+      revision: winner.status_revision,
+    };
+    if (!db.prepare("SELECT 1 FROM sync_changes WHERE id = ?").get(id))
+      insertChange(
+        db,
+        {
+          id,
+          entityId: id,
+          entity: "transition",
+          hlc: winner.status_hlc,
+          payload,
+        },
+        now,
+      );
+    db.prepare(
+      "INSERT OR IGNORE INTO task_transitions(id,hlc,task_id,from_status,to_status,changed_at,revision) VALUES(?, ?, ?, 'doing','paused',?,?)",
+    ).run(
+      id,
+      winner.status_hlc,
+      loser.id,
+      payload.changed_at,
+      payload.revision,
+    );
+  }
+  db.exec("DELETE FROM sync_dirty");
+  db.exec(
+    "CREATE UNIQUE INDEX ux_one_doing ON tasks(status) WHERE status = 'doing'",
+  );
+}
+
 export function applyRemoteChanges(
   db: SqliteDatabase,
   input: unknown,
@@ -420,7 +513,6 @@ export function applyRemoteChanges(
     const now = Date.now();
     let applied = 0;
     let newest: string | undefined;
-    const tasks = new Set<string>();
     for (const change of parsed.data) {
       const prior = db
         .prepare(
@@ -452,41 +544,20 @@ export function applyRemoteChanges(
       )
         throw DomainError.validation("同步记录的不可变标识或时钟冲突。");
       insertChange(db, change, now);
-      if (change.entity === "task-content" || change.entity === "task-status")
-        tasks.add(change.entityId);
-      else if (change.entity === "breakpoint" || change.entity === "transition")
-        tasks.add(change.payload.task_id);
       if (newest === undefined || newest < change.hlc) newest = change.hlc;
       applied++;
     }
     if (newest === undefined) return { applied: 0, revision: readRevision(db) };
     nextClock(db, now, newest);
     const revision = bumpRevision(db);
-    db.exec("DROP INDEX ux_one_doing");
-    materializeTasks(db, tasks);
-    materializeAppendOnly(db, tasks);
+    materializeDoing(db, now);
     const invalidNextUp = materializeNextUp(db);
     db.exec("DELETE FROM sync_dirty");
-    const doing = db
-      .prepare(
-        "SELECT id FROM tasks WHERE status = 'doing' ORDER BY status_changed_at DESC, status_hlc DESC, id ASC",
-      )
-      .all() as { id: string }[];
-    for (const loser of doing.slice(1)) {
-      db.prepare(
-        `UPDATE tasks SET status = 'paused', status_changed_at = ?, status_revision = ?,
-        updated_at = max(updated_at, ?), version = version + 1 WHERE id = ?`,
-      ).run(now, revision, now, loser.id);
-      insertTransition(db, loser.id, "doing", "paused", now, revision);
-    }
     if (invalidNextUp)
       db.exec(
         "INSERT OR IGNORE INTO sync_dirty VALUES('next-up', 'singleton')",
       );
-    recordLocalChanges(db, now);
-    db.exec(
-      "CREATE UNIQUE INDEX ux_one_doing ON tasks(status) WHERE status = 'doing'",
-    );
+    flushLocalChanges(db, now);
     return { applied, revision };
   })();
 }

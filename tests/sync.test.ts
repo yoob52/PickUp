@@ -510,6 +510,56 @@ describe.each(["better-sqlite3", "sqlite-wasm"] as const)(
       expect(a.prepare("SELECT * FROM sync_device").get()).toEqual(clock);
     });
 
+    it.each([false, true])(
+      "preserves completion when the following start is delivered first: %s",
+      (startFirst) => {
+        const time = vi.spyOn(Date, "now").mockReturnValue(1000);
+        const a = open(),
+          b = open();
+        const first = create(a),
+          second = create(a);
+        createCommands(a).startTask({ commandId: uuid(), task: ref(a, first) });
+        settled(a, b);
+        const cursor = listChangesSince(a, 0, 1000).cursor;
+        time.mockReturnValue(2000);
+        createCommands(a).completeTask({
+          commandId: uuid(),
+          task: ref(a, first),
+        });
+        const completed = listChangesSince(a, cursor, 1000);
+        time.mockReturnValue(3000);
+        createCommands(a).startTask({
+          commandId: uuid(),
+          task: ref(a, second),
+        });
+        const started = listChangesSince(a, completed.cursor, 1000).changes;
+        time.mockReturnValue(100000);
+        for (const batch of startFirst
+          ? [started, completed.changes]
+          : [completed.changes, started])
+          applyRemoteChanges(b, batch);
+        settled(a, b);
+        expect(state(a)).toEqual(state(b));
+        expect(
+          b.prepare("SELECT status FROM tasks WHERE id=?").get(first),
+        ).toEqual({ status: "done" });
+        expect(
+          b.prepare("SELECT id FROM tasks WHERE status='doing'").all(),
+        ).toEqual([{ id: second }]);
+        expect(
+          changes(b)
+            .filter((c) => c.entity === "task-status")
+            .map((c) => c.id)
+            .sort(),
+        ).toEqual(
+          changes(a)
+            .filter((c) => c.entity === "task-status")
+            .map((c) => c.id)
+            .sort(),
+        );
+      },
+    );
+
     it("repairs next-up pointing at an ended or waiting task, resolves next-up LWW and never skips late old-HLC changes with the upload cursor", () => {
       const a = open(),
         b = open();
