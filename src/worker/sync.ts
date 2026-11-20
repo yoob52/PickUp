@@ -1,5 +1,3 @@
-import { sha256 } from "@noble/hashes/sha256";
-import { bytesToHex } from "@noble/hashes/utils";
 import { z } from "zod";
 import { DomainError } from "./errors";
 import { decodeHlc, hlcSchema, receive, tick } from "./hlc";
@@ -163,7 +161,7 @@ export function initializeSync(db: SqliteDatabase): void {
 /** Called inside the business transaction, before its receipt is committed. */
 export function recordLocalChanges(db: SqliteDatabase, now: number): void {
   flushLocalChanges(db, now);
-  materializeDoing(db, now);
+  materializeState(db);
   materializeNextUp(db);
   db.exec("DELETE FROM sync_dirty");
 }
@@ -171,7 +169,7 @@ export function recordLocalChanges(db: SqliteDatabase, now: number): void {
 function flushLocalChanges(db: SqliteDatabase, now: number): void {
   const dirty = db
     .prepare(
-      `SELECT entity, entity_id FROM sync_dirty ORDER BY CASE WHEN entity = 'transition' THEN 0 ELSE 1 END, entity,
+      `SELECT entity, entity_id FROM sync_dirty ORDER BY entity,
     CASE WHEN entity IN ('breakpoint','transition') THEN CAST(entity_id AS INTEGER) ELSE 0 END, entity_id`,
     )
     .all() as { entity: Entity; entity_id: string }[];
@@ -303,15 +301,34 @@ function latest(
 }
 
 function materializeTasks(db: SqliteDatabase, ids: Set<string>): void {
+  const starts = db
+    .prepare(
+      "SELECT entity_id, hlc FROM sync_changes WHERE entity = 'task-status' AND json_extract(payload, '$.status') = 'doing' ORDER BY hlc ASC, entity_id DESC",
+    )
+    .all() as { entity_id: string; hlc: string }[];
   for (const id of ids) {
     const title = latest(db, "task-content", id) as
       Extract<SyncChange, { entity: "task-content" }> | undefined;
     const state = latest(db, "task-status", id) as
       Extract<SyncChange, { entity: "task-status" }> | undefined;
     if (!title || !state) continue;
+    const s = state.payload;
+    const displacer =
+      s.status === "doing"
+        ? starts.find(
+            (start) =>
+              start.entity_id !== id &&
+              (start.hlc > state.hlc ||
+                (start.hlc === state.hlc && start.entity_id < id)),
+          )
+        : undefined;
+    const effectiveStatus = displacer ? "paused" : s.status;
+    const statusChangedAt = displacer
+      ? decodeHlc(displacer.hlc).wallMs
+      : s.status_changed_at;
     const prior = db
       .prepare(
-        "SELECT content_hlc, status_hlc, updated_at, status FROM tasks WHERE id = ?",
+        "SELECT content_hlc, status_hlc, updated_at, status, status_changed_at FROM tasks WHERE id = ?",
       )
       .get(id) as
       | {
@@ -319,6 +336,7 @@ function materializeTasks(db: SqliteDatabase, ids: Set<string>): void {
           status_hlc: string;
           updated_at: number;
           status: string;
+          status_changed_at: number;
         }
       | undefined;
     const { updated_at: updatedAt } = db
@@ -334,7 +352,8 @@ function materializeTasks(db: SqliteDatabase, ids: Set<string>): void {
     if (
       prior?.content_hlc === title.hlc &&
       prior.status_hlc === state.hlc &&
-      prior.status === state.payload.status
+      prior.status === effectiveStatus &&
+      prior.status_changed_at === statusChangedAt
     ) {
       if (prior.updated_at !== updatedAt)
         db.prepare(
@@ -343,7 +362,6 @@ function materializeTasks(db: SqliteDatabase, ids: Set<string>): void {
       continue;
     }
     const c = title.payload;
-    const s = state.payload;
     db.prepare(
       `INSERT INTO tasks(id, title, note, created_at, updated_at, content_hlc, status_hlc,
       status, wait_reason, check_back_at, status_changed_at, status_revision, ended_at)
@@ -361,10 +379,10 @@ function materializeTasks(db: SqliteDatabase, ids: Set<string>): void {
       updatedAt,
       title.hlc,
       state.hlc,
-      s.status,
+      effectiveStatus,
       s.wait_reason,
       s.check_back_at,
-      s.status_changed_at,
+      statusChangedAt,
       s.status_revision,
       s.ended_at,
     );
@@ -447,7 +465,7 @@ function materializeNextUp(db: SqliteDatabase): void {
   ).run(id, change.hlc, id, change.hlc);
 }
 
-function materializeDoing(db: SqliteDatabase, now: number): void {
+function materializeState(db: SqliteDatabase): void {
   db.exec("DROP INDEX ux_one_doing");
   const ids = new Set(
     (
@@ -460,72 +478,6 @@ function materializeDoing(db: SqliteDatabase, now: number): void {
   );
   materializeTasks(db, ids);
   materializeAppendOnly(db, ids);
-  const doing = db
-    .prepare(
-      "SELECT id, status_hlc, status_changed_at, status_revision FROM tasks WHERE status = 'doing' ORDER BY status_hlc DESC, id ASC",
-    )
-    .all() as {
-    id: string;
-    status_hlc: string;
-    status_changed_at: number;
-    status_revision: number;
-  }[];
-  const starts = db
-    .prepare(
-      "SELECT entity_id, hlc, payload FROM sync_changes WHERE entity = 'task-status' AND json_extract(payload, '$.status') = 'doing' ORDER BY hlc ASC, entity_id DESC",
-    )
-    .all() as { entity_id: string; hlc: string; payload: string }[];
-  for (const loser of doing) {
-    const displacer = starts.find(
-      (start) =>
-        start.hlc > loser.status_hlc ||
-        (start.hlc === loser.status_hlc && start.entity_id < loser.id),
-    );
-    if (!displacer) continue;
-    const displacedAt = (
-      JSON.parse(displacer.payload) as z.infer<typeof taskStatus>
-    ).status_changed_at;
-    const pauseHlc = tick(displacer.hlc, decodeHlc(displacer.hlc).deviceId, 0);
-    db.prepare(
-      "UPDATE tasks SET status = 'paused', status_changed_at = ?, updated_at = max(updated_at, ?), version = version + 1 WHERE id = ?",
-    ).run(displacedAt, displacedAt, loser.id);
-    const hash = bytesToHex(
-      sha256(
-        new TextEncoder().encode(
-          JSON.stringify([
-            "suppressed-start",
-            loser.id,
-            loser.status_hlc,
-            displacer.entity_id,
-            displacer.hlc,
-          ]),
-        ),
-      ),
-    );
-    const id = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
-    const payload = {
-      task_id: loser.id,
-      from_status: "doing" as const,
-      to_status: "paused" as const,
-      changed_at: displacedAt,
-      revision: loser.status_revision,
-    };
-    if (!db.prepare("SELECT 1 FROM sync_changes WHERE id = ?").get(id))
-      insertChange(
-        db,
-        {
-          id,
-          entityId: id,
-          entity: "transition",
-          hlc: pauseHlc,
-          payload,
-        },
-        now,
-      );
-    db.prepare(
-      "INSERT OR IGNORE INTO task_transitions(id,hlc,task_id,from_status,to_status,changed_at,revision) VALUES(?, ?, ?, 'doing','paused',?,?)",
-    ).run(id, pauseHlc, loser.id, payload.changed_at, payload.revision);
-  }
   db.exec("DELETE FROM sync_dirty");
   db.exec(
     "CREATE UNIQUE INDEX ux_one_doing ON tasks(status) WHERE status = 'doing'",
@@ -580,7 +532,7 @@ export function applyRemoteChanges(
     if (newest === undefined) return { applied: 0, revision: readRevision(db) };
     nextClock(db, now, newest);
     const revision = bumpRevision(db);
-    materializeDoing(db, now);
+    materializeState(db);
     materializeNextUp(db);
     db.exec("DELETE FROM sync_dirty");
     return { applied, revision };

@@ -516,7 +516,7 @@ describe.each(["better-sqlite3", "sqlite-wasm"] as const)(
       );
     });
 
-    it("keeps the most recently started task, pauses other doing tasks with synced history and preserves the unique index", () => {
+    it("keeps the most recently started task, derives other doing tasks as paused and preserves genuine history and the unique index", () => {
       const a = open(),
         b = open();
       const first = create(a),
@@ -540,7 +540,7 @@ describe.each(["better-sqlite3", "sqlite-wasm"] as const)(
             "SELECT count(*) AS n FROM task_transitions WHERE task_id=? AND from_status='doing' AND to_status='paused'",
           )
           .get(first),
-      ).toEqual({ n: 1 });
+      ).toEqual({ n: 0 });
       expect(() =>
         a.prepare("UPDATE tasks SET status='doing' WHERE id=?").run(first),
       ).toThrow(/UNIQUE/);
@@ -553,7 +553,7 @@ describe.each(["better-sqlite3", "sqlite-wasm"] as const)(
       expect(a.prepare("SELECT * FROM sync_device").get()).toEqual(clock);
     });
 
-    it("timestamps displacement at the displacing start and ranks its pause above both starts", () => {
+    it("derives displacement time for resume ranking without synthesizing history", () => {
       const time = vi.spyOn(Date, "now").mockReturnValue(1000);
       const a = open(),
         b = open();
@@ -599,19 +599,8 @@ describe.each(["better-sqlite3", "sqlite-wasm"] as const)(
           to_status: string;
           changed_at: number;
         }[];
-        expect(history[0].to_status).toBe("paused");
-        expect(history[0].changed_at).toBe(5000);
-        const starts = changes(db).filter(
-          (c) =>
-            ((c.entity === "task-status" && c.payload.status === "doing") ||
-              (c.entity === "transition" && c.payload.to_status === "doing")) &&
-            [displaced, displacer].includes(
-              c.entity === "task-status"
-                ? c.entityId
-                : (c.payload as { task_id: string }).task_id,
-            ),
-        );
-        expect(starts.every((start) => start.hlc < history[0].hlc)).toBe(true);
+        expect(history.map((row) => row.to_status)).toEqual(["doing", "todo"]);
+        expect(history[0].changed_at).toBe(2000);
         const detail = createQueries(db).taskDetail({
           taskId: displaced,
           breakpointOffset: 0,
@@ -619,7 +608,7 @@ describe.each(["better-sqlite3", "sqlite-wasm"] as const)(
           transitionOffset: 0,
           transitionLimit: 20,
         });
-        expect(detail.transitions.items[0].toStatus).toBe("paused");
+        expect(detail.transitions.items[0].toStatus).toBe("doing");
       }
       expect(state(a)).toEqual(state(b));
     });
@@ -667,7 +656,7 @@ describe.each(["better-sqlite3", "sqlite-wasm"] as const)(
               "SELECT count(*) AS n FROM task_transitions WHERE task_id=? AND from_status='doing' AND to_status='paused'",
             )
             .get(first),
-        ).toEqual({ n: 1 });
+        ).toEqual({ n: 0 });
         time.mockReturnValue(1);
         createCommands(a).startTask({ commandId: uuid(), task: ref(a, first) });
         expect(
@@ -677,6 +666,55 @@ describe.each(["better-sqlite3", "sqlite-wasm"] as const)(
         expect(state(a)).toEqual(state(b));
       },
     );
+
+    it("accepts a late earlier displacer without adding duplicate pause history or outbox events", () => {
+      const time = vi.spyOn(Date, "now").mockReturnValue(1000);
+      const a = open(),
+        b = open(),
+        c = open();
+      const first = create(a),
+        earlier = create(a),
+        later = create(a);
+      settled(a, b);
+      applyRemoteChanges(c, changes(a));
+      time.mockReturnValue(2000);
+      createCommands(a).startTask({ commandId: uuid(), task: ref(a, first) });
+      time.mockReturnValue(3000);
+      createCommands(b).startTask({ commandId: uuid(), task: ref(b, earlier) });
+      time.mockReturnValue(4000);
+      createCommands(c).startTask({ commandId: uuid(), task: ref(c, later) });
+      const genuine = new Set(
+        [...changes(a), ...changes(b), ...changes(c)].map((event) => event.id),
+      );
+      applyRemoteChanges(a, changes(c));
+      expect(
+        a
+          .prepare("SELECT status,status_changed_at FROM tasks WHERE id=?")
+          .get(first),
+      ).toEqual({ status: "paused", status_changed_at: 4000 });
+      applyRemoteChanges(a, changes(b));
+      expect(
+        a
+          .prepare("SELECT status,status_changed_at FROM tasks WHERE id=?")
+          .get(first),
+      ).toEqual({ status: "paused", status_changed_at: 3000 });
+      expect(new Set(changes(a).map((event) => event.id))).toEqual(genuine);
+      settled(a, b);
+      settled(a, c);
+      settled(a, b);
+      expect(state(a)).toEqual(state(b));
+      expect(state(a)).toEqual(state(c));
+      for (const db of [a, b, c]) {
+        expect(
+          db
+            .prepare(
+              "SELECT to_status FROM task_transitions WHERE task_id=? ORDER BY hlc DESC,id DESC",
+            )
+            .all(first),
+        ).toEqual([{ to_status: "doing" }, { to_status: "todo" }]);
+        expect(new Set(changes(db).map((event) => event.id))).toEqual(genuine);
+      }
+    });
 
     it.each(["start", "switch"] as const)(
       "honors an explicit %s after observing future-clock starts",
@@ -776,6 +814,27 @@ describe.each(["better-sqlite3", "sqlite-wasm"] as const)(
         expect(
           b.prepare("SELECT status FROM tasks WHERE id=?").get(first),
         ).toEqual({ status: "done" });
+        const history = b
+          .prepare(
+            "SELECT to_status FROM task_transitions WHERE task_id=? ORDER BY hlc DESC,id DESC",
+          )
+          .all(first);
+        expect(history).toEqual([
+          { to_status: "done" },
+          { to_status: "doing" },
+          { to_status: "todo" },
+        ]);
+        expect(
+          changes(b)
+            .filter((event) => event.entity === "transition")
+            .map((event) => event.id)
+            .sort(),
+        ).toEqual(
+          changes(a)
+            .filter((event) => event.entity === "transition")
+            .map((event) => event.id)
+            .sort(),
+        );
         expect(
           b.prepare("SELECT id FROM tasks WHERE status='doing'").all(),
         ).toEqual([{ id: second }]);
