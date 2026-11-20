@@ -167,6 +167,49 @@ describe.each(["better-sqlite3", "sqlite-wasm"] as const)(
       expect(other.prepare("SELECT * FROM command_receipts").all()).toEqual([]);
     });
 
+    it("backfills many history rows with one observed-clock scan and one persisted clock advance", () => {
+      const db = open(false);
+      db.exec(MIGRATIONS[0].sql);
+      db.exec(MIGRATIONS[1].sql);
+      db.exec("PRAGMA user_version = 2");
+      const id = uuid();
+      db.prepare(
+        "INSERT INTO tasks(id,title,status,created_at,updated_at,status_changed_at,status_revision) VALUES(?,'旧任务','paused',1,2,2,1)",
+      ).run(id);
+      const insert = db.prepare(
+        "INSERT INTO task_transitions(task_id,from_status,to_status,changed_at,revision) VALUES(?,'doing','paused',?,?)",
+      );
+      db.transaction(() => {
+        for (let i = 1; i <= 600; i++) insert.run(id, i, i);
+      })();
+      let scans = 0,
+        clockReads = 0,
+        clockWrites = 0;
+      const tracked: SqliteDatabase = {
+        prepare: (sql) => {
+          if (sql.includes("SELECT max(hlc)")) scans++;
+          if (sql.includes("SELECT id, last_hlc FROM sync_device"))
+            clockReads++;
+          if (sql.includes("UPDATE sync_device SET last_hlc")) clockWrites++;
+          return db.prepare(sql);
+        },
+        exec: (sql) => db.exec(sql),
+        transaction: (fn) => db.transaction(fn),
+        close: () => {},
+      };
+      migrateSchema(tracked);
+      expect(scans).toBe(1);
+      expect(clockReads).toBe(1);
+      expect(clockWrites).toBe(1);
+      const events = changes(db);
+      expect(events).toHaveLength(602);
+      expect(new Set(events.map((c) => c.hlc)).size).toBe(602);
+      expect(events.map((c) => c.hlc)).toEqual(events.map((c) => c.hlc).sort());
+      expect(db.prepare("SELECT last_hlc FROM sync_device").get()).toEqual({
+        last_hlc: events.at(-1)!.hlc,
+      });
+    });
+
     it("rolls back schema, identity backfill and seed outbox together when the sync migration fails", () => {
       const db = open(false);
       db.exec(MIGRATIONS[0].sql);
@@ -508,6 +551,77 @@ describe.each(["better-sqlite3", "sqlite-wasm"] as const)(
       expect(state(a)).toEqual(snapshot);
       expect(changes(a)).toEqual(outbox);
       expect(a.prepare("SELECT * FROM sync_device").get()).toEqual(clock);
+    });
+
+    it("timestamps displacement at the displacing start and ranks its pause above both starts", () => {
+      const time = vi.spyOn(Date, "now").mockReturnValue(1000);
+      const a = open(),
+        b = open();
+      const previous = create(a),
+        displaced = create(a),
+        displacer = create(a);
+      createCommands(a).startTask({
+        commandId: uuid(),
+        task: ref(a, previous),
+      });
+      time.mockReturnValue(4000);
+      createCommands(a).pauseTask({
+        commandId: uuid(),
+        task: ref(a, previous),
+      });
+      settled(a, b);
+      time.mockReturnValue(2000);
+      createCommands(a).startTask({
+        commandId: uuid(),
+        task: ref(a, displaced),
+      });
+      time.mockReturnValue(5000);
+      createCommands(b).startTask({
+        commandId: uuid(),
+        task: ref(b, displacer),
+      });
+      settled(a, b);
+      for (const db of [a, b]) {
+        expect(
+          db
+            .prepare("SELECT status,status_changed_at FROM tasks WHERE id=?")
+            .get(displaced),
+        ).toEqual({ status: "paused", status_changed_at: 5000 });
+        const recommendation = createQueries(db).workspaceSnapshot().resume;
+        expect(recommendation?.task.id).toBe(displaced);
+        expect(recommendation?.pausedAt).toBe(5000);
+        const history = db
+          .prepare(
+            "SELECT hlc,to_status,changed_at FROM task_transitions WHERE task_id=? ORDER BY hlc DESC,id DESC",
+          )
+          .all(displaced) as {
+          hlc: string;
+          to_status: string;
+          changed_at: number;
+        }[];
+        expect(history[0].to_status).toBe("paused");
+        expect(history[0].changed_at).toBe(5000);
+        const starts = changes(db).filter(
+          (c) =>
+            ((c.entity === "task-status" && c.payload.status === "doing") ||
+              (c.entity === "transition" && c.payload.to_status === "doing")) &&
+            [displaced, displacer].includes(
+              c.entity === "task-status"
+                ? c.entityId
+                : (c.payload as { task_id: string }).task_id,
+            ),
+        );
+        expect(starts.every((start) => start.hlc < history[0].hlc)).toBe(true);
+        const detail = createQueries(db).taskDetail({
+          taskId: displaced,
+          breakpointOffset: 0,
+          breakpointLimit: 10,
+          transitionOffset: 0,
+          transitionLimit: 20,
+        });
+        expect(detail.transitions.items[0].toStatus).toBe("paused");
+      }
+      expect(state(a)).toEqual(state(b));
     });
 
     it.each(["complete", "pause", "cancel"] as const)(

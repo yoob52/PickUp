@@ -2,7 +2,7 @@ import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex } from "@noble/hashes/utils";
 import { z } from "zod";
 import { DomainError } from "./errors";
-import { hlcSchema, receive, tick } from "./hlc";
+import { decodeHlc, hlcSchema, receive, tick } from "./hlc";
 import { bumpRevision, readRevision } from "./rows";
 import type { SqliteDatabase } from "./sqlite";
 
@@ -102,13 +102,6 @@ function nextClock(db: SqliteDatabase, now: number, remote?: string): string {
   const device = db
     .prepare("SELECT id, last_hlc FROM sync_device WHERE singleton = 1")
     .get() as Device;
-  const observed = db
-    .prepare(
-      "SELECT max(hlc) AS hlc FROM sync_changes WHERE entity = 'task-status' AND json_extract(payload, '$.status') = 'doing'",
-    )
-    .get() as { hlc: string | null };
-  if (observed.hlc !== null && (remote === undefined || observed.hlc > remote))
-    remote = observed.hlc;
   const hlc =
     remote === undefined
       ? tick(device.last_hlc, device.id, now)
@@ -178,12 +171,25 @@ export function recordLocalChanges(db: SqliteDatabase, now: number): void {
 function flushLocalChanges(db: SqliteDatabase, now: number): void {
   const dirty = db
     .prepare(
-      `SELECT entity, entity_id FROM sync_dirty ORDER BY entity,
+      `SELECT entity, entity_id FROM sync_dirty ORDER BY CASE WHEN entity = 'transition' THEN 0 ELSE 1 END, entity,
     CASE WHEN entity IN ('breakpoint','transition') THEN CAST(entity_id AS INTEGER) ELSE 0 END, entity_id`,
     )
     .all() as { entity: Entity; entity_id: string }[];
+  if (dirty.length === 0) return;
+  const device = db
+    .prepare("SELECT id, last_hlc FROM sync_device WHERE singleton = 1")
+    .get() as Device;
+  const observed = db
+    .prepare("SELECT max(hlc) AS hlc FROM sync_changes")
+    .get() as { hlc: string | null };
+  let last =
+    observed.hlc !== null &&
+    (device.last_hlc === null || observed.hlc > device.last_hlc)
+      ? receive(device.last_hlc, observed.hlc, device.id, now)
+      : device.last_hlc;
   for (const item of dirty) {
-    const hlc = nextClock(db, now);
+    const hlc = tick(last, device.id, now);
+    last = hlc;
     let payload: SyncChange["payload"];
     let entityId = item.entity_id;
     switch (item.entity) {
@@ -255,6 +261,9 @@ function flushLocalChanges(db: SqliteDatabase, now: number): void {
       now,
     );
   }
+  db.prepare("UPDATE sync_device SET last_hlc = ? WHERE singleton = 1").run(
+    last,
+  );
   db.exec("DELETE FROM sync_dirty");
 }
 
@@ -461,24 +470,35 @@ function materializeDoing(db: SqliteDatabase, now: number): void {
     status_changed_at: number;
     status_revision: number;
   }[];
-  const latestStart = db
+  const starts = db
     .prepare(
-      "SELECT entity_id, hlc FROM sync_changes WHERE entity = 'task-status' AND json_extract(payload, '$.status') = 'doing' ORDER BY hlc DESC, entity_id ASC LIMIT 1",
+      "SELECT entity_id, hlc, payload FROM sync_changes WHERE entity = 'task-status' AND json_extract(payload, '$.status') = 'doing' ORDER BY hlc ASC, entity_id DESC",
     )
-    .get() as { entity_id: string; hlc: string } | undefined;
-  for (const loser of doing.filter(
-    (row) =>
-      latestStart !== undefined &&
-      (row.status_hlc < latestStart.hlc ||
-        (row.status_hlc === latestStart.hlc && row.id > latestStart.entity_id)),
-  )) {
+    .all() as { entity_id: string; hlc: string; payload: string }[];
+  for (const loser of doing) {
+    const displacer = starts.find(
+      (start) =>
+        start.hlc > loser.status_hlc ||
+        (start.hlc === loser.status_hlc && start.entity_id < loser.id),
+    );
+    if (!displacer) continue;
+    const displacedAt = (
+      JSON.parse(displacer.payload) as z.infer<typeof taskStatus>
+    ).status_changed_at;
+    const pauseHlc = tick(displacer.hlc, decodeHlc(displacer.hlc).deviceId, 0);
     db.prepare(
-      "UPDATE tasks SET status = 'paused', version = version + 1 WHERE id = ?",
-    ).run(loser.id);
+      "UPDATE tasks SET status = 'paused', status_changed_at = ?, updated_at = max(updated_at, ?), version = version + 1 WHERE id = ?",
+    ).run(displacedAt, displacedAt, loser.id);
     const hash = bytesToHex(
       sha256(
         new TextEncoder().encode(
-          JSON.stringify(["suppressed-start", loser.id, loser.status_hlc]),
+          JSON.stringify([
+            "suppressed-start",
+            loser.id,
+            loser.status_hlc,
+            displacer.entity_id,
+            displacer.hlc,
+          ]),
         ),
       ),
     );
@@ -487,7 +507,7 @@ function materializeDoing(db: SqliteDatabase, now: number): void {
       task_id: loser.id,
       from_status: "doing" as const,
       to_status: "paused" as const,
-      changed_at: loser.status_changed_at,
+      changed_at: displacedAt,
       revision: loser.status_revision,
     };
     if (!db.prepare("SELECT 1 FROM sync_changes WHERE id = ?").get(id))
@@ -497,14 +517,14 @@ function materializeDoing(db: SqliteDatabase, now: number): void {
           id,
           entityId: id,
           entity: "transition",
-          hlc: loser.status_hlc,
+          hlc: pauseHlc,
           payload,
         },
         now,
       );
     db.prepare(
       "INSERT OR IGNORE INTO task_transitions(id,hlc,task_id,from_status,to_status,changed_at,revision) VALUES(?, ?, ?, 'doing','paused',?,?)",
-    ).run(id, loser.status_hlc, loser.id, payload.changed_at, payload.revision);
+    ).run(id, pauseHlc, loser.id, payload.changed_at, payload.revision);
   }
   db.exec("DELETE FROM sync_dirty");
   db.exec(
