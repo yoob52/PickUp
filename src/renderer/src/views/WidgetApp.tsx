@@ -59,7 +59,7 @@ export function WidgetApp() {
     }
     const refreshed = await refresh();
     notify(
-      refreshed ? "已完成。请到主窗口查看恢复建议。" : "已保存，但界面未刷新。",
+      refreshed ? "已完成。" : "已保存，但界面未刷新。",
       refreshed ? "ok" : "error",
       reopenAction(task),
     );
