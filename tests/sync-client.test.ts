@@ -197,11 +197,67 @@ it("reuses persisted ciphertext after a lost upload response, including a client
   expect(bodies[1]).toBe(bodies[0]);
   expect(cursor(db).pushed_cursor).toBe(outbox.cursor);
   expect(db.prepare("SELECT count(*) AS n FROM sync_uploads").get()).toEqual({
-    n: 0,
+    n: outbox.changes.length,
   });
 });
 
 describe.each([false, true])("%s WASM transactional pull", (wasm) => {
+  it("replays identical ciphertext after restoring an older relay backup and converges with another device", async () => {
+    const server = await relay(),
+      a = open(wasm),
+      b = open(!wasm);
+    const first = client(a),
+      second = client(b);
+    create(a, "备份中的任务");
+    await first.enable({
+      serverUrl: server.url,
+      registrationToken: server.token,
+    });
+    const pairing = parsePairingPayload(first.pairing());
+    const keys = await deriveSyncKeys(pairing.rootKey);
+    seed(b, server.url, pairing.rootKey);
+    await first.syncNow();
+    await second.syncNow();
+    await first.syncNow();
+    const snapshot = await server.backup();
+    create(a, "备份后的电脑任务");
+    create(b, "备份后的另一设备任务");
+    for (let i = 0; i < 3; i++) {
+      await first.syncNow();
+      await second.syncNow();
+    }
+    const download = async () => {
+      const response = await fetch(
+        `${server.url}/v1/spaces/${keys.spaceId}/changes?limit=500`,
+        { headers: { Authorization: `Bearer ${keys.authKey}` } },
+      );
+      const page = (await response.json()) as {
+        changes: { deviceId: string; clientSeq: number; blob: string }[];
+      };
+      return page.changes
+        .map(({ deviceId, clientSeq, blob }) => ({ deviceId, clientSeq, blob }))
+        .sort(
+          (a, b) =>
+            a.deviceId.localeCompare(b.deviceId) || a.clientSeq - b.clientSeq,
+        );
+    };
+    const before = await download();
+    await server.restore(snapshot);
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (let i = 0; i < 3; i++) {
+      await first.syncNow();
+      await second.syncNow();
+    }
+    expect(warning).toHaveBeenCalledWith("sync-relay-rollback");
+    expect(await download()).toEqual(before);
+    create(a, "恢复后继续记录");
+    for (let i = 0; i < 2; i++) {
+      await first.syncNow();
+      await second.syncNow();
+    }
+    expect(state(a)).toEqual(state(b));
+    expect(createQueries(b).workspaceSnapshot().counts.todo).toBe(4);
+  });
   it("never applies a partial page or advances the cursor on invalid ciphertext", async () => {
     const db = open(wasm),
       source = open(wasm),
@@ -442,7 +498,10 @@ it.each([false, true])(
         new ReadableStream<Uint8Array>({
           pull(controller) {
             reads++;
-            if (!remaining) return controller.close();
+            if (!remaining) {
+              if (oversized) return controller.enqueue(chunk);
+              return controller.close();
+            }
             if (remaining > 48 * 1024 * 1024 - json.length) {
               controller.enqueue(json);
               remaining -= json.length;

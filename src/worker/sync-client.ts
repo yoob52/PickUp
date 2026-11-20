@@ -327,7 +327,6 @@ export class SyncClient {
     for (;;) {
       if (this.controller.signal.aborted)
         throw new DomainError("SYNC_ERROR", "同步已取消。", false);
-      const pushed = await this.push(config, keys, deviceId, url);
       const parsed = downloadSchema.safeParse(
         await this.request(
           url + `?after=${config.pulled_cursor}&limit=500`,
@@ -337,6 +336,24 @@ export class SyncClient {
       if (!parsed.success)
         throw new DomainError("SYNC_ERROR", "同步服务器响应格式无效。", false);
       const page = parsed.data;
+      if (
+        page.lastServerSeq < config.pulled_cursor &&
+        !page.changes.length &&
+        !page.more
+      ) {
+        this.db.transaction(() => {
+          this.db
+            .prepare(
+              "UPDATE sync_config SET pushed_cursor=0,pulled_cursor=0,last_error=? WHERE singleton=1",
+            )
+            .run("同步服务器已回退，正在重新上传本地变更。");
+        })();
+        config.pushed_cursor = 0;
+        config.pulled_cursor = 0;
+        console.warn("sync-relay-rollback");
+        this.notify();
+        continue;
+      }
       let previous = config.pulled_cursor;
       for (const row of page.changes) {
         if (row.serverSeq <= previous)
@@ -372,6 +389,7 @@ export class SyncClient {
       })();
       config.pulled_cursor = page.lastServerSeq;
       if (result.applied) this.notify();
+      const pushed = await this.push(config, keys, deviceId, url);
       if (
         !pushed &&
         !page.changes.length &&
@@ -426,7 +444,6 @@ export class SyncClient {
       this.db
         .prepare("UPDATE sync_config SET pushed_cursor=? WHERE singleton=1")
         .run(cursor);
-      this.db.prepare("DELETE FROM sync_uploads WHERE seq<=?").run(cursor);
     })();
     config.pushed_cursor = cursor;
     return changes.length;

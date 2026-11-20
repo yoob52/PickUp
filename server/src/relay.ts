@@ -333,7 +333,13 @@ export function createRelay(
             clientSeq: c.client_seq,
             blob: Buffer.from(c.blob).toString("base64url"),
           })),
-          lastServerSeq: selected.at(-1)?.server_seq ?? after,
+          lastServerSeq:
+            selected.at(-1)?.server_seq ??
+            (
+              db
+                .prepare("SELECT last_seq FROM spaces WHERE space_id=?")
+                .get(space.data) as { last_seq: number }
+            ).last_seq,
           more: rows.length > limit,
         });
         return;

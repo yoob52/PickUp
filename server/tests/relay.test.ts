@@ -275,6 +275,11 @@ it("paginates without skipping events, caps limits and reports an empty final pa
     lastServerSeq: 5,
     more: false,
   });
+  expect((await s.call(a.path + "?after=999", a.authKey)).body).toEqual({
+    changes: [],
+    lastServerSeq: 5,
+    more: false,
+  });
   for (const query of [
     "limit=501",
     "limit=0",

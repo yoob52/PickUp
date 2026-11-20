@@ -94,7 +94,7 @@ server {
 - `POST /v1/spaces`：注册 token 的 Bearer 认证；JSON `{spaceId,authKey}`，两者均为客户端生成的 32 字节规范 base64url（无 `=`）。首次返回 201，同空间同密钥返回 200，不同密钥返回 409；服务仅保存 authKey 原始字节的 SHA-256 摘要。
 - 其余 API 使用该空间 `authKey` 的 Bearer 认证。密钥错误和不存在的空间均返回 401。
 - `POST /v1/spaces/:id/changes`：JSON `{deviceId,changes:[{clientSeq,blob}]}`。deviceId 为 1–128 字符，clientSeq 为非负安全整数；blob 为规范 base64url 密文，解码后不超过 64 KiB。每次最多 500 条，请求体最多 1 MiB。重复 `(space,deviceId,clientSeq)` 且密文相同为 no-op，密文不同则 409，整批回滚。返回 `{accepted,lastServerSeq}`，accepted 是新插入的条数；空批次允许。
-- `GET /v1/spaces/:id/changes?after=0&limit=200`：limit 为 1–500；返回 `{changes:[{serverSeq,deviceId,clientSeq,blob}],lastServerSeq,more}`。`clientSeq` 是原始设备的 outbox 序号，接收端用它重建 AES-GCM AAD；不能用 serverSeq 代替。**lastServerSeq 是本页末尾的游标，不是空间全局高水位**；下一页以该值作为 after，直到 more 为 false。空页保持 after，避免跳过未下载数据。每个空间独立分配递增序号。
+- `GET /v1/spaces/:id/changes?after=0&limit=200`：limit 为 1–500；返回 `{changes:[{serverSeq,deviceId,clientSeq,blob}],lastServerSeq,more}`。`clientSeq` 是原始设备的 outbox 序号，接收端用它重建 AES-GCM AAD；不能用 serverSeq 代替。**非空页 lastServerSeq 是本页末尾的游标，不是空间全局高水位**；下一页以该值作为 after，直到 more 为 false。空页返回空间当前真实最大序号（无事件为 0），不回显 after；恢复旧备份后该值可能更低，客户端据此清零推拉游标并用保留的原始密文、clientSeq 重传 outbox。每个空间独立分配递增序号。
 - 所有 API 错误为 `{error:{code,message}}`；格式错误 400、凭据错误 401、CORS 拒绝 403、冲突 409、超时 408、体积过大 413、错误 Content-Type 415。用 `application/json` 上传。
 
 没有空间删除、配额、密钥轮换或速率限制接口。注册 token 可以通过更新环境变量并重建容器轮换；空间 authKey 由客户端保管，当前无服务端找回。服务器操作者仍能观察设备/空间标识、变更大小和请求时间，不能把密文存储等同于完整隐私保证。部署在可信访问范围内，必要时由反代实施额外限流和访问控制。
