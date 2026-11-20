@@ -1,0 +1,34 @@
+services:
+  sync:
+    image: ghcr.io/yoob52/pickup-sync:latest
+    build: .
+    restart: unless-stopped
+    stop_grace_period: 20s
+    env_file: .env
+    environment:
+      PICKUP_DATA_DIR: /data
+      PORT: "8787"
+    ports:
+      - "127.0.0.1:${PICKUP_PORT:-8787}:8787"
+    volumes:
+      - sync-data:/data
+  caddy:
+    image: caddy:2.10.2-alpine
+    profiles: [https]
+    restart: unless-stopped
+    environment:
+      PICKUP_DOMAIN: ${PICKUP_DOMAIN:-}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      sync:
+        condition: service_healthy
+volumes:
+  sync-data:
+  caddy-data:
+  caddy-config:
