@@ -8,9 +8,27 @@
       content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; worker-src 'self'"
     />
     <title>接着 PickUp</title>
+    <style>
+      @keyframes pickup-fallback {
+        to {
+          visibility: visible;
+        }
+      }
+      .pickup-fallback {
+        visibility: hidden;
+        animation: pickup-fallback 0s 3s forwards;
+        padding: 24px;
+        font: 16px/1.6 sans-serif;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <p class="pickup-fallback">
+        PickUp 未能启动：系统 WebView 版本过旧。请在应用商店更新“Android System
+        WebView”后重新打开。
+      </p>
+    </div>
     <script type="module" src="/main.ts"></script>
   </body>
 </html>
