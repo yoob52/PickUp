@@ -8,6 +8,7 @@ import initSqlite from "@sqlite.org/sqlite-wasm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createCommands } from "../src/worker/commands";
 import { createQueries } from "../src/worker/queries";
+import { dispatch } from "../src/worker/dispatch";
 import { toAppError } from "../src/worker/errors";
 import { migrateSchema, schemaVersion } from "../src/worker/migrate";
 import { MIGRATIONS, SCHEMA_VERSION } from "../src/worker/migrations";
@@ -46,33 +47,8 @@ vi.mock("../src/main/worker-client", () => ({
 
     async send(request: WorkerRequest) {
       if (this.closed) return { ok: false, code: "DB_UNAVAILABLE" };
-      const queries: Record<string, string> = {
-        getWorkspaceSnapshot: "workspaceSnapshot",
-        getTaskDetail: "taskDetail",
-        getDailyReview: "dailyReview",
-        getCommandResult: "commandOutcome",
-      };
-      const name = queries[request.kind] ?? request.kind;
-      const method = this.store[name as keyof typeof this.store] as (
-        input?: unknown,
-      ) => unknown;
       try {
-        const input = "input" in request ? request.input : undefined;
-        const value = method(
-          request.kind === "getCommandResult"
-            ? (input as { commandId: string }).commandId
-            : input,
-        );
-        if (
-          request.kind !== "getCommandResult" &&
-          value &&
-          typeof value === "object" &&
-          "revision" in value &&
-          "value" in value
-        ) {
-          return { ok: true, ...value };
-        }
-        return { ok: true, value, revision: this.store.revision() };
+        return dispatch(this.store, request);
       } catch (error) {
         return toAppError(error);
       }

@@ -84,11 +84,17 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
 | `npm test` | 以 Electron 的 Node 模式运行 Vitest，匹配 better-sqlite3 ABI；覆盖契约、组件及两驱动的共享 store 场景 |
 | `npm run check` | 类型 + 格式 + 单元/组件测试 |
 | `npm run build` | 输出 main/preload/worker/renderer 到 out |
+| `npm run build:mobile` | 独立 Vite 构建，共享 React UI + 移动 API + Web Worker + SQLite WASM 到 out/mobile；不修改桌面构建 |
+| `npm run test:mobile` | 构建移动 Web 产物，使用 Chromium 对实际 OPFS 验证创建、开始、重载持久化及 OPFS 不可用错误 |
 | `npm run test:integration` | 构建后通过 Electron 运行真实 worker/SQLite 的 16 组集成场景 |
 | `npm run test:e2e` | 构建后运行 Playwright Electron 自动化（桥接、独立 capture、界面闭环、视觉、规模） |
 | `npm run rebuild:native` | 为锁定 Electron/架构准备 better-sqlite3 原生模块 |
 | `npm run pack` | 输出 dist/win-unpacked |
 | `npm run dist` | 输出 dist/PickUp Setup 0.3.0.exe（版本读取 package.json） |
+
+移动 Web 可运行 `npx vite preview --config vite.mobile.config.ts` 后访问 `http://127.0.0.1:4174`。需要安全上下文（localhost 或 HTTPS）及支持 OPFS 同步访问句柄的浏览器；不需要 COOP/COEP。首次运行浏览器测试需 `npx playwright install chromium`。存储位置固定为当前 origin 的 `/pickup-sahpool`，池内主文件 `/pickup.sqlite`；不同端口、协议或域名的数据相互隔离。不得清空该目录作为启动恢复手段。
+
+当前为浏览器 API / 存储宿主，不包含 Capacitor。主窗口的“记一件事”仍调用桌面 `showCapture`（移动宿主明确拒绝）；可通过 `/?window=capture` 使用共享记录表单，浏览器测试从这里创建并开始任务，再回主窗口验证。桌面窗口操作、桌面入口与全部桌面偏好写入返回 `VALIDATION_ERROR`，不伪造系统设置成功。一次仅一个页面持有存储池；并发打开会明确报错，关闭占用页后重新加载。页面隐藏不停止已接收事务；离开页面时释放 worker，BFCache 恢复时重新加载连接。
 
 禁止同时执行安装/重建和构建/打包，它们共享依赖目录。不要用开发 Node.js 直接加载已经按 Electron ABI 准备的原生库；数据库集成测试刻意在 Electron 中执行。`scripts/run-integration.mjs` 的进程级超时为 120 秒，覆盖当前 16 组场景（含多次 worker 重启）。单元/组件测试数量以最近一次 `npm test` 为准，不要沿用旧轮次的 44/46。
 

@@ -17,6 +17,8 @@
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "node scripts/run-vitest.mjs",
     "build": "npm run typecheck && electron-vite build",
+    "build:mobile": "npm run typecheck && vite build --config vite.mobile.config.ts",
+    "test:mobile": "npm run build:mobile && playwright test --config playwright.mobile.config.ts",
     "test:integration": "npm run build && node scripts/run-integration.mjs",
     "test:e2e": "npm run build && playwright test",
     "check": "npm run typecheck && npm run format:check && npm test",

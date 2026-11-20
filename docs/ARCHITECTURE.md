@@ -80,6 +80,14 @@ MVP 不引入云服务、账号、同步协议、AI、通知调度、团队协�
 
 ## 3. 总体结构及职责
 
+### 浏览器 / 移动 Web 宿主
+
+除下述 Electron 链路外，同一 React renderer 可通过 `src/mobile/main.ts` 在浏览器运行：先安装类型化 `window.pickup`，再渲染 UI。`src/shared/api-registry.ts` 共享输入 schema、当天范围计算与广播集合；桌面和浏览器 worker 共享 `src/worker/dispatch.ts` 及全部 store 业务规则。
+
+浏览器链路为 renderer → 移动 API 边界 → 单一 Web Worker → 官方 SQLite WASM `opfs-sahpool` VFS。数据库持久化在同源 OPFS，不需要 COOP/COEP；迁移前用同池 `VACUUM INTO` 生成并校验保护副本，保留最近两份。OPFS 缺失、文件损坏或存储池被其他标签页占用时明确失败，不切换内存库、不重置数据。桌面窗口与系统设置 API 返回明确不支持错误；尚未接入 Capacitor 或 Android 原生能力。
+
+### Electron 宿主
+
 ```mermaid
 flowchart TB
     user[用户] --> views[React 窗口：主窗口 / 快速记录 / 桌面入口]
