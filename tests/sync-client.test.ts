@@ -209,7 +209,7 @@ describe.each([false, true])("%s WASM transactional pull", (wasm) => {
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     const fetcher = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(
+      .mockImplementation(async () =>
         Response.json({ changes: [], lastServerSeq: 0, more: false }),
       );
     const sync = client(db, fetcher);
@@ -277,6 +277,7 @@ describe.each([false, true])("%s WASM transactional pull", (wasm) => {
       if (refilled) {
         await second.syncNow();
         create(b, "另一设备重新填满中继");
+        create(b, "另一设备补充记录");
         await second.syncNow();
         expect((await download()).length).toBeGreaterThanOrEqual(oldCursor);
         create(a, "恢复期间待上传的任务");
@@ -298,7 +299,7 @@ describe.each([false, true])("%s WASM transactional pull", (wasm) => {
       }
       expect(state(a)).toEqual(state(b));
       expect(createQueries(b).workspaceSnapshot().counts.todo).toBe(
-        refilled ? 6 : 4,
+        refilled ? 7 : 4,
       );
     },
   );
