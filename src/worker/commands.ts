@@ -572,12 +572,14 @@ export function createCommands(
       const type: CommandType = "markWaiting";
       const reason = input.reason.trim();
       const checkBackAt = input.checkBackAt;
-      const hash = payloadHash(type, [
+      // 未设回看时间时沿用旧版 payload，升级前已提交的回执仍可幂等重试。
+      const payload: unknown[] = [
         input.task.taskId,
         input.task.expectedVersion,
         reason,
-        checkBackAt,
-      ]);
+      ];
+      if (checkBackAt !== null) payload.push(checkBackAt);
+      const hash = payloadHash(type, payload);
       const prior = findReceipt<MarkWaitingValue>(input.commandId, type, hash);
       if (prior) return prior;
       const now = Date.now();
