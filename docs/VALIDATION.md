@@ -1,5 +1,13 @@
 # PickUp 验证记录
 
+## 2026-11-20 · 1.0.0 发版准备（未打标签）
+
+根 package.json / package-lock.json 版本统一为 `1.0.0`；Android 默认 `versionName=1.0.0`、`versionCode=10000`，仍允许现有 Gradle 属性覆盖。`v1.0.0` 标签将触发 Windows NSIS 构建并创建包含安装器和 SHA-256 校验文件的 Release；Android 标签构建沿用 `versionName=1.0.0` / `versionCode=GITHUB_RUN_NUMBER`，有完整签名 secrets 才正式签名，等待 Windows 创建同名 Release 后追加 APK。未修改工作流，未推送标签或创建 Release。
+
+新增 `tests/real-server.test.ts`：默认启动隔离本地中继，使用 better-sqlite3 与 WASM 两个 store 注册临时账户、双向创建和同步、处理 doing 冲突并验证完成胜者后不自动恢复被压制任务。运行 `npm test -- tests/real-server.test.ts`；只有明确提供 `PICKUP_E2E_SERVER_URL=https://your-server.example` 才访问外部服务。账户为 `e2e+<ts>@pickup.test`，成功后撤销会话；外部服务没有账户删除接口，临时账户与少量密文仍会保留。
+
+经机主追加授权，通过本地及 `https://pickup.3352378.xyz` 双 store 验证；生产共创建两个临时账户，其中第二个由 Android 模拟器注册，使用默认服务器、无 adb reverse，通过电脑“复制登录码”→手机确认完成登录，并验证两端分别创建的任务收敛，最后撤销两端会话。模拟器安装版本经 dumpsys 确认为 `1.0.0` / `10000`。实际查看截图 `~/android-setup/v1-*.png`；日志为 `v1-production-store-test.log`、`v1-emulator.log`。未测试光学扫码或真机，未发版。
+
 ## 2026-11-20 · 移动布局与交互（PR4）
 
 机主反馈后的手机结构改版：不再复用桌面顶栏/侧栏，采用品牌小标题、底部“工作台 / 今日收尾”导航与居中记录操作。恢复区减轻边框与留白，移除重复统计/收尾面板。新增 DOM 断言禁止 `.topbar/.sidebar/.window-controls/.side-nav` 出现在移动宿主，验证底部导航完整可见、标题高度小于 60px，继续覆盖原触屏流程。
