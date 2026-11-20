@@ -1,0 +1,143 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "src/**"
+      - "android/**"
+      - "resources/**"
+      - "package.json"
+      - "package-lock.json"
+      - "capacitor.config.ts"
+      - "vite.mobile.config.ts"
+      - "tsconfig*.json"
+      - ".node-version"
+      - ".npmrc"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Ensure Android SDK components
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Build and sync mobile assets
+        run: npm run android:sync
+      - name: Build trusted APK with optional release signing
+        id: signing
+        if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'rm -f "$RUNNER_TEMP/pickup-release.keystore"' EXIT
+          if [[ -z "$ANDROID_KEYSTORE_BASE64$ANDROID_KEYSTORE_PASSWORD$ANDROID_KEY_PASSWORD$ANDROID_KEY_ALIAS" ]]; then
+            mode='debug-signed: secrets missing'
+          elif [[ -z "$ANDROID_KEYSTORE_BASE64" || -z "$ANDROID_KEYSTORE_PASSWORD" || -z "$ANDROID_KEY_PASSWORD" || -z "$ANDROID_KEY_ALIAS" ]]; then
+            echo '::error::Partial Android signing secrets: configure all four ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_PASSWORD and ANDROID_KEY_ALIAS, or remove all four.'
+            exit 1
+          else
+            umask 077
+            export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/pickup-release.keystore"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_FILE"
+            mode='release-signed'
+          fi
+          printf 'Android signing: **%s**\n' "$mode" >> "$GITHUB_STEP_SUMMARY"
+          args=(--no-daemon :app:assembleRelease)
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo '::error::Android release tags must have the form vX.Y.Z.'
+              exit 1
+            fi
+            args+=("-PpickupVersionName=${GITHUB_REF_NAME#v}" "-PpickupVersionCode=$GITHUB_RUN_NUMBER")
+          fi
+          ./gradlew "${args[@]}"
+      - name: Build untrusted APK with debug signing
+        if: steps.signing.outcome == 'skipped'
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'Android signing: **debug-signed: secrets missing**\n' >> "$GITHUB_STEP_SUMMARY"
+          args=(--no-daemon :app:assembleRelease)
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo '::error::Android release tags must have the form vX.Y.Z.'
+              exit 1
+            fi
+            args+=("-PpickupVersionName=${GITHUB_REF_NAME#v}" "-PpickupVersionCode=$GITHUB_RUN_NUMBER")
+          fi
+          ./gradlew "${args[@]}"
+      - name: Verify APK and report certificate
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk | tee "$RUNNER_TEMP/android-certificate.txt"
+          {
+            printf '\n```text\n'
+            cat "$RUNNER_TEMP/android-certificate.txt"
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: pickup-android-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: pickup-android-apk
+          path: apk
+      - name: Attach APK to the shared GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The Windows workflow owns release creation; avoid a race with gh release create.
+          for attempt in {1..60}; do
+            if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+              gh release upload "$GITHUB_REF_NAME" apk/app-release.apk
+              exit 0
+            fi
+            if [[ "$attempt" -lt 60 ]]; then sleep 30; fi
+          done
+          echo '::error::Release not available after 30 minutes. Check the Windows release workflow, then rerun this publish job.'
+          exit 1
