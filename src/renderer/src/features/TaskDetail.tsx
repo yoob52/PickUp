@@ -476,7 +476,7 @@ export function TaskDetailDialog({
             </section>
           </div>
           <aside className="detail-side">
-            <label>Created</label>
+            <label>创建时间</label>
             <div className="side-stat">
               {task ? formatDateTime(task.createdAt) : ""}
             </div>

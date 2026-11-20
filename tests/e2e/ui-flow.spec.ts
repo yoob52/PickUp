@@ -34,6 +34,9 @@ test("界面走完记录到收尾并在重启后恢复", async () => {
     await expect(
       capture.getByRole("heading", { name: "先保存，再继续。" }),
     ).toBeVisible();
+    await expect(
+      capture.getByRole("button", { name: "保存并切换" }),
+    ).toBeInViewport({ ratio: 1 });
     await capture.getByLabel("下一步").fill("检查下游重试配置");
     await capture.getByRole("button", { name: "保存并切换" }).click();
     await expect(

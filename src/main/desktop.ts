@@ -125,7 +125,7 @@ export function createDesktop(options: Options): DesktopHost {
     const win = new BrowserWindow({
       show: false,
       icon: appIcon,
-      backgroundColor: kind === "main" ? "#e9eae6" : "#f7f7f1",
+      backgroundColor: kind === "main" ? "#f3f3f0" : "#ffffff",
       webPreferences,
       ...extra,
     });
@@ -230,7 +230,7 @@ export function createDesktop(options: Options): DesktopHost {
       skipTaskbar: true,
       title: "记下新一件事",
       titleBarStyle: "hidden",
-      titleBarOverlay: { color: "#f7f7f1", symbolColor: "#182023", height: 40 },
+      titleBarOverlay: { color: "#ffffff", symbolColor: "#15171c", height: 40 },
     });
     capture.on("close", (event) => {
       if (quitting) return;
