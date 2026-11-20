@@ -1243,6 +1243,24 @@ html[data-window="main"] #root {
   background: var(--coral);
 }
 
+/* The widget is small: keep feedback over the brand label, clear of the actions. */
+html[data-window="widget"] .toast {
+  top: 12px;
+  right: auto;
+  bottom: auto;
+  left: 12px;
+  width: calc(100vw - 128px);
+  max-width: none;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  transform: translateY(-8px);
+}
+
+html[data-window="widget"] .toast.show {
+  transform: translateY(0);
+}
+
 .notice-bar {
   display: flex;
   align-items: center;
