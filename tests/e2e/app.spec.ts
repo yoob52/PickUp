@@ -32,6 +32,7 @@ const EXPECTED_BRIDGE_METHODS = [
   "getWorkspaceSnapshot",
   "hideCapture",
   "hideWidget",
+  "host",
   "listTasks",
   "markWaiting",
   "moveWidget",

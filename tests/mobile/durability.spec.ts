@@ -3,9 +3,13 @@ import { expect, test } from "@playwright/test";
 test("shared renderer creates and starts a task and retains it after reload without isolation headers", async ({
   page,
 }) => {
-  const response = await page.goto("/?window=capture");
+  const response = await page.goto("/");
   expect(response?.headers()["cross-origin-opener-policy"]).toBeUndefined();
   expect(response?.headers()["cross-origin-embedder-policy"]).toBeUndefined();
+  await page
+    .getByRole("button", { name: "记一件事", exact: true })
+    .first()
+    .tap();
   await expect(
     page.getByRole("heading", { name: "记下新一件事。" }),
   ).toBeVisible();
@@ -19,7 +23,7 @@ test("shared renderer creates and starts a task and retains it after reload with
       }),
     )
     .toBe("浏览器持久接续验证");
-  await page.goto("/");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: "浏览器持久接续验证", exact: true }),
   ).toBeVisible();

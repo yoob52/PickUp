@@ -9,6 +9,7 @@ function subscribe(channel: string, listener: (...args: unknown[]) => void) {
 
 /** 只暴露固定业务方法；不透传任意 channel，也不暴露原始 ipcRenderer。 */
 const api: PickupAPI = {
+  host: "desktop",
   getWorkspaceSnapshot: () => ipcRenderer.invoke("pickup:getWorkspaceSnapshot"),
   listTasks: (input) => ipcRenderer.invoke("pickup:listTasks", input),
   getTaskDetail: (input) => ipcRenderer.invoke("pickup:getTaskDetail", input),

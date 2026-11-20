@@ -21,6 +21,12 @@ function setup() {
 }
 
 describe("mobile API boundary", () => {
+  it("exposes an immutable mobile host capability", () => {
+    const { api, dispose } = setup();
+    expect(api.host).toBe("mobile");
+    expect(Object.getOwnPropertyDescriptor(api, "host")?.writable).toBe(false);
+    dispose();
+  });
   it("validates and normalizes inputs without sending invalid or empty data", async () => {
     const { api, send, dispose } = setup();
     try {

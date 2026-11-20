@@ -30,11 +30,44 @@ export function AppShell({
   children,
 }: Props) {
   const notify = useToast();
+  const mobile = window.pickup.host === "mobile";
   const mainRef = useRef<HTMLElement>(null);
 
   async function controlWindow(action: MainWindowAction) {
     const result = await window.pickup.controlMainWindow(action);
     if (!result.ok) notify(result.message, "error");
+  }
+
+  if (mobile) {
+    return (
+      <div className="app-shell mobile-shell">
+        <header className="mobile-header">
+          <img src={logo} alt="" draggable={false} />
+          <span>接着 PickUp</span>
+        </header>
+        <main className="main" ref={mainRef}>
+          {children}
+        </main>
+        <nav className="mobile-bottom-nav" aria-label="手机导航">
+          <button
+            type="button"
+            aria-current="page"
+            onClick={() => mainRef.current?.scrollTo({ top: 0 })}
+          >
+            <LayoutDashboard size={22} aria-hidden="true" />
+            <span>工作台</span>
+          </button>
+          <button type="button" className="mobile-capture" onClick={onCapture}>
+            <Plus size={22} aria-hidden="true" />
+            <span>记一件事</span>
+          </button>
+          <button type="button" onClick={onReview}>
+            <Sunset size={22} aria-hidden="true" />
+            <span>今日收尾</span>
+          </button>
+        </nav>
+      </div>
+    );
   }
 
   return (

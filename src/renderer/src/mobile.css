@@ -1,0 +1,291 @@
+html[data-host="mobile"] {
+  scroll-padding-block: 20px;
+}
+
+html[data-host="mobile"] body {
+  min-width: 0;
+}
+
+[data-host="mobile"] .app-shell {
+  height: var(--mobile-height, 100dvh);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+[data-host="mobile"] .mobile-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(12px + env(safe-area-inset-top)) 20px 12px;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+[data-host="mobile"] .mobile-header img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+[data-host="mobile"] .mobile-bottom-nav {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 8px max(16px, env(safe-area-inset-right))
+    calc(8px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: var(--paper);
+  border-top: 1px solid var(--line);
+}
+
+[data-host="mobile"] .mobile-bottom-nav button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 56px;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+}
+
+[data-host="mobile"] .mobile-bottom-nav button[aria-current] {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
+[data-host="mobile"] .mobile-bottom-nav .mobile-capture {
+  flex-direction: row;
+  gap: 8px;
+  padding: 0 20px;
+  color: white;
+  background: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+  box-shadow: 0 4px 12px #15171c26;
+}
+
+[data-host="mobile"] .main {
+  padding: 8px max(16px, env(safe-area-inset-right))
+    calc(24px + env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
+}
+
+[data-host="mobile"] .dashboard-grid,
+[data-host="mobile"] .lower-grid,
+[data-host="mobile"] .workspace-aside,
+[data-host="mobile"] .detail-grid,
+[data-host="mobile"] .switch-context {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+[data-host="mobile"] .context-arrow {
+  transform: rotate(90deg);
+}
+
+[data-host="mobile"] .current-card {
+  min-height: 240px;
+  padding: 24px;
+}
+
+[data-host="mobile"] .current-content h2 {
+  font-size: 26px;
+  line-height: 1.4;
+}
+
+[data-host="mobile"] .current-content h2,
+[data-host="mobile"] .next-line,
+[data-host="mobile"] .task-title,
+[data-host="mobile"] .task-sub,
+[data-host="mobile"] .endday-title,
+[data-host="mobile"] .endday-sub,
+[data-host="mobile"] .context-box strong,
+[data-host="mobile"] .modal h2 {
+  overflow-wrap: anywhere;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  -webkit-line-clamp: unset;
+}
+
+[data-host="mobile"] button,
+[data-host="mobile"] .btn,
+[data-host="mobile"] .icon-button,
+[data-host="mobile"] .modal-head .icon-button {
+  min-width: 44px;
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
+[data-host="mobile"] .icon-button,
+[data-host="mobile"] .modal-head .icon-button {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+
+[data-host="mobile"] .current-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+[data-host="mobile"] .capture-trigger {
+  display: none;
+}
+
+[data-host="mobile"] .recovery-panel {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+[data-host="mobile"] .recovery-panel .section-head {
+  padding: 0 4px 12px;
+}
+
+[data-host="mobile"] .recovery-body {
+  padding: 0 4px;
+}
+
+[data-host="mobile"] .recovery-body > .empty {
+  min-height: 0;
+  padding: 8px 0;
+  text-align: left;
+}
+
+[data-host="mobile"] .next-up {
+  margin-top: 12px;
+  padding-top: 8px;
+}
+
+[data-host="mobile"] .workspace-aside,
+[data-host="mobile"] .workspace-footer {
+  display: none;
+}
+
+[data-host="mobile"] .capture-placeholder {
+  white-space: normal;
+  font-size: 14px;
+  text-align: left;
+}
+
+[data-host="mobile"] .capture-key,
+[data-host="mobile"] .capture-cta {
+  display: none;
+}
+
+[data-host="mobile"] .task-board .section-head {
+  padding: 16px 8px;
+  gap: 14px;
+}
+
+[data-host="mobile"] .filter-tabs {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+[data-host="mobile"] .filter-tab {
+  padding: 6px 2px;
+}
+
+[data-host="mobile"] .task-row {
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 14px 8px;
+  align-items: start;
+}
+
+[data-host="mobile"] .task-row > .status-dot {
+  margin-top: 8px;
+}
+
+[data-host="mobile"] .task-title {
+  font-size: 15px;
+}
+
+[data-host="mobile"] .task-row > .status-mark {
+  grid-column: 2;
+}
+
+[data-host="mobile"] .task-row > .row-actions {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  flex-direction: column;
+  gap: 4px;
+}
+
+[data-host="mobile"] .modal-backdrop {
+  top: var(--mobile-top, 0px);
+  height: var(--mobile-height, 100dvh);
+  bottom: auto;
+  padding: 0;
+}
+
+[data-host="mobile"] .modal,
+[data-host="mobile"] .modal.detail-modal {
+  width: 100%;
+  max-width: 600px;
+  height: 100%;
+  max-height: 100%;
+  padding: calc(20px + env(safe-area-inset-top))
+    max(20px, env(safe-area-inset-right))
+    calc(20px + env(safe-area-inset-bottom))
+    max(20px, env(safe-area-inset-left));
+  border: 0;
+  border-radius: 0;
+  overscroll-behavior: contain;
+  scroll-padding-block: 100px;
+}
+
+[data-host="mobile"] .modal-head {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+[data-host="mobile"] .modal h2 {
+  font-size: 24px;
+}
+
+[data-host="mobile"] .field input,
+[data-host="mobile"] .field textarea,
+[data-host="mobile"] select {
+  max-width: 100%;
+  min-height: 48px;
+  font-size: 16px;
+  scroll-margin-block: 80px;
+}
+
+[data-host="mobile"] .field textarea {
+  min-height: 112px;
+}
+
+[data-host="mobile"] .modal .modal-actions {
+  margin-inline: -20px;
+  padding: 16px 20px calc(16px + env(safe-area-inset-bottom));
+}
+
+[data-host="mobile"] .modal-actions > .btn {
+  flex: 1 1 auto;
+}
+
+[data-host="mobile"] .toast {
+  left: max(16px, env(safe-area-inset-left));
+  right: max(16px, env(safe-area-inset-right));
+  bottom: calc(88px + env(safe-area-inset-bottom));
+  max-width: none;
+}
+
+[data-host="mobile"] .workspace-footer {
+  flex-direction: column;
+  gap: 4px;
+}
+
+[data-host="mobile"] .fatal-screen {
+  padding: calc(24px + env(safe-area-inset-top)) 20px;
+  overflow-wrap: anywhere;
+}

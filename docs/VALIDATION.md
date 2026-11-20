@@ -1,5 +1,21 @@
 # PickUp 验证记录
 
+## 2026-11-20 · 移动布局与交互（PR4）
+
+机主反馈后的手机结构改版：不再复用桌面顶栏/侧栏，采用品牌小标题、底部“工作台 / 今日收尾”导航与居中记录操作。恢复区减轻边框与留白，移除重复统计/收尾面板。新增 DOM 断言禁止 `.topbar/.sidebar/.window-controls/.side-nav` 出现在移动宿主，验证底部导航完整可见、标题高度小于 60px，继续覆盖原触屏流程。
+
+改版后重新通过 `npm run check`（9 个文件 / 127 项）、`npm run test:mobile`（5 项）、桌面构建、17 组集成场景和 3 项相关 Electron E2E；重建、安装 APK 后重新点击验证完整流程，并从底部打开“今日收尾”、通过 Android 返回关闭、点击“工作台”回顶。模拟器实测品牌标题 48px、底部导航 73px、桌面 chrome 节点数为 0，无页面异常或横向溢出。以下 `pr4-*.png` 已刷新并实际查看，新增 `pr4-review.png`；主界面和空状态证明无桌面顶栏、顶部导航或窗口按钮，覆盖层右上角仅保留关闭该表单的按钮。改版日志为 `~/android-setup/pr4-owner-*.log`。
+
+共享 renderer 按只读 `PickupAPI.host` 切换宿主能力。移动端通过全屏覆盖层复用记录表单，记录/现在处理/稍后处理后返回工作台，关闭/返回保存草稿；不显示桌面窗口控件、桌面入口及系统偏好设置。手机采用单列、长中文换行、44px 触控目标和安全区留白；桌面保留独立记录窗口与原布局。
+
+- `npm run check`：类型、格式、9 个文件 / 127 项单元与组件测试通过；含 desktop/mobile 能力分支、移动宿主忽略 widget URL、草稿关闭失败保留输入、只读宿主标记及 IPC 契约。
+- `npm run build`、`DISPLAY=:0 npm run test:integration` 通过，后者 17 组现有集成场景全部通过。相关 Electron E2E 3 项通过：桥接完整业务链路、重启持久化、独立 capture/桌面状态桥接；未运行历史全量视觉 E2E，也未修改其旧标题断言。
+- `npm run test:mobile`：393×851 Chromium 触屏项目 5 项通过。覆盖记录/开始、详情/返回、嵌套收尾/详情返回、暂停/继续/完成、稍后处理、草稿恢复与失败关闭保护，以及 OPFS 持久化/不可用/并发页保护；360 / 393 / 412px 检查横向溢出与 44px 按钮目标。
+- 重建并安装 debug APK，在 Android 15 / WebView 124 的 `pickup` 模拟器以 393×851 分辨率实际点击同一流程，使用物理返回键事件关闭详情，再暂停、继续、完成及稍后保存。未清除应用数据。AndroidX 回调只把系统返回键连接到 WebView history，无历史时交回系统；Insets 处理状态栏、导航栏、刘海与键盘，未增加插件。键盘显示时 viewport 高度从 803px 缩小到 548px，活动文本框底部 438px，未被键盘遮挡。
+- 实际查看 `~/android-setup/pr4-main.png`、`pr4-capture.png`、`pr4-detail.png`、`pr4-empty.png`，另有 `pr4-capture-keyboard.png`、`pr4-pause-keyboard.png`。首轮发现 Android 15 系统栏覆盖和默认返回退出 Activity，均由上述原生桥接修正后复验。无捕获的页面异常；logcat 仍有 SQLite 对另一个 SharedArrayBuffer OPFS VFS 的既有警告，实际使用 sahpool。
+
+本轮未做真机、多密度、Windows 输入法或全量桌面视觉验收；截图及本地日志位于模拟器环境的 `~/android-setup/`，不作为仓库内发布素材。
+
 ## 2026-11-20 · 0.3.0 发版版本更新
 
 将 package.json、package-lock.json 顶层及根包版本统一为 `0.3.0`，同步更新工程说明中的安装器名称和后续发版示例。标签发版使用 `v0.3.0`，包含界面现代化（#3）、移除重复状态导航（#4）、完成提示支持重新打开（#5）和等待事项回看时间（#6）。历史记录中的 `0.2.0` 保留为当时实际版本。
