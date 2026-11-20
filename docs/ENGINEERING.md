@@ -43,7 +43,7 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
 
 ## 2. 实际工程结构
 
-独立的自托管密文同步中继位于 `server/`，不依赖应用 worker 或 UI。部署、HTTPS、备份与升级见 [SYNC-SERVER.md](SYNC-SERVER.md)；根目录 `npm run server:test` 包含服务端类型检查，`npm run server:build` 输出独立 Node 24 产物。客户端加密与联网同步尚未接入。
+独立的自托管密文同步中继位于 `server/`，不依赖应用 worker 或 UI。部署、HTTPS、备份、升级与桌面启用步骤见 [SYNC-SERVER.md](SYNC-SERVER.md)；根目录 `npm run server:test` 包含服务端类型检查，`npm run server:build` 输出独立 Node 24 产物。桌面加密同步与配对二维码已接入；Android 配对与联网同步留待 PR9。
 
 - `src/shared/`
   - `contracts.ts`：DTO、Zod 输入 schema、结果与错误码、命令结果值、`PickupAPI`。
@@ -60,7 +60,7 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
   - `migrate.ts`：无 Node 依赖的版本守卫与事务迁移；桌面升级前备份仍由 `database.ts` 负责。
   - `errors.ts`：领域错误、schema/迁移/一致性/连接错误与启动诊断文案。
   - `hlc.ts`、`sync.ts`：可移植 HLC、事务 outbox、离线变更导出与合并；没有网络调用或 renderer API。
-  - `migrations/`：`001.sql` 初始结构、`002.sql` 等待回看字段、`003.sql` 同步元数据 + `index.ts` 顺序迁移清单（当前 schema 版本 3）。
+  - `migrations/`：`001.sql` 初始结构、`002.sql` 等待回看字段、`003.sql` 同步元数据、`004.sql` 本机同步配置与上传密文、`005.sql` 拉取连续性锚点 + `index.ts` 顺序迁移清单（当前 schema 版本 5）。
 - `src/main/`
   - `index.ts`：单实例、生命周期、资源协议、桌面宿主与 worker 装配。
   - `desktop.ts`：主窗口/唯一 capture/widget、托盘、全局快捷键、登录项、关闭隐藏、完全退出与草稿 flush。
@@ -118,6 +118,18 @@ Android `MainActivity` 仅桥接系统 UI：使用已有 AndroidX 的返回键�
 next-up 按选择 HLC 合并，并检查目标任务的全部结束/等待事件：选择之后（或同 HLC）的 done/cancelled/waiting 使该选择永久失效，后续 reopen 不复活旧引用，哪怕结束设备从未收到该选择。选择比结束事件更新时，若父任务或 reopen 尚未到达则暂时隐藏，补齐后恢复有效选择；用户在结束/reopen 之后重新选择可以正常生效。不生成拥有新 HLC 的自动清空事件。用户明确清空、结束或等待命令产生的清空仍是正常 LWW 事件。合并只保留收到的原始事件，不生成修复事件。单 doing 唯一索引在物化事务内重建，提交前恢复；任何中间错误连同索引变化一起回滚。
 
 `tests/sync.test.ts` 在 better-sqlite3 / SQLite WASM 两驱动运行同组迁移、LWW、乱序/重复、冲突、原子失败和 12 个种子的双设备随机交错收敛测试。运行 `npm run check` 或 `npm test -- tests/sync.test.ts`；现有桌面 worker 场景另由 `DISPLAY=:0 npm run test:integration` 验证。
+
+### 桌面加密同步（PR8）
+
+`sync-client.ts` 使用 fetch/WebCrypto，不依赖 Electron 或 Node 模块；只有桌面 Node worker 创建实例，移动 API 对五个同步方法返回既有 unsupported 错误。`sync-crypto.ts` 实现随机 32 字节 rootKey、HKDF-SHA256、AES-256-GCM 和版本化配对载荷。注册 token 只用于一次注册请求，不进入数据库、状态 DTO 或日志。同步配置里的 rootKey 与数据库一样需要保护，升级保护副本也可能包含它；这里未引入系统钥匙串。
+
+schema 4 的 `sync_config` 保存本机服务器、根密钥、推/拉游标、上次成功/错误和退避状态，`sync_uploads` 保留所有已加密的上传条目，直到停止同步。后者保证请求成功但回包丢失、进程重启或服务器回退后仍复用完全相同的随机 nonce/密文，符合服务端 `(deviceId,clientSeq)` 幂等规则。两表都不导出。确认上传后事务推进本机序号但保留密文；拉取整页先全部验证解密，再在一个事务中合并并推进 serverSeq，失败不应用部分页面。schema 5 增加最后一条拉取事件的 deviceId/clientSeq 锚点，与游标在同一事务保存。N>0 从 after=N−1 请求，首条必须为相同身份的 seq N，验证后丢弃重叠行；缺失或不匹配则事务清零推拉游标与锚点，重新下载、重传完整 outbox，并记录连续性重建。N=0 从 after=0 请求，不验证锚点；旧配置没有锚点时也安全重建，即使其他设备已重新填满中继也不依赖高水位下降。
+
+本地业务提交后按新增 outbox 序号防抖 2 秒；worker 每 60 秒和启动时补同步，也可手动“立即同步”。同一时刻只运行一个循环，网络等待不占 SQLite 事务、不阻塞本地记录。每轮先上传，再拉取，慢拉取或拉取超时不阻塞该轮的本地上传。拉取每页 50 条（含连续性重叠行，最大密文页约 4.2 MiB）；响应流累计超过 48 MiB 则中止，不信任 Content-Length。每次请求 20 秒超时（含读取正文），禁止跟随重定向以避免凭据泄露。失败以 5 秒倍增至 5 分钟，成功重置；401/403 持久停止并显示“需要重新配对”。上传每批最多 500 条，另按 UTF-8 JSON 请求体的 1 MiB 和单密文 64 KiB 拆包。收到远程数据后通过 worker → main → 全窗口广播刷新；同步状态也复用该通知。
+
+固定 API 是 `enableSync({serverUrl,registrationToken})`、`disableSync()`、`getSyncStatus()`、`syncNow()`、`getPairingPayload()`，经过 Zod IPC allowlist。停止保留任务与 outbox，再次启用创建新空间；不撤销旧二维码或其他设备。配对二维码仅 desktop settings 渲染，使用精确锁定的 qrcode 包；不修改 Electron CSP。
+
+验证：`npm run check` 包含密钥/篡改/载荷、原子游标、断线重推、401/403、定时/防抖/退避与真实 HTTP relay + native/WASM 两库收敛。`DISPLAY=:0 npm run test:e2e -- tests/e2e/sync.spec.ts` 覆盖设置启用、立即同步和二维码；服务端另运行 `npm run server:test`。Android 真机配对不在本轮范围。
 
 ### Android 壳（Capacitor 7）
 

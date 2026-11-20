@@ -21,6 +21,29 @@ function setup() {
 }
 
 describe("mobile API boundary", () => {
+  it("does not expose sync or pairing before mobile support is implemented", async () => {
+    const { api, send, dispose } = setup();
+    try {
+      for (const result of [
+        await api.enableSync({
+          serverUrl: "https://example.com",
+          registrationToken: "x".repeat(40),
+        }),
+        await api.disableSync(),
+        await api.getSyncStatus(),
+        await api.syncNow(),
+        await api.getPairingPayload(),
+      ])
+        expect(result).toMatchObject({
+          ok: false,
+          code: "VALIDATION_ERROR",
+          retryable: false,
+        });
+      expect(send).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
   it("exposes an immutable mobile host capability", () => {
     const { api, dispose } = setup();
     expect(api.host).toBe("mobile");

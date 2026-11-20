@@ -32,7 +32,12 @@ function start(): void {
     return;
   }
 
-  port.on("message", (message: unknown) => {
+  const sync = store.createSyncClient(() =>
+    port.postMessage({ changed: store.revision() }),
+  );
+  sync.start();
+
+  port.on("message", async (message: unknown) => {
     if (
       typeof message !== "object" ||
       message === null ||
@@ -41,6 +46,7 @@ function start(): void {
       return;
     // 集成测试专用：模拟就绪后进程在应答前退出（没有 error 事件、不回复请求）。
     if (options.faults?.includes("request.exitBeforeReply")) {
+      await sync.close();
       store.close();
       port.close();
       return;
@@ -53,6 +59,7 @@ function start(): void {
     try {
       if (request.kind === "close") {
         const revision = store.revision();
+        await sync.close();
         store.close();
         port.postMessage({
           requestId,
@@ -61,7 +68,39 @@ function start(): void {
         port.close();
         return;
       }
-      result = dispatch(store, request);
+      const revision = store.revision();
+      switch (request.kind) {
+        case "enableSync":
+          result = {
+            ok: true,
+            value: await sync.enable(request.input),
+            revision: store.revision(),
+          };
+          break;
+        case "disableSync":
+          result = {
+            ok: true,
+            value: await sync.disable(),
+            revision: store.revision(),
+          };
+          break;
+        case "getSyncStatus":
+          result = { ok: true, value: sync.status(), revision };
+          break;
+        case "syncNow":
+          result = {
+            ok: true,
+            value: await sync.syncNow(),
+            revision: store.revision(),
+          };
+          break;
+        case "getPairingPayload":
+          result = { ok: true, value: sync.pairing(), revision };
+          break;
+        default:
+          result = dispatch(store, request);
+          if (result.ok && result.revision > revision) sync.localCommitted();
+      }
     } catch (error) {
       result = toAppError(error);
     }
@@ -70,8 +109,10 @@ function start(): void {
 
   // 集成测试专用：模拟数据库已打开、但 worker 在 ready 之前退出且没有 fatal/error 事件。
   if (options.faults?.includes("boot.exitBeforeReady")) {
-    store.close();
-    port.close();
+    void sync.close().then(() => {
+      store.close();
+      port.close();
+    });
     return;
   }
 

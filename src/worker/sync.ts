@@ -271,6 +271,18 @@ export function listChangesSince(
   cursor = 0,
   limit = 200,
 ): { changes: SyncChange[]; cursor: number } {
+  const page = listChangeEntriesSince(db, cursor, limit);
+  return {
+    changes: page.entries.map((entry) => entry.change),
+    cursor: page.cursor,
+  };
+}
+
+export function listChangeEntriesSince(
+  db: SqliteDatabase,
+  cursor = 0,
+  limit = 200,
+): { entries: { seq: number; change: SyncChange }[]; cursor: number } {
   if (
     !Number.isSafeInteger(cursor) ||
     cursor < 0 ||
@@ -284,7 +296,10 @@ export function listChangesSince(
       "SELECT seq, id, hlc, entity, entity_id, payload FROM sync_changes WHERE seq > ? ORDER BY seq LIMIT ?",
     )
     .all(cursor, limit) as ChangeRow[];
-  return { changes: rows.map(decodeRow), cursor: rows.at(-1)?.seq ?? cursor };
+  return {
+    entries: rows.map((row) => ({ seq: row.seq, change: decodeRow(row) })),
+    cursor: rows.at(-1)?.seq ?? cursor,
+  };
 }
 
 function latest(

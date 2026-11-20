@@ -32,9 +32,15 @@ import type {
   UpdateTaskInput,
   WorkspaceSnapshot,
 } from "./contracts";
+import type { EnableSyncInput, SyncStatus } from "./sync-contracts";
 
 /** main → worker 的固定命令集合；worker 串行处理。 */
 export type WorkerRequest =
+  | { kind: "enableSync"; input: EnableSyncInput }
+  | { kind: "disableSync" }
+  | { kind: "getSyncStatus" }
+  | { kind: "syncNow" }
+  | { kind: "getPairingPayload" }
   | { kind: "getWorkspaceSnapshot" }
   | { kind: "listTasks"; input: ListTasksInput }
   | { kind: "getTaskDetail"; input: TaskDetailInput }
@@ -61,6 +67,8 @@ export type WorkerRequest =
   | { kind: "close" };
 
 export type WorkerReplyValue =
+  | SyncStatus
+  | string
   | WorkspaceSnapshot
   | Page<TaskSummary>
   | TaskDetail

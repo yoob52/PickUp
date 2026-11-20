@@ -11,6 +11,8 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach, expect, it, vi } from "vitest";
 import { App } from "../src/renderer/src/App";
 import { WaitDialog } from "../src/renderer/src/features/WaitDialog";
+import { SettingsDialog } from "../src/renderer/src/features/SettingsDialog";
+import { SyncSettings } from "../src/renderer/src/features/SyncSettings";
 import { CaptureApp } from "../src/renderer/src/views/CaptureApp";
 import { WorkspaceProvider } from "../src/renderer/src/state/workspace";
 import { ToastProvider } from "../src/renderer/src/ui/Toast";
@@ -21,6 +23,13 @@ import type {
   WorkspaceSnapshot,
 } from "../src/shared/contracts";
 import { emptyWorkspaceSnapshot } from "../src/shared/task";
+import QRCode from "qrcode";
+
+vi.mock("qrcode", () => ({
+  default: {
+    toDataURL: vi.fn().mockResolvedValue("data:image/png;base64,AAAA"),
+  },
+}));
 
 afterEach(() => {
   cleanup();
@@ -57,6 +66,21 @@ function task(
 
 function createApi(overrides: Partial<PickupAPI> = {}): PickupAPI {
   return {
+    enableSync: unused,
+    disableSync: unused,
+    getSyncStatus: vi.fn().mockResolvedValue(
+      ok({
+        enabled: false,
+        serverUrl: null,
+        running: false,
+        stopped: false,
+        lastSuccess: null,
+        error: null,
+        retryAt: null,
+      }),
+    ),
+    syncNow: unused,
+    getPairingPayload: unused,
     host: "desktop",
     getWorkspaceSnapshot: unused,
     listTasks: unused,
@@ -133,6 +157,83 @@ function renderCapture() {
     </WorkspaceProvider>,
   );
 }
+
+it("sync settings retains failed inputs, clears the registration token on success and protects pairing", async () => {
+  const disabled = {
+    enabled: false,
+    serverUrl: null,
+    running: false,
+    stopped: false,
+    lastSuccess: null,
+    error: null,
+    retryAt: null,
+  };
+  const enabled = {
+    ...disabled,
+    enabled: true,
+    serverUrl: "https://sync.example.com",
+  };
+  const enable = vi
+    .fn()
+    .mockResolvedValueOnce({
+      ok: false,
+      code: "SYNC_ERROR",
+      message: "服务器不可用",
+      retryable: true,
+    })
+    .mockResolvedValueOnce(ok(enabled));
+  window.pickup = createApi({
+    enableSync: enable,
+    getSyncStatus: vi.fn().mockResolvedValue(ok(disabled)),
+    getPairingPayload: vi.fn().mockResolvedValue(ok("pickup-sync:1:test")),
+    disableSync: vi.fn().mockResolvedValue(ok(disabled)),
+  });
+  render(<SyncSettings />);
+  await screen.findByLabelText("服务器地址");
+  fireEvent.change(screen.getByLabelText("服务器地址"), {
+    target: { value: "https://sync.example.com" },
+  });
+  fireEvent.change(screen.getByLabelText("注册令牌"), {
+    target: { value: "t".repeat(40) },
+  });
+  fireEvent.submit(
+    screen.getByRole("button", { name: "启用同步" }).closest("form")!,
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent("服务器不可用");
+  expect(screen.getByLabelText("注册令牌")).toHaveValue("t".repeat(40));
+  fireEvent.submit(
+    screen.getByRole("button", { name: "启用同步" }).closest("form")!,
+  );
+  await screen.findByRole("button", { name: "显示配对二维码" });
+  fireEvent.click(screen.getByRole("button", { name: "显示配对二维码" }));
+  expect(await screen.findByAltText("同步配对二维码")).toBeVisible();
+  expect(screen.getByText(/完整访问权限/)).toBeVisible();
+  expect(QRCode.toDataURL).toHaveBeenCalledWith(
+    "pickup-sync:1:test",
+    expect.objectContaining({ margin: 4 }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "关闭二维码" }));
+  expect(screen.queryByAltText("同步配对二维码")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "停止同步" }));
+  expect(await screen.findByLabelText("注册令牌")).toHaveValue("");
+});
+
+it("does not render pairing or sync controls for mobile settings", async () => {
+  window.pickup = createApi({
+    host: "mobile",
+    getPreferences: vi.fn().mockResolvedValue({
+      ok: false,
+      code: "DB_UNAVAILABLE",
+      message: "未载入",
+      retryable: true,
+    }),
+  });
+  render(<SettingsDialog onClose={() => {}} onNotice={() => {}} />);
+  expect(
+    screen.queryByRole("heading", { name: "同步" }),
+  ).not.toBeInTheDocument();
+  await screen.findByText("未载入");
+});
 
 async function openCapture() {
   return screen.findByLabelText("标题");

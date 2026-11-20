@@ -15,7 +15,7 @@
 
 本文件用于工程初始化、模块开发和测试设计。PRD 决定产品规则；本文件决定实现边界。若原型行为与 PRD 不一致，以 PRD 为准。Windows 11 x64、小范围试用、手动更新是本稿采用的工程默认值，并非用户已逐项确认的产品承诺。框架相关官方资料见第 19 节。
 
-实际实现范围、锁定版本和验证结果分别见 [ENGINEERING.md](ENGINEERING.md)、[VALIDATION.md](VALIDATION.md) 与 [ACCEPTANCE-TRACKING.md](ACCEPTANCE-TRACKING.md)。联网同步、搜索、AI、用户导出尚未交付；移动宿主及离线合并基础的增量见工程说明与 21.14 节。
+实际实现范围、锁定版本和验证结果分别见 [ENGINEERING.md](ENGINEERING.md)、[VALIDATION.md](VALIDATION.md) 与 [ACCEPTANCE-TRACKING.md](ACCEPTANCE-TRACKING.md)。搜索、AI、用户导出尚未交付；移动宿主、离线合并与桌面加密同步的增量见工程说明与 21.14–21.15 节。
 
 ## 目录
 
@@ -691,3 +691,11 @@ worker 在 ready 之前退出（连接报错、正常关闭、无 `fatal`/`error
 schema 3 为设备创建持久 UUID，为任务内容/状态分别保存 HLC，为断点/历史回填全局 UUID，并增加本地追加式 sync_changes。普通命令的变更与回执在同一业务事务提交，draft/preferences/receipts 不导出。HLC、验证和合并均为 worker 下的可移植 TypeScript，可运行于两个 SQLite 驱动，不增加网络或服务器。
 
 `applyRemoteChanges` 原子接收变更 ID 去重、独立内容/状态 LWW、断点/历史并集与 next-up LWW；缺失父记录的事件保留待物化。每次合并及本地命令提交后，由 `materializeTasks` 从原始寄存器派生单 doing：开始按 HLC、任务 ID 排序，被其他任务后续开始抑制的 doing 显示 paused，时间为第一个 displacer 的 HLC.wallMs；不生成状态事件或合成历史，历史仅含真实用户转换的追加并集。本地时钟 receive 所有已观察开始，明确 start/switch 超过它们；胜者结束不会自动恢复旧任务，自己的后续真实状态转换按 LWW 生效。next-up 选择后的结束/等待事件使该选择永久失效，reopen 不复活它；比结束更新的选择仅在父记录/reopen 缺失时暂时隐藏，补齐可恢复。最终交换全部原始事件后收敛，无需交换额外修复事件。上传使用本地追加序号游标，不用 HLC 水位，避免漏掉晚到事件。没有硬删除或 tombstone，也不迁移本地 version/revision 的并发控制语义。API 与具体边界见 [工程说明](ENGINEERING.md#离线同步基础pr6)。
+
+### 21.15 桌面加密同步与配对（PR8）
+
+在离线合并之上增加独立 `SyncClient`，由桌面 worker 持有生命周期、网络与计时器；SQLite 仍只有同步短事务。等待 fetch/WebCrypto 时，worker 可继续处理本地命令。主进程只转发 API 与变更广播，renderer 只持有设置表单/状态 DTO，密钥不进入普通状态通知。移动宿主暂不创建客户端，也不开放设置入口。
+
+schema 4 的本机 `sync_config` 与上传密文 `sync_uploads` 不参与原始事件流。上传以本地 outbox seq 作为 clientSeq，随机加密后先持久化密文，保证不确定结果重试不改变字节；确认后事务推进游标并继续保留密文。下载使用独立 serverSeq 游标，整页鉴权解密后调用既有 `applyRemoteChanges`，并在外层同一事务推进下载游标；任何校验/事务错误保留旧游标。自己的设备事件跳过应用。schema 5 将最后拉取事件的 deviceId/clientSeq 身份与游标 N 一同保存；N>0 时从 N−1 拉取，校验首条身份和序号后丢弃重叠行。锚点缺失或变化时事务清零推拉游标与锚点、记录连续性重建，并用原密文重传完整 outbox；N=0 无需锚点。循环直到推拉均无新条目。
+
+rootKey 仅存在本机数据库和明确请求的桌面配对载荷中；服务器只收到派生 spaceId/authKey 与密文。HKDF salt/info、AES-GCM 版本与 AAD 属于客户端协议，见 [部署与配对说明](SYNC-SERVER.md)。rootKey 泄露等于完整空间访问；本轮无密钥轮换、单设备吊销、系统钥匙串或移动端扫码。备份 SQLite 也必须按密钥材料保护。

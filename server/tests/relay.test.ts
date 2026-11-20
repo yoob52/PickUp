@@ -174,6 +174,7 @@ it("idempotently appends opaque bytes, rejects changed identities atomically and
     changes: body.changes.map((c, i) => ({
       serverSeq: i + 1,
       deviceId: body.deviceId,
+      clientSeq: c.clientSeq,
       blob: c.blob,
     })),
     lastServerSeq: 2,
@@ -256,6 +257,10 @@ it("paginates without skipping events, caps limits and reports an empty final pa
   });
   const first = await s.call(a.path + "?after=0&limit=2", a.authKey);
   expect(first.body).toMatchObject({ lastServerSeq: 2, more: true });
+  expect(first.body.changes).toEqual([
+    { serverSeq: 1, deviceId: "a", clientSeq: 0, blob: blob("0") },
+    { serverSeq: 2, deviceId: "a", clientSeq: 1, blob: blob("1") },
+  ]);
   expect(
     first.body.changes.map((c: { serverSeq: number }) => c.serverSeq),
   ).toEqual([1, 2]);
@@ -266,6 +271,11 @@ it("paginates without skipping events, caps limits and reports an empty final pa
     (await s.call(a.path + "?after=4&limit=2", a.authKey)).body,
   ).toMatchObject({ lastServerSeq: 5, more: false });
   expect((await s.call(a.path + "?after=5", a.authKey)).body).toEqual({
+    changes: [],
+    lastServerSeq: 5,
+    more: false,
+  });
+  expect((await s.call(a.path + "?after=999", a.authKey)).body).toEqual({
     changes: [],
     lastServerSeq: 5,
     more: false,
@@ -471,7 +481,9 @@ it("persists credentials and ciphertext through a graceful restart", async () =>
   await s.relay.close();
   const second = await start(s.dir);
   expect((await second.call(a.path, a.authKey)).body).toEqual({
-    changes: [{ serverSeq: 1, deviceId: "persist", blob: blob() }],
+    changes: [
+      { serverSeq: 1, deviceId: "persist", clientSeq: 1, blob: blob() },
+    ],
     lastServerSeq: 1,
     more: false,
   });

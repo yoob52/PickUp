@@ -3,6 +3,7 @@ import { Check } from "lucide-react";
 import type { DesktopState, PreferenceState } from "../../../shared/contracts";
 import { Button } from "../ui/primitives";
 import { Modal } from "../ui/Modal";
+import { SyncSettings } from "./SyncSettings";
 
 type Props = {
   onClose: () => void;
@@ -153,6 +154,7 @@ export function SettingsDialog({ onClose, onNotice }: Props) {
           }}
         />
       </div>
+      {window.pickup.host === "desktop" ? <SyncSettings /> : null}
       <div className="modal-actions">
         <Button icon={<Check size={15} />} onClick={onClose}>
           完成
