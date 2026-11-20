@@ -31,6 +31,7 @@ describe("mobile API boundary", () => {
         }),
         await api.getPairingPayload(),
         await api.copyPairingPayload(),
+        await api.copyLoginPayload(),
       ])
         expect(result).toMatchObject({
           ok: false,

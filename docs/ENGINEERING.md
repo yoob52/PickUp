@@ -121,9 +121,11 @@ next-up 按选择 HLC 合并，并检查目标任务的全部结束/等待事件
 
 ### 桌面加密同步（PR8）
 
-`sync-client.ts` 使用 fetch/WebCrypto，不依赖 Electron 或 Node 模块；桌面 Node worker 与移动 Web Worker 共用。`sync-crypto.ts` 实现随机 32 字节 rootKey、HKDF-SHA256、AES-256-GCM 和版本化配对载荷。注册 token 只用于桌面的一次注册请求，不进入数据库、状态 DTO 或日志；手机仅通过配对加入。同步配置里的 rootKey 与数据库一样需要保护，升级保护副本也可能包含它；这里未引入系统钥匙串。
+`sync-client.ts` 使用 fetch/WebCrypto，不依赖 Electron 或 Node 模块；桌面 Node worker 与移动 Web Worker 共用。`sync-crypto.ts` 实现随机 32 字节 rootKey、HKDF-SHA256、AES-256-GCM 和版本化配对载荷。注册 token 只用于旧版桌面的一次空间注册请求，不进入数据库、状态 DTO 或日志；手机可登录账户或通过配对加入。同步配置里的 rootKey 与数据库一样需要保护，升级保护副本也可能包含它；这里未引入系统钥匙串。
 
-schema 4 的 `sync_config` 保存本机服务器、根密钥、推/拉游标、上次成功/错误和退避状态，`sync_uploads` 保留所有已加密的上传条目，直到停止同步。后者保证请求成功但回包丢失、进程重启或服务器回退后仍复用完全相同的随机 nonce/密文，符合服务端 `(deviceId,clientSeq)` 幂等规则。两表都不导出。确认上传后事务推进本机序号但保留密文；拉取整页先全部验证解密，再在一个事务中合并并推进 serverSeq，失败不应用部分页面。schema 5 增加最后一条拉取事件的 deviceId/clientSeq 锚点，与游标在同一事务保存。N>0 从 after=N−1 请求，首条必须为相同身份的 seq N，验证后丢弃重叠行；缺失或不匹配则事务清零推拉游标与锚点，重新下载、重传完整 outbox，并记录连续性重建。N=0 从 after=0 请求，不验证锚点；旧配置没有锚点时也安全重建，即使其他设备已重新填满中继也不依赖高水位下降。
+PR9b 增加固定 `account(input)` API，动作通过 Zod 判别联合 allowlist（注册/登录/退出、恢复、临时扫码请求/确认）进入同一 worker。`account-crypto.ts` 仅使用 WebCrypto：600k PBKDF2-SHA256、域分离 HKDF、AES-GCM 包装，ECDH P-256 加密手机到桌面的单次授权。默认服务是 `shared/account-contracts.ts` 的构建常量，定制服务只在“高级”。schema 7 在本机配置增加 session/email，暂存未确认保存的恢复码，均不参与同步；确认后删除暂存。账户登录验证包装根密钥后复用 `saveConfig` 路径，空间加密协议不变。服务只持有 scrypt 认证摘要和包装密钥。桌面私钥/轮询凭据仅在 worker 内存，UI 只持有公开二维码；2 分钟过期，隐藏时停止轮询。服务器配置、限流、恢复与部署约束见 [SYNC-SERVER.md](SYNC-SERVER.md)。
+
+schema 4 的 `sync_config` 保存本机服务器、根密钥、推/拉游标、上次成功/错误和退避状态，`sync_uploads` 保留已加密上传条目。schema 8 把网络 `sync_outbox` 与 CRDT `sync_changes` 分开；本地提交和明确的快照分别标记 `local` / `snapshot`，普通远端合并不入队。迁移保留旧本地条目的序号和密文，过滤历史误入队的远端记录。首次加入或切换空间时，事务创建新上传身份与紧凑快照：当前内容寄存器及最大更新时间证据、所有状态寄存器、最新 next-up、全部断点与转换历史，保留领域 ID/HLC。完整状态历史防止遗忘 doing 压制和 next-up 的失效证据。旧原始 outbox 不发送到新空间。`sync_destination` 仅保存上次空间 ID、上传身份及游标；停止后不保留密钥/会话，但保留 outbox/密文和这些非密钥元数据，使同空间重登复用原上传身份、游标及完全相同的 nonce/密文，不重复上传。切换空间时清除旧网络缓存。这些表均不导出。确认上传后事务推进 outbox 序号；拉取整页先全部验证解密，再在一个事务中合并并推进 serverSeq，失败不应用部分页面。schema 5 的 deviceId/clientSeq 锚点与拉取游标在同一事务保存：N>0 从 after=N−1 请求，首条必须为相同身份的 seq N，验证后丢弃重叠行；缺失或不匹配则事务清零推拉游标与锚点，只重传当前空间 outbox 的保留密文，并记录连续性重建。N=0 不验证锚点；旧配置没有锚点时也安全重建，不依赖高水位下降。
 
 本地业务提交后按新增 outbox 序号防抖 2 秒；worker 每 60 秒和启动时补同步，也可手动“立即同步”。同一时刻只运行一个循环，网络等待不占 SQLite 事务、不阻塞本地记录。每轮先上传，再拉取，慢拉取或拉取超时不阻塞该轮的本地上传。拉取每页 50 条（含连续性重叠行，最大密文页约 4.2 MiB）；响应流累计超过 48 MiB 则中止，不信任 Content-Length。每次请求 20 秒超时（含读取正文），禁止跟随重定向以避免凭据泄露。失败以 5 秒倍增至 5 分钟，成功重置；401/403 持久停止并显示“需要重新配对”。上传每批最多 500 条，另按 UTF-8 JSON 请求体的 1 MiB 和单密文 64 KiB 拆包。收到远程数据后通过 worker → main → 全窗口广播刷新；同步状态也复用该通知。
 
@@ -133,9 +135,9 @@ schema 4 的 `sync_config` 保存本机服务器、根密钥、推/拉游标、�
 
 ### 手机前台同步与配对（PR9）
 
-移动 Web Worker 在同一 WASM/OPFS 连接上创建 `SyncClient`。`pairWithPayload(payload)` 在 API registry 校验输入、在 worker 用既有版本化 parser 校验 URL/rootKey，经单一 `saveConfig` 路径保存同一 `sync_config`，立即运行首次同步。没有注册请求或 token；配对前的本地 outbox 也保留并上传。移动端开放状态/立即同步/停止；`enableSync` 与 `getPairingPayload` 仍为 desktop-only。401/403 持久停止后可重新扫码或粘贴，已启用时须先停止再换空间。停止只清本机配置与密文缓存，不清任务/outbox、不撤销其他设备。
+移动 Web Worker 在同一 WASM/OPFS 连接上创建 `SyncClient`。`pairWithPayload(payload)` 在 API registry 校验输入、在 worker 用既有版本化 parser 校验 URL/rootKey，经单一 `saveConfig` 路径保存同一 `sync_config`，立即运行首次同步。没有注册请求或 token；首次配对把已有完整状态写成快照上传。移动端开放状态/立即同步/停止；`enableSync` 与 `getPairingPayload` 仍为 desktop-only。401/403 持久停止后可重新扫码或粘贴，已启用时须先停止再换空间。停止清本机密钥/会话配置，不清任务/outbox 或同空间重试密文、不撤销其他设备。
 
-schema 6 增加本机 `upload_device_id`：每次新启用/配对生成独立的上传身份，持续重试和连续性重建复用它；旧配置为空时继续沿用原 store deviceId 和已有密文，不改变已发布会话。这样停止清密文后再次加入同一空间时，新 nonce 不会撞上旧 `(deviceId,clientSeq)` 的幂等记录；领域事件 ID/HLC 与持久 store deviceId 不变，旧事件仍按 ID 合并去重。此身份不进入同步事件流。
+schema 6 增加本机 `upload_device_id`；schema 8 只在首次加入或切换空间时生成新身份，同空间重连、持续重试和连续性重建复用它。旧配置为空时继续沿用原 store deviceId 和已有密文，不改变已发布会话。领域事件 ID/HLC 与持久 store deviceId 不变，事件按 ID 合并去重；上传身份和 outbox 序号不再从 HLC 作者推断，也不进入领域事件流。
 
 页面以 `visibilitychange` 转发前台状态，worker 启动时默认 inactive；可见时启动 60 秒周期、2 秒本地提交防抖、回到可见时触发同步，隐藏时清计时器并中止请求，不把主动取消记作网络失败。**没有后台服务、后台同步或保活。** 本地数据库事务不依赖网络。远程应用/状态通过 worker `changed` → `MobileWorkerClient` → `onStateChanged` 刷新，订阅和页面计时器在释放时清理。
 

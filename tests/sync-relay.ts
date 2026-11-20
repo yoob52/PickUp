@@ -9,16 +9,14 @@ import { createRelay } from "../server/src/relay";
 export async function startSyncRelay(allowedOrigins: string[] = []) {
   const directory = await mkdtemp(join(tmpdir(), "pickup-client-relay-"));
   const token = crypto.randomUUID() + crypto.randomUUID();
-  const create = () =>
-    createRelay(
-      {
-        registrationToken: token,
-        dataDir: directory,
-        allowedOrigins,
-        port: 8787,
-      },
-      () => {},
-    );
+  const config = {
+    registrationToken: token,
+    dataDir: directory,
+    allowedOrigins,
+    port: 8787,
+    accountQuotaBytes: 20 * 1024 * 1024,
+  };
+  const create = () => createRelay(config, () => {});
   let relay = create();
   relay.server.listen(0, "127.0.0.1");
   await once(relay.server, "listening");
@@ -28,6 +26,9 @@ export async function startSyncRelay(allowedOrigins: string[] = []) {
     token,
     directory,
     relay,
+    setQuota: (bytes: number) => {
+      config.accountQuotaBytes = bytes;
+    },
     backup: async () => {
       const source = new DatabaseSync(join(directory, "sync.sqlite"));
       const path = join(directory, "earlier.sqlite");

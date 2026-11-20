@@ -9,6 +9,7 @@ import type { SyncStatus } from "../../../shared/sync-contracts";
 import type { Result } from "../../../shared/contracts";
 import { Modal } from "../ui/Modal";
 import { Button, Field } from "../ui/primitives";
+import { AccountPanel } from "./AccountPanel";
 
 export function MobileSyncSheet({ onClose }: { onClose: () => void }) {
   const [status, setStatus] = useState<SyncStatus | null>(null);
@@ -77,6 +78,7 @@ export function MobileSyncSheet({ onClose }: { onClose: () => void }) {
         </p>
       ) : null}
       {!status ? <p role="status">正在读取同步状态…</p> : null}
+      <AccountPanel status={status} onStatus={setStatus} />
       {status?.enabled ? (
         <>
           <div className="sync-status" role="status">

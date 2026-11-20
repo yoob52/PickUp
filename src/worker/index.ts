@@ -70,6 +70,13 @@ function start(): void {
       }
       const revision = store.revision();
       switch (request.kind) {
+        case "account":
+          result = {
+            ok: true,
+            value: await sync.account(request.input),
+            revision: store.revision(),
+          };
+          break;
         case "pairWithPayload":
           throw DomainError.validation("请在手机上扫描桌面配对码。");
         case "enableSync":

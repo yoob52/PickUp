@@ -6,9 +6,11 @@ import {
   type ServerResponse,
 } from "node:http";
 import { join } from "node:path";
+import { isIP } from "node:net";
 import { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 import type { Config } from "./config.js";
+import { createAccounts, HttpError } from "./accounts.js";
 
 const MAX_BODY = 1024 * 1024;
 const MAX_BLOB = 64 * 1024;
@@ -43,15 +45,6 @@ const page = z.strictObject({
   limit: decimal.pipe(z.number().min(1).max(500)).default(200),
 });
 
-class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
 const digest = (value: string | Uint8Array) =>
   createHash("sha256").update(value).digest();
 
@@ -144,6 +137,7 @@ function readJson(req: IncomingMessage): Promise<unknown> {
 export function createRelay(
   config: Config,
   log: (line: string) => void = console.log,
+  now: () => number = Date.now,
 ) {
   mkdirSync(config.dataDir, { recursive: true });
   const db = new DatabaseSync(join(config.dataDir, "sync.sqlite"));
@@ -156,7 +150,10 @@ export function createRelay(
     db.close();
     throw error;
   }
-  const registrationHash = digest(config.registrationToken);
+  const registrationHash = config.registrationToken
+    ? digest(config.registrationToken)
+    : undefined;
+  const accounts = createAccounts(db, config, now);
 
   const server = createServer((req, res) => {
     const started = performance.now();
@@ -195,6 +192,15 @@ export function createRelay(
       if (url.pathname === "/healthz") route = "/healthz";
       else if (url.pathname === "/v1/spaces") route = "/v1/spaces";
       else if (match) route = "/v1/spaces/:id/changes";
+      else if (
+        /^\/v1\/accounts(?:\/(prelogin|login|recover|logout|session))?$/.test(
+          url.pathname,
+        )
+      )
+        route = url.pathname;
+      else if (url.pathname === "/v1/handoff") route = "/v1/handoff";
+      else if (/^\/v1\/handoff\/[A-Za-z0-9_-]{43}$/.test(url.pathname))
+        route = "/v1/handoff/:id";
       const origin = req.headers.origin;
       res.setHeader("Vary", "Origin");
       if (origin !== undefined) {
@@ -211,7 +217,9 @@ export function createRelay(
       const methods =
         route === "/healthz"
           ? ["GET"]
-          : route === "/v1/spaces"
+          : route === "/v1/spaces" ||
+              route.startsWith("/v1/accounts") ||
+              route === "/v1/handoff"
             ? ["POST"]
             : ["GET", "POST"];
       if (req.method === "OPTIONS") {
@@ -247,8 +255,35 @@ export function createRelay(
         json(res, 200, { ok: true });
         return;
       }
+      if (route.startsWith("/v1/accounts") || route.startsWith("/v1/handoff")) {
+        const credential =
+          /^Bearer ([^\s]+)$/.exec(req.headers.authorization ?? "")?.[1] ?? "";
+        const remote = req.socket.remoteAddress ?? "unknown",
+          forwarded = req.headers["x-real-ip"];
+        const ip =
+          config.trustedProxies?.includes(remote) &&
+          typeof forwarded === "string" &&
+          isIP(forwarded)
+            ? forwarded
+            : remote;
+        json(
+          res,
+          200,
+          await accounts.handle(
+            url.pathname,
+            req.method!,
+            req.method === "GET" ? undefined : await readJson(req),
+            credential,
+            ip,
+          ),
+        );
+        return;
+      }
       if (route === "/v1/spaces") {
-        if (!timingSafeEqual(digest(bearer(req)), registrationHash))
+        if (
+          !registrationHash ||
+          !timingSafeEqual(digest(bearer(req)), registrationHash)
+        )
           throw new HttpError(
             401,
             "UNAUTHORIZED",
@@ -294,7 +329,11 @@ export function createRelay(
         supplied,
         row?.auth_hash ?? Buffer.alloc(32),
       );
-      if (!auth.success || !row || !correct)
+      if (
+        !auth.success ||
+        !row ||
+        (!correct && !accounts.authorize(space.data, auth.data))
+      )
         throw new HttpError(401, "UNAUTHORIZED", "Invalid space credential.");
       if (req.method === "GET") {
         if (
@@ -394,6 +433,7 @@ export function createRelay(
               "Space sequence is exhausted.",
             );
           lastServerSeq++;
+          accounts.quota(space.data, bytes.length);
           db.prepare(
             "INSERT INTO changes(space_id,server_seq,device_id,client_seq,blob) VALUES(?,?,?,?,?)",
           ).run(

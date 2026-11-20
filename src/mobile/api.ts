@@ -68,6 +68,7 @@ export function createMobileAPI(
   }
 
   const api: PickupAPI = {
+    account: (input) => invoke("account", input),
     enableSync: unsupported,
     pairWithPayload: (payload) => invoke("pairWithPayload", payload),
     disableSync: () => invoke("disableSync"),
@@ -75,6 +76,7 @@ export function createMobileAPI(
     syncNow: () => invoke("syncNow"),
     getPairingPayload: unsupported,
     copyPairingPayload: unsupported,
+    copyLoginPayload: unsupported,
     host: "mobile",
     getWorkspaceSnapshot: () => invoke("getWorkspaceSnapshot"),
     listTasks: (input) => invoke("listTasks", input),

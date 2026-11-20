@@ -13,6 +13,7 @@ import type { SyncStatus } from "../../../shared/sync-contracts";
 import type { Result } from "../../../shared/contracts";
 import { Button, Field } from "../ui/primitives";
 import { Modal } from "../ui/Modal";
+import { AccountPanel } from "./AccountPanel";
 
 export function SyncSettings() {
   const [status, setStatus] = useState<SyncStatus | null>(null);
@@ -106,6 +107,7 @@ export function SyncSettings() {
         </div>
         <span className="sync-badge">端到端加密</span>
       </div>
+      <AccountPanel status={status} onStatus={setStatus} />
       {error || status?.error ? (
         <p className="field-error" role="alert">
           {error || status?.error}
@@ -175,55 +177,58 @@ export function SyncSettings() {
           </p>
         </>
       ) : (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void act(() =>
-              window.pickup.enableSync({ serverUrl, registrationToken }),
-            );
-          }}
-        >
-          <Field
-            id="sync-server"
-            label="服务器地址"
-            hint="使用 HTTPS；本机调试可用 http://localhost。"
+        <details className="account-advanced">
+          <summary>高级：旧版配对空间</summary>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void act(() =>
+                window.pickup.enableSync({ serverUrl, registrationToken }),
+              );
+            }}
           >
-            <input
+            <Field
               id="sync-server"
-              type="url"
-              placeholder="https://sync.example.com"
-              required
-              autoComplete="url"
-              value={serverUrl}
-              disabled={busy}
-              onChange={(event) => setServerUrl(event.target.value)}
-            />
-          </Field>
-          <Field
-            id="sync-registration"
-            label="注册令牌"
-            hint="由服务器管理员提供，仅注册时使用，不会保存。"
-          >
-            <input
+              label="服务器地址"
+              hint="使用 HTTPS；本机调试可用 http://localhost。"
+            >
+              <input
+                id="sync-server"
+                type="url"
+                placeholder="https://sync.example.com"
+                required
+                autoComplete="url"
+                value={serverUrl}
+                disabled={busy}
+                onChange={(event) => setServerUrl(event.target.value)}
+              />
+            </Field>
+            <Field
               id="sync-registration"
-              type="password"
-              autoComplete="off"
-              required
-              minLength={32}
-              value={registrationToken}
+              label="注册令牌"
+              hint="由服务器管理员提供，仅注册时使用，不会保存。"
+            >
+              <input
+                id="sync-registration"
+                type="password"
+                autoComplete="off"
+                required
+                minLength={32}
+                value={registrationToken}
+                disabled={busy}
+                onChange={(event) => setRegistrationToken(event.target.value)}
+              />
+            </Field>
+            <Button
+              type="submit"
+              kind="secondary"
+              icon={<Cloud size={15} />}
               disabled={busy}
-              onChange={(event) => setRegistrationToken(event.target.value)}
-            />
-          </Field>
-          <Button
-            type="submit"
-            kind="secondary"
-            icon={<Cloud size={15} />}
-            disabled={busy}
-          >
-            {busy ? "正在启用…" : "启用同步"}
-          </Button>
-        </form>
+            >
+              {busy ? "正在启用…" : "启用同步"}
+            </Button>
+          </form>
+        </details>
       )}
       {qr
         ? createPortal(

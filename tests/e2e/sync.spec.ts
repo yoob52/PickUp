@@ -15,6 +15,7 @@ test("desktop settings enables encrypted sync and displays a private pairing QR"
     await main.evaluate(() => window.pickup.showMain());
     await main.getByRole("button", { name: "打开设置" }).click();
     const settings = main.getByRole("dialog", { name: "让入口安静。" });
+    await settings.getByText("高级：旧版配对空间", { exact: true }).click();
     await settings.getByLabel("服务器地址").fill(server.url);
     await settings.getByLabel("注册令牌").fill(server.token);
     await settings
@@ -56,6 +57,7 @@ test("desktop settings enables encrypted sync and displays a private pairing QR"
     await pairing.getByRole("button", { name: "关闭二维码" }).click();
     await expect(pairing).not.toBeVisible();
     await settings.getByRole("button", { name: "停止同步" }).click();
+    await settings.getByText("高级：旧版配对空间", { exact: true }).click();
     await expect(
       settings.getByRole("button", { name: "启用同步", exact: true }),
     ).toBeVisible();

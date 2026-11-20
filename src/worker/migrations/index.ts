@@ -4,6 +4,8 @@ import sync from "./003.sql?raw";
 import syncConfig from "./004.sql?raw";
 import syncContinuity from "./005.sql?raw";
 import syncUploadIdentity from "./006.sql?raw";
+import accountSession from "./007.sql?raw";
+import syncOutbox from "./008.sql?raw";
 
 /**
  * 按序迁移列表：版本号 = 数组下标 + 1，与 PRAGMA user_version 对应。
@@ -16,6 +18,8 @@ export const MIGRATIONS: readonly { version: number; sql: string }[] = [
   { version: 4, sql: syncConfig },
   { version: 5, sql: syncContinuity },
   { version: 6, sql: syncUploadIdentity },
+  { version: 7, sql: accountSession },
+  { version: 8, sql: syncOutbox },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

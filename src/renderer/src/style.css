@@ -1,3 +1,61 @@
+.account-panel {
+  margin: 24px 0;
+  padding: 20px 0;
+  border-block: 1px solid var(--line);
+}
+.account-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+.account-advanced {
+  margin: 16px 0;
+}
+.account-advanced summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 8px 0;
+}
+.account-advanced[open] {
+  padding-bottom: 12px;
+}
+.account-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+  font-weight: 650;
+}
+.account-recovery,
+.account-confirm {
+  padding: 16px;
+  border: 1px solid var(--line-dark);
+  background: var(--surface);
+  border-radius: 16px;
+  margin: 16px 0;
+}
+.account-recovery h4,
+.account-confirm h4 {
+  margin: 0 0 12px;
+}
+.account-recovery textarea,
+#desktop-login-code {
+  font-family: monospace;
+  overflow-wrap: anywhere;
+}
+.account-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0;
+  font-size: 13px;
+}
+.account-check input {
+  width: auto;
+}
+
 :root {
   --ink: #15171c;
   --text: #1f232b;
