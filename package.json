@@ -4,7 +4,7 @@
   "private": true,
   "description": "接着 PickUp — 本地个人工作助手",
   "author": "PickUp",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "main": "out/main/index.js",
   "engines": {
     "node": "24.12.0",
