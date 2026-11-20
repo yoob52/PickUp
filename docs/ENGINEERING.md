@@ -135,7 +135,7 @@ Authenticode 为 NotSigned。历史版本已静默安装到临时目录、对安
 ### GitHub Actions 打包与发版
 
 - 手动试打包：先将工作流推送到默认分支，在 GitHub 的 **Actions → Build and release Windows → Run workflow** 选择分支运行。成功后下载 `pickup-windows-x64` artifact，其中包含 NSIS 安装器和 `SHA256SUMS.txt`；手动触发仅生成 artifact，不创建 Release。
-- 标签发版：推送 `v<package.json version>` 标签，检查及包内冒烟全部通过后，自动创建 GitHub Release，上传安装器和 SHA-256 校验文件并生成发布说明。标签与包版本必须完全一致；例如 `v0.2.0-beta.1` 对应包版本 `0.2.0-beta.1`，含预发布标识的版本创建为 prerelease，且不设为 latest。
+- 标签发版：推送 `v<package.json version>` 标签，检查及包内冒烟全部通过后，自动创建 GitHub Release，上传安装器和 SHA-256 校验文件并生成发布说明（开头附 README 的 Code signing policy 链接，满足 SignPath Foundation 对发布页的要求）。标签与包版本必须完全一致；例如 `v0.2.0-beta.1` 对应包版本 `0.2.0-beta.1`，含预发布标识的版本创建为 prerelease，且不设为 latest。
 - 后续发布示例（以 `0.3.1` 为例，先确认工作区、发布内容和版本）：
 
   ```powershell
