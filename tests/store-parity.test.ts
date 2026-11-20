@@ -171,6 +171,9 @@ describe.each(["better-sqlite3", "sqlite-wasm"] as const)(
         );
         expect(() => insert.run({ a: 1 })).toThrow();
         expect(() => db.prepare("SELECT ?").get(1, 2)).toThrow();
+        expect(db.prepare("SELECT ? AS t").get("前\u0000后")).toEqual({
+          t: "前\u0000后",
+        });
         expect(db.prepare("SELECT 9007199254740993 AS n").get()).toEqual({
           n: 9007199254740992,
         });

@@ -51,10 +51,20 @@ function bind(stmt: PreparedStatement, params: unknown[]): void {
     throw new RangeError("Too many SQLite bindings");
 }
 
+const SQLITE_BLOB = 4;
+const utf8 = new TextDecoder();
+
+// oo1 reads TEXT as NUL-terminated; read the bytes so embedded NULs survive.
 function row(stmt: PreparedStatement): Record<string, unknown> {
-  const result = stmt.get({});
-  for (const [key, value] of Object.entries(result)) {
-    if (typeof value === "bigint") result[key] = Number(value);
+  const result: Record<string, unknown> = {};
+  for (let index = 0; index < stmt.columnCount; index++) {
+    const value = stmt.get(index);
+    result[stmt.getColumnName(index)] =
+      typeof value === "bigint"
+        ? Number(value)
+        : typeof value === "string"
+          ? utf8.decode(stmt.get(index, SQLITE_BLOB) as Uint8Array)
+          : value;
   }
   return result;
 }
