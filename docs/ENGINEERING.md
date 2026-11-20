@@ -8,32 +8,32 @@
 
 Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块 ABI 146。better-sqlite3 实际 SQLite 版本为 3.53.2；Electron `process.versions.sqlite` 的 3.53.3 属于运行时内置 SQLite，不是本项目数据库依赖版本。
 
-| 直接依赖                    | 精确版本        |
-| --------------------------- | --------------- |
-| `better-sqlite3`            | `12.11.1`       |
-| `@noble/hashes`             | `1.8.0`         |
-| `@sqlite.org/sqlite-wasm`   | `3.50.4-build1` |
-| `lucide-react`              | `1.43.0`        |
-| `react`                     | `19.3.0`        |
-| `react-dom`                 | `19.3.0`        |
-| `zod`                       | `4.6.1`         |
-| `@playwright/test`          | `1.63.0`        |
-| `@testing-library/dom`      | `10.4.1`        |
-| `@testing-library/jest-dom` | `7.0.1`         |
-| `@testing-library/react`    | `16.3.3`        |
-| `@types/better-sqlite3`     | `9.6.0`         |
-| `@types/node`               | `24.13.4`       |
-| `@types/react`              | `19.3.0`        |
-| `@types/react-dom`          | `19.3.0`        |
-| `@vitejs/plugin-react`      | `5.2.0`         |
-| `electron`                  | `42.11.3`       |
-| `electron-builder`          | `26.15.3`       |
-| `electron-vite`             | `5.0.0`         |
-| `jsdom`                     | `26.1.0`        |
-| `prettier`                  | `3.9.6`         |
-| `typescript`                | `5.9.3`         |
-| `vite`                      | `7.3.6`         |
-| `vitest`                    | `4.1.11`        |
+| 直接依赖 | 精确版本 |
+| --- | --- |
+| `better-sqlite3` | `12.11.1` |
+| `@noble/hashes` | `1.8.0` |
+| `@sqlite.org/sqlite-wasm` | `3.50.4-build1` |
+| `lucide-react` | `1.43.0` |
+| `react` | `19.3.0` |
+| `react-dom` | `19.3.0` |
+| `zod` | `4.6.1` |
+| `@playwright/test` | `1.63.0` |
+| `@testing-library/dom` | `10.4.1` |
+| `@testing-library/jest-dom` | `7.0.1` |
+| `@testing-library/react` | `16.3.3` |
+| `@types/better-sqlite3` | `9.6.0` |
+| `@types/node` | `24.13.4` |
+| `@types/react` | `19.3.0` |
+| `@types/react-dom` | `19.3.0` |
+| `@vitejs/plugin-react` | `5.2.0` |
+| `electron` | `42.11.3` |
+| `electron-builder` | `26.15.3` |
+| `electron-vite` | `5.0.0` |
+| `jsdom` | `26.1.0` |
+| `prettier` | `3.9.6` |
+| `typescript` | `5.9.3` |
+| `vite` | `7.3.6` |
+| `vitest` | `4.1.11` |
 
 全部直接依赖使用精确版本；传递依赖由 package-lock.json 固定。`.npmrc` 设置 save-exact 和 npm 官方 registry。正式验证使用 `npm ci`，不采用 `--legacy-peer-deps` 或强行忽略相容性。驱动可移植层使用 `@noble/hashes` 同步计算兼容既有回执的 SHA-256，使用官方 `@sqlite.org/sqlite-wasm` 验证相同命令与查询；尚未接入移动宿主或 OPFS。
 
@@ -74,23 +74,23 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
 
 ## 3. 命令及产物
 
-| 命令                              | 作用                                                                                                  |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `npm ci`                          | 按锁文件安装，下载官方运行时并准备原生依赖                                                            |
-| `npm run dev`                     | 启动 Vite 开发服务和 Electron 主窗口                                                                  |
-| `npm run start`                   | 运行已有 out 构建；首次需先 build                                                                     |
-| `npm run typecheck`               | 分别检查 Node/Electron 与 Web 配置，strict、未使用声明检查                                            |
-| `npm run format` / `format:check` | 格式化 / 检查源码、测试和配置                                                                         |
-| `npm test`                        | 以 Electron 的 Node 模式运行 Vitest，匹配 better-sqlite3 ABI；覆盖契约、组件及两驱动的共享 store 场景 |
-| `npm run check`                   | 类型 + 格式 + 单元/组件测试                                                                           |
-| `npm run build`                   | 输出 main/preload/worker/renderer 到 out                                                              |
-| `npm run build:mobile`            | 独立 Vite 构建，共享 React UI + 移动 API + Web Worker + SQLite WASM 到 out/mobile；不修改桌面构建     |
-| `npm run test:mobile`             | 构建移动 Web 产物，使用 Chromium 对实际 OPFS 验证创建、开始、重载持久化及 OPFS 不可用错误             |
-| `npm run test:integration`        | 构建后通过 Electron 运行真实 worker/SQLite 的 16 组集成场景                                           |
-| `npm run test:e2e`                | 构建后运行 Playwright Electron 自动化（桥接、独立 capture、界面闭环、视觉、规模）                     |
-| `npm run rebuild:native`          | 为锁定 Electron/架构准备 better-sqlite3 原生模块                                                      |
-| `npm run pack`                    | 输出 dist/win-unpacked                                                                                |
-| `npm run dist`                    | 输出 dist/PickUp Setup 0.3.0.exe（版本读取 package.json）                                             |
+| 命令 | 作用 |
+| --- | --- |
+| `npm ci` | 按锁文件安装，下载官方运行时并准备原生依赖 |
+| `npm run dev` | 启动 Vite 开发服务和 Electron 主窗口 |
+| `npm run start` | 运行已有 out 构建；首次需先 build |
+| `npm run typecheck` | 分别检查 Node/Electron 与 Web 配置，strict、未使用声明检查 |
+| `npm run format` / `format:check` | 格式化 / 检查源码、测试和配置 |
+| `npm test` | 以 Electron 的 Node 模式运行 Vitest，匹配 better-sqlite3 ABI；覆盖契约、组件及两驱动的共享 store 场景 |
+| `npm run check` | 类型 + 格式 + 单元/组件测试 |
+| `npm run build` | 输出 main/preload/worker/renderer 到 out |
+| `npm run build:mobile` | 独立 Vite 构建，共享 React UI + 移动 API + Web Worker + SQLite WASM 到 out/mobile；不修改桌面构建 |
+| `npm run test:mobile` | 构建移动 Web 产物，使用 Chromium 对实际 OPFS 验证创建、开始、重载持久化及 OPFS 不可用错误 |
+| `npm run test:integration` | 构建后通过 Electron 运行真实 worker/SQLite 的 16 组集成场景 |
+| `npm run test:e2e` | 构建后运行 Playwright Electron 自动化（桥接、独立 capture、界面闭环、视觉、规模） |
+| `npm run rebuild:native` | 为锁定 Electron/架构准备 better-sqlite3 原生模块 |
+| `npm run pack` | 输出 dist/win-unpacked |
+| `npm run dist` | 输出 dist/PickUp Setup 0.3.0.exe（版本读取 package.json） |
 
 移动 Web 可运行 `npx vite preview --config vite.mobile.config.ts` 后访问 `http://127.0.0.1:4174`。需要安全上下文（localhost 或 HTTPS）及支持 OPFS 同步访问句柄的浏览器；不需要 COOP/COEP。首次运行浏览器测试需 `npx playwright install chromium`。存储位置固定为当前 origin 的 `/pickup-sahpool`，池内主文件 `/pickup.sqlite`；不同端口、协议或域名的数据相互隔离。不得清空该目录作为启动恢复手段。
 
