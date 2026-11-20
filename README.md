@@ -35,3 +35,7 @@ npm run dist              # 生成 NSIS 安装包
 - [技术负责人计划](docs/TECH-LEAD-PLAN.md)
 
 本版本关闭主窗口会退出应用。托盘、全局快捷键、独立快速记录窗和桌面入口窗口尚未由主进程创建。当前安装包未签名，使用默认 Electron 图标。
+
+## 许可证
+
+[MIT](LICENSE)
