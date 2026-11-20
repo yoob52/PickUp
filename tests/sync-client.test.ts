@@ -524,6 +524,59 @@ it.each(["headers", "body"])(
 );
 
 it.each([false, true])(
+  "uploads local commits before a pull times out (WASM: %s)",
+  async (wasm) => {
+    vi.useFakeTimers();
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), ms);
+      return controller.signal;
+    });
+    const db = open(wasm);
+    seed(db, "https://relay.example.com");
+    create(db, "拉取故障时仍需上传");
+    const outbox = listChangesSince(db, 0, 1000);
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (_url, options) => {
+        if (options?.method === "POST")
+          return Response.json({
+            accepted: outbox.changes.length,
+            lastServerSeq: outbox.cursor,
+          });
+        return new Promise((_resolve, reject) => {
+          options!.signal!.addEventListener(
+            "abort",
+            () => reject(new Error("aborted")),
+            { once: true },
+          );
+        });
+      });
+    const sync = client(db, fetcher);
+    const pending = expect(sync.syncNow()).rejects.toThrow("超时");
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+    const [url, options] = fetcher.mock.calls[0];
+    expect(String(url)).toContain("/changes");
+    expect(options?.method).toBe("POST");
+    expect(
+      (JSON.parse(String(options?.body)) as { changes: unknown[] }).changes,
+    ).toHaveLength(outbox.changes.length);
+    expect(String(fetcher.mock.calls[1][0])).toContain("after=0&limit=50");
+    expect(cursor(db)).toEqual({
+      pushed_cursor: outbox.cursor,
+      pulled_cursor: 0,
+    });
+    await vi.advanceTimersByTimeAsync(20_000);
+    await pending;
+    expect(cursor(db)).toEqual({
+      pushed_cursor: outbox.cursor,
+      pulled_cursor: 0,
+    });
+    expect(sync.status().error).toContain("超时");
+  },
+);
+
+it.each([false, true])(
   "bounds streamed responses at 48 MiB (oversized: %s)",
   async (oversized) => {
     const db = open();

@@ -334,9 +334,10 @@ export class SyncClient {
     for (;;) {
       if (this.controller.signal.aborted)
         throw new DomainError("SYNC_ERROR", "同步已取消。", false);
+      const pushed = await this.push(config, keys, deviceId, url);
       const parsed = downloadSchema.safeParse(
         await this.request(
-          url + `?after=${Math.max(0, config.pulled_cursor - 1)}&limit=500`,
+          url + `?after=${Math.max(0, config.pulled_cursor - 1)}&limit=50`,
           keys.authKey,
         ),
       );
@@ -400,7 +401,6 @@ export class SyncClient {
       config.pulled_device_id = last?.deviceId ?? null;
       config.pulled_client_seq = last?.clientSeq ?? null;
       if (result.applied) this.notify();
-      const pushed = await this.push(config, keys, deviceId, url);
       if (
         !pushed &&
         !page.changes.length &&
