@@ -23,6 +23,7 @@ import type {
   WorkerRequest,
 } from "../shared/worker-protocol";
 import { StoreClient } from "./worker-client";
+import { SCHEMA_VERSION } from "../worker/migrations";
 
 /* ------------------------------------------------------------------ 工具 */
 
@@ -1734,9 +1735,9 @@ async function recoveryAndVersionGuards(dir: string): Promise<void> {
     const state = await snapshot(secondRun);
     assert.equal(state.unfinished.length, 1);
     assert.equal(state.unfinished[0].id, created);
-    assert.equal(secondRun.schemaVersion, 2);
+    assert.equal(secondRun.schemaVersion, SCHEMA_VERSION);
     assert.equal(secondRun.backupPath, null);
-    assert.equal((await readFile(stable)).readUInt32BE(60), 2);
+    assert.equal((await readFile(stable)).readUInt32BE(60), SCHEMA_VERSION);
   } finally {
     await secondRun.close();
   }

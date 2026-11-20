@@ -45,6 +45,7 @@ import {
 } from "../shared/contracts";
 import type { WorkerFaultStage } from "../shared/worker-protocol";
 import { DomainError } from "./errors";
+import { recordLocalChanges } from "./sync";
 import {
   bumpRevision,
   insertTransition,
@@ -167,7 +168,7 @@ function touchTask(
   update: TaskUpdate,
   now: number,
 ): void {
-  const columns: [string, unknown][] = [["updated_at", now]];
+  const columns: [string, unknown][] = [];
   if (update.title !== undefined) columns.push(["title", update.title]);
   if (update.note !== undefined) columns.push(["note", update.note]);
   if (update.status !== undefined) columns.push(["status", update.status]);
@@ -182,9 +183,13 @@ function touchTask(
   if (update.statusRevision !== undefined)
     columns.push(["status_revision", update.statusRevision]);
   if (update.endedAt !== undefined) columns.push(["ended_at", update.endedAt]);
-  const assignments = columns.map(([column]) => `${column} = ?`);
+  const assignments = [
+    "updated_at = max(updated_at, ?)",
+    ...columns.map(([column]) => `${column} = ?`),
+  ];
   assignments.push("version = version + 1");
   db.prepare(`UPDATE tasks SET ${assignments.join(", ")} WHERE id = ?`).run(
+    now,
     ...columns.map(([, value]) => value),
     taskId,
   );
@@ -248,7 +253,7 @@ export function createCommands(
         `SELECT id, title, note, status, wait_reason, check_back_at, created_at, updated_at,
                 status_changed_at, status_revision, ended_at, version,
                 (SELECT count(*) FROM breakpoints b WHERE b.task_id = t.id) AS breakpoint_count,
-                (SELECT b.seq FROM breakpoints b WHERE b.task_id = t.id ORDER BY b.seq DESC LIMIT 1)
+                (SELECT b.seq FROM breakpoints b WHERE b.task_id = t.id ORDER BY b.hlc DESC, b.id DESC LIMIT 1)
                   AS latest_breakpoint_seq
          FROM tasks t WHERE t.status = 'doing' LIMIT 1`,
       )
@@ -296,6 +301,7 @@ export function createCommands(
     now: number,
     revision: number,
   ): void {
+    recordLocalChanges(db, now);
     db.prepare(
       `INSERT INTO command_receipts(command_id, command_type, payload_hash, result_json, committed_at, revision)
        VALUES(?, ?, ?, ?, ?, ?)`,

@@ -15,7 +15,7 @@
 
 本文件用于工程初始化、模块开发和测试设计。PRD 决定产品规则；本文件决定实现边界。若原型行为与 PRD 不一致，以 PRD 为准。Windows 11 x64、小范围试用、手动更新是本稿采用的工程默认值，并非用户已逐项确认的产品承诺。框架相关官方资料见第 19 节。
 
-实际实现范围、锁定版本和验证结果分别见 [ENGINEERING.md](ENGINEERING.md)、[VALIDATION.md](VALIDATION.md) 与 [ACCEPTANCE-TRACKING.md](ACCEPTANCE-TRACKING.md)。P1/P2（同步、搜索、手机、AI、导出）仍不在本版。
+实际实现范围、锁定版本和验证结果分别见 [ENGINEERING.md](ENGINEERING.md)、[VALIDATION.md](VALIDATION.md) 与 [ACCEPTANCE-TRACKING.md](ACCEPTANCE-TRACKING.md)。联网同步、搜索、AI、用户导出尚未交付；移动宿主及离线合并基础的增量见工程说明与 21.14 节。
 
 ## 目录
 
@@ -167,7 +167,7 @@ Task 使用 UUID 标识；允许同名标题。内部状态为 todo、doing、pa
 | updateTask / saveBreakpoint | 编辑 / 显式保存断点 | 不改变状态；空断点不覆盖历史 |
 | setNextUp | 指定未结束任务或清空 | 只修改全局可选引用，不开始任务 |
 
-当前任务始终查询 status = doing，不保存另一份 current_task_id。最新断点按断点序号选取；原始进展、下一步和参考内容分别保存。单句输入映射到 next_step，进展和参考为可选字段。
+当前任务始终查询 status = doing，不保存另一份 current_task_id。schema 3 起最新断点按 HLC、UUID 选取，避免远端旧记录晚到覆盖新断点；原始进展、下一步和参考内容分别保存。单句输入映射到 next_step，进展和参考为可选字段。
 
 恢复默认推荐最近进入 paused 的任务，按 status_changed_at DESC、status_revision DESC、id ASC 稳定排序。waiting 不参与默认推荐；设置了回看时间的 waiting 到点后在恢复区域显示为“到点回看”，只提示不改变状态、不自动开始；“暂不开始”关闭本次恢复提示，不改变状态，不自动弹回。完成非当前任务只刷新列表，不触发强制恢复区域。
 
@@ -652,7 +652,7 @@ main 和 worker 通过 shared 契约通信，不互相导入执行入口；rende
 
 ### 21.5 状态历史与回执的查询顺序
 
-`getTaskDetail` 的断点历史与状态历史均按 `seq DESC`（最新在前）分页；列表排序使用统一表达式（见 IPC 契约 5.4 节）。`getCommandResult(commandId)` 是“结果不确定”时确认已提交命令的唯一入口。
+schema 3 起 `getTaskDetail` 的断点历史与状态历史均按 `hlc DESC, id DESC`（最新在前）分页，seq 仍是本地记录定位符；列表排序使用统一表达式（见 IPC 契约 5.4 节）。`getCommandResult(commandId)` 是“结果不确定”时确认已提交命令的唯一入口。
 
 ### 21.6 故障注入仅用于集成测试
 
@@ -685,3 +685,9 @@ worker 在 ready 之前退出（连接报错、正常关闭、无 `fatal`/`error
 ### 21.13 集成覆盖补充
 
 集成场景新增“命令 × 六种状态”的命令来源行为、收尾当前任务变化（先暂停/完成/标记等待/切换当前任务）、收尾查询日期边界与非 24 小时区间、worker 生命周期（启动退出、初始化失败、就绪后退出、正常关闭）四组验证。日期与时区测试只在隔离测试进程内设置 `TZ`，不修改操作系统时区；跨日夹具全部由合法命令构造，不使用吞掉失败的断言。
+
+### 21.14 离线同步元数据与合并（PR6）
+
+schema 3 为设备创建持久 UUID，为任务内容/状态分别保存 HLC，为断点/历史回填全局 UUID，并增加本地追加式 sync_changes。普通命令的变更与回执在同一业务事务提交，draft/preferences/receipts 不导出。HLC、验证和合并均为 worker 下的可移植 TypeScript，可运行于两个 SQLite 驱动，不增加网络或服务器。
+
+`applyRemoteChanges` 原子接收变更 ID 去重、独立内容/状态 LWW、断点/历史并集与 next-up LWW；缺失父记录的事件保留待物化。每次合并及本地命令提交后，由 `materializeTasks` 从原始寄存器派生单 doing：开始按 HLC、任务 ID 排序，被其他任务后续开始抑制的 doing 显示 paused，时间为第一个 displacer 的 HLC.wallMs；不生成状态事件或合成历史，历史仅含真实用户转换的追加并集。本地时钟 receive 所有已观察开始，明确 start/switch 超过它们；胜者结束不会自动恢复旧任务，自己的后续真实状态转换按 LWW 生效。next-up 选择后的结束/等待事件使该选择永久失效，reopen 不复活它；比结束更新的选择仅在父记录/reopen 缺失时暂时隐藏，补齐可恢复。最终交换全部原始事件后收敛，无需交换额外修复事件。上传使用本地追加序号游标，不用 HLC 水位，避免漏掉晚到事件。没有硬删除或 tombstone，也不迁移本地 version/revision 的并发控制语义。API 与具体边界见 [工程说明](ENGINEERING.md#离线同步基础pr6)。
