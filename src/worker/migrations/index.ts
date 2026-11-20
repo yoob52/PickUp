@@ -1,4 +1,5 @@
 import initial from "./001.sql?raw";
+import waitingCheckBack from "./002.sql?raw";
 
 /**
  * 按序迁移列表：版本号 = 数组下标 + 1，与 PRAGMA user_version 对应。
@@ -6,6 +7,7 @@ import initial from "./001.sql?raw";
  */
 export const MIGRATIONS: readonly { version: number; sql: string }[] = [
   { version: 1, sql: initial },
+  { version: 2, sql: waitingCheckBack },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

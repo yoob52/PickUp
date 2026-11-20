@@ -285,6 +285,8 @@ export function MainApp() {
           onContinue={(task) => void startTask(task)}
           onChooseOther={() => focusBoard("paused")}
           onDefer={() => setResumeHighlight(false)}
+          onReschedule={(task) => setOverlay({ type: "wait", task })}
+          onShowWaiting={() => focusBoard("waiting")}
           onPickNext={() => setReviewOpen(true)}
           onChangeNext={() => setReviewOpen(true)}
         />

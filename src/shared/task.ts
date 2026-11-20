@@ -1,4 +1,4 @@
-import type { WorkspaceSnapshot } from "./contracts";
+import type { TaskSummary, WorkspaceSnapshot } from "./contracts";
 
 /** 任务状态；界面中文名称与 PRD 7.2 对应。 */
 export type TaskStatus =
@@ -59,6 +59,39 @@ export function isStartableStatus(status: TaskStatus): boolean {
 
 export function canTransition(from: TaskStatus, to: TaskStatus): boolean {
   return TASK_TRANSITIONS[from].includes(to);
+}
+
+/** 已到回看时间的等待事项，按回看时间从早到晚、id 升序。 */
+export function dueCheckBacks(
+  tasks: readonly TaskSummary[],
+  now: number,
+): TaskSummary[] {
+  return tasks
+    .filter(
+      (task) =>
+        task.status === "waiting" &&
+        task.checkBackAt !== null &&
+        task.checkBackAt <= now,
+    )
+    .sort(
+      (a, b) =>
+        (a.checkBackAt ?? 0) - (b.checkBackAt ?? 0) ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    );
+}
+
+/** 下一个尚未到达的回看时间；没有则为 null。 */
+export function nextCheckBackAt(
+  tasks: readonly TaskSummary[],
+  now: number,
+): number | null {
+  let next: number | null = null;
+  for (const task of tasks) {
+    if (task.status !== "waiting" || task.checkBackAt === null) continue;
+    if (task.checkBackAt <= now) continue;
+    if (next === null || task.checkBackAt < next) next = task.checkBackAt;
+  }
+  return next;
 }
 
 export type StatusCounts = Record<TaskStatus, number> & {

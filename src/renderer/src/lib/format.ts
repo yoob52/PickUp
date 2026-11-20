@@ -19,6 +19,20 @@ export function formatDateTime(ms: number): string {
   return `${formatDay(ms)} ${formatClock(ms)}`;
 }
 
+/** 本地时间的 datetime-local 输入值（YYYY-MM-DDTHH:mm）。 */
+export function toDateTimeInput(ms: number): string {
+  const date = new Date(ms);
+  const pad = (value: number) => value.toString().padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** datetime-local 输入值按设备本地时间解释；空或无效返回 null。 */
+export function fromDateTimeInput(value: string): number | null {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
 export function formatStamp(ms: number): string {
   return new Intl.DateTimeFormat("zh-CN", {
     year: "numeric",

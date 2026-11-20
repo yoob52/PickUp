@@ -125,7 +125,7 @@ type Result<T> =
 | `startTask` | `pickup:startTask` | `commandId, task{taskId, expectedVersion}` | `startTask` | 是 |
 | `switchTask` | `pickup:switchTask` | `commandId, from, to, breakpoint?` | `switchTask` | 是 |
 | `pauseTask` | `pickup:pauseTask` | `commandId, task, breakpoint?` | `pauseTask` | 是 |
-| `markWaiting` | `pickup:markWaiting` | `commandId, task, reason` | `markWaiting` | 是 |
+| `markWaiting` | `pickup:markWaiting` | `commandId, task, reason, checkBackAt?` | `markWaiting` | 是 |
 | `resolveWaiting` | `pickup:resolveWaiting` | `commandId, task` | `resolveWaiting` | 是 |
 | `completeTask` | `pickup:completeTask` | `commandId, task` | `completeTask` | 是 |
 | `cancelTask` | `pickup:cancelTask` | `commandId, task` | `cancelTask` | 是 |
@@ -218,8 +218,9 @@ const result = await window.pickup.switchTask({
 
 ### 4.6 markWaiting / resolveWaiting
 
-- `markWaiting`：`todo`/`doing`/`paused`/`waiting` 均可标记等待；`reason` 选填。原本是当前任务时，状态变化自然释放当前位。
-- 已处于 `waiting` 时再次标记：`reason` 相同返回 `reasonUpdated: false` 且不递增 `revision`；不同则更新等待原因（只递增任务 `version`，不改变 `status_changed_at`/`status_revision`）。
+- `markWaiting`：`todo`/`doing`/`paused`/`waiting` 均可标记等待；`reason` 选填；`checkBackAt`（何时回看，UTC 毫秒正整数或 `null`，默认 `null`）选填。原本是当前任务时，状态变化自然释放当前位。命中的下次开工引用在同一事务内清除，返回 `nextUpCleared`。
+- 已处于 `waiting` 时再次标记：`reason` 与 `checkBackAt` 都相同返回 `updated: false` 且不递增 `revision`；否则更新等待原因与回看时间（只递增任务 `version`，不改变 `status_changed_at`/`status_revision`）。
+- 任务离开 `waiting` 时 `checkBackAt` 清为 `null`；数据库约束保证非等待任务没有回看时间。
 - `resolveWaiting`：**仅接受 `waiting`** 作为来源状态 → `todo`，保留断点与等待原因。需要立即继续时由 renderer 再调用 `startTask`；若此时已有其他当前任务会得到 `NEED_SWITCH`。
 - 其他来源状态（`todo`/`doing`/`paused`/`done`/`cancelled`）在**领域校验阶段**返回 `STATE_CONFLICT`：不依赖数据库 `CHECK` 约束报错，也不会把 `done`/`cancelled` 误当作“重新打开”。
 
@@ -238,7 +239,7 @@ const result = await window.pickup.switchTask({
 
 ### 4.9 setNextUp
 
-- `taskId: null` 表示清空；`expectedNextUpVersion` 必须与当前 `nextUpVersion` 一致，否则 `STATE_CONFLICT`。
+- `taskId: null` 表示清空；目标为 `waiting` 或已结束任务时返回 `STATE_CONFLICT`；`expectedNextUpVersion` 必须与当前 `nextUpVersion` 一致，否则 `STATE_CONFLICT`。
 - 目标必须是未结束任务；已结束返回 `STATE_CONFLICT`。
 - 只保存全局引用，**不开始**任务；与当前一致时返回 `changed: false` 且不递增版本。
 
@@ -282,7 +283,7 @@ const result = await window.pickup.switchTask({
 | `currentTask` | `status = 'doing'` 的任务；没有则为 `null`（不保留“上一次当前任务”） |
 | `counts` | 六种状态计数 + `unfinished`（todo+doing+paused+waiting） |
 | `unfinished` | 全部未结束任务，按第 5.4 节排序规则稳定排列（不含断点正文，只含最新断点摘要） |
-| `resume` | 最近进入 `paused` 的任务及其暂停时间；`waiting` 不参与默认推荐 |
+| `resume` | 最近进入 `paused` 的任务及其暂停时间；`waiting` 不参与默认推荐。到达 `checkBackAt` 的等待任务由 renderer 依据 `unfinished` 与本地时钟在恢复区域单独呈现为“到点回看”，不自动开始 |
 | `nextUp` / `nextUpVersion` | 下次开工引用；引用已失效（指向已结束任务）时返回 `null`，不做隐式修复 |
 
 已结束明细请用 `listTasks` 分页查询，避免快照携带全部历史。

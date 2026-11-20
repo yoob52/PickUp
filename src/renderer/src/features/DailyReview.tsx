@@ -15,7 +15,7 @@ import {
   optionalBreakpoint,
   taskRef,
 } from "../lib/command";
-import { nextStepText } from "../lib/format";
+import { formatDateTime, nextStepText } from "../lib/format";
 import { Button, Field, StatusDot } from "../ui/primitives";
 import { Modal } from "../ui/Modal";
 
@@ -229,7 +229,7 @@ export function DailyReviewDialog({
   return (
     <Modal eyebrow="今日收尾" title="把今天收好。" onClose={onClose}>
       <p className="helper" style={{ marginTop: 0 }}>
-        未结束的事情都会留在这里。选一件作为下一次开工的第一件事，选择本身不会开始任务。
+        未结束的事情都会留在这里。选一件作为下一次开工的第一件事，选择本身不会开始任务；等待中的事项需先转为待处理。
       </p>
       {error ? (
         <p className="field-error" role="alert">
@@ -365,10 +365,17 @@ function ReviewRow({
         </div>
         <div className="endday-sub">
           {TASK_STATUS_LABEL[task.status]}
-          {nextStepText(task) ? ` / ${nextStepText(task)}` : ""}
+          {task.checkBackAt !== null
+            ? ` / ${formatDateTime(task.checkBackAt)} 回看`
+            : nextStepText(task)
+              ? ` / ${nextStepText(task)}`
+              : ""}
         </div>
       </button>
-      {onChoose && task.status !== "done" && task.status !== "cancelled" ? (
+      {onChoose &&
+      task.status !== "done" &&
+      task.status !== "cancelled" &&
+      task.status !== "waiting" ? (
         <button type="button" className="choose-button" onClick={onChoose}>
           {selected ? "已选择" : "选为第一件事"}
         </button>

@@ -121,9 +121,11 @@ export const markWaitingSchema = z
     commandId: commandIdSchema,
     task: taskRefSchema,
     reason: textField(WAIT_REASON_MAX_LENGTH).default(""),
+    /** 何时回看（UTC 毫秒）；到时间后任务回到恢复区域，null 表示不设。 */
+    checkBackAt: z.number().int().positive().nullable().default(null),
   })
   .strict();
-export type MarkWaitingInput = z.infer<typeof markWaitingSchema>;
+export type MarkWaitingInput = z.input<typeof markWaitingSchema>;
 
 export const resolveWaitingSchema = z
   .object({ commandId: commandIdSchema, task: taskRefSchema })
@@ -320,6 +322,8 @@ export type TaskSummary = {
   note: string;
   status: TaskStatus;
   waitReason: string;
+  /** 等待中任务的回看时间；其他状态恒为 null。 */
+  checkBackAt: number | null;
   createdAt: number;
   updatedAt: number;
   statusChangedAt: number;
@@ -353,7 +357,7 @@ export type WorkspaceSnapshot = {
   counts: StatusCounts;
   /** 全部未结束任务，按状态排序规则稳定排列；已结束列表使用 listTasks 分页查询。 */
   unfinished: TaskSummary[];
-  /** 最近进入 paused 的任务；waiting 不参与默认推荐。 */
+  /** 最近进入 paused 的任务；waiting 不参与默认推荐（到点回看由 checkBackAt 单独呈现）。 */
   resume: ResumeSuggestion | null;
   nextUp: NextUpRef | null;
   nextUpVersion: number;
@@ -413,7 +417,10 @@ export type PauseTaskValue = {
 export type MarkWaitingValue = {
   type: "markWaiting";
   taskId: string;
-  reasonUpdated: boolean;
+  /** 等待原因或回看时间是否有变化。 */
+  updated: boolean;
+  /** 是否清除了命中的下次开工引用：等待中的事项不作为下次开工第一件事。 */
+  nextUpCleared: boolean;
 };
 export type ResolveWaitingValue = { type: "resolveWaiting"; taskId: string };
 export type CompleteTaskValue = {

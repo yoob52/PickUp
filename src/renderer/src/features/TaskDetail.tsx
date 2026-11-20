@@ -491,6 +491,14 @@ export function TaskDetailDialog({
                 <p className="detail-copy">{task.waitReason}</p>
               </div>
             ) : null}
+            {task?.checkBackAt != null ? (
+              <div className="detail-section">
+                <h4>何时回看</h4>
+                <p className="detail-copy">
+                  {formatDateTime(task.checkBackAt)}
+                </p>
+              </div>
+            ) : null}
             <div className="detail-actions">
               {unfinished ? (
                 <>

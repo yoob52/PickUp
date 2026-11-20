@@ -6,13 +6,16 @@ import {
   TASK_TRANSITIONS,
   UNFINISHED_STATUSES,
   canTransition,
+  dueCheckBacks,
   emptyCounts,
   emptyWorkspaceSnapshot,
   isEndedStatus,
   isStartableStatus,
   isUnfinishedStatus,
+  nextCheckBackAt,
   type TaskStatus,
 } from "../src/shared/task";
+import type { TaskSummary } from "../src/shared/contracts";
 
 describe("状态定义", () => {
   it("覆盖 PRD 的六种状态且都有中文名称", () => {
@@ -106,5 +109,55 @@ describe("空快照", () => {
     const first = emptyWorkspaceSnapshot();
     first.counts.todo = 5;
     expect(emptyWorkspaceSnapshot().counts.todo).toBe(0);
+  });
+});
+
+describe("何时回看", () => {
+  function summary(
+    id: string,
+    status: TaskStatus,
+    checkBackAt: number | null,
+  ): TaskSummary {
+    return {
+      id,
+      title: id,
+      note: "",
+      status,
+      waitReason: "",
+      checkBackAt,
+      createdAt: 1,
+      updatedAt: 1,
+      statusChangedAt: 1,
+      statusRevision: 1,
+      endedAt: null,
+      version: 1,
+      breakpointCount: 0,
+      latestBreakpoint: null,
+    };
+  }
+
+  const tasks = [
+    summary("b", "waiting", 100),
+    summary("later", "waiting", 300),
+    summary("a", "waiting", 100),
+    summary("early", "waiting", 50),
+    summary("none", "waiting", null),
+    summary("todo", "todo", null),
+  ];
+
+  it("只返回已到时间的等待事项，按回看时间与 id 稳定排序", () => {
+    expect(dueCheckBacks(tasks, 99).map((task) => task.id)).toEqual(["early"]);
+    expect(dueCheckBacks(tasks, 100).map((task) => task.id)).toEqual([
+      "early",
+      "a",
+      "b",
+    ]);
+    expect(dueCheckBacks(tasks, 49)).toEqual([]);
+  });
+
+  it("给出下一个尚未到达的回看时间", () => {
+    expect(nextCheckBackAt(tasks, 0)).toBe(50);
+    expect(nextCheckBackAt(tasks, 100)).toBe(300);
+    expect(nextCheckBackAt(tasks, 300)).toBeNull();
   });
 });

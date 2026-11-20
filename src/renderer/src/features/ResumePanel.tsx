@@ -1,5 +1,6 @@
-import { ArrowUpRight, Play } from "lucide-react";
+import { AlarmClock, ArrowUpRight, Play } from "lucide-react";
 import type { TaskSummary, WorkspaceSnapshot } from "../../../shared/contracts";
+import { useDueCheckBacks } from "../lib/check-back";
 import { formatDateTime, nextStepText } from "../lib/format";
 import { Button } from "../ui/primitives";
 import { EmptyState } from "../ui/primitives";
@@ -10,6 +11,8 @@ type Props = {
   onContinue: (task: TaskSummary) => void;
   onChooseOther: () => void;
   onDefer: () => void;
+  onReschedule: (task: TaskSummary) => void;
+  onShowWaiting: () => void;
   onPickNext: () => void;
   onChangeNext: () => void;
 };
@@ -20,11 +23,15 @@ export function ResumePanel({
   onContinue,
   onChooseOther,
   onDefer,
+  onReschedule,
+  onShowWaiting,
   onPickNext,
   onChangeNext,
 }: Props) {
   const resume = snapshot.resume;
   const todo = snapshot.unfinished.find((task) => task.status === "todo");
+  const due = useDueCheckBacks(snapshot.unfinished);
+  const checkBack = due[0];
 
   return (
     <article className="recovery-panel">
@@ -35,6 +42,45 @@ export function ResumePanel({
         </div>
       </div>
       <div className="recovery-body">
+        {checkBack ? (
+          <div
+            className="recommend-card check-back-card"
+            aria-label="到点回看"
+            role="group"
+          >
+            <div className="recommend-label">
+              <AlarmClock size={12} aria-hidden="true" />
+              到点回看
+            </div>
+            <div className="recommend-title" title={checkBack.title}>
+              {checkBack.title}
+            </div>
+            <div className="recommend-note">
+              {checkBack.waitReason
+                ? `在等：${checkBack.waitReason}`
+                : "等待的条件可能已经满足，看一眼再决定。"}
+            </div>
+            <div className="recommend-meta">
+              约定 {formatDateTime(checkBack.checkBackAt ?? 0)} 回看
+            </div>
+            <div className="recommend-actions">
+              <Button
+                icon={<ArrowUpRight size={14} />}
+                onClick={() => onContinue(checkBack)}
+              >
+                继续这件事
+              </Button>
+              <Button kind="secondary" onClick={() => onReschedule(checkBack)}>
+                稍后再看
+              </Button>
+              {due.length > 1 ? (
+                <Button kind="ghost" onClick={onShowWaiting}>
+                  还有 {due.length - 1} 件到点
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
         {resume ? (
           <div>
             <p className="recovery-intro">
@@ -91,7 +137,8 @@ export function ResumePanel({
               </div>
             </div>
           </div>
-        ) : snapshot.counts.doing || snapshot.counts.waiting ? (
+        ) : checkBack && !snapshot.counts.doing ? null : snapshot.counts
+            .doing || snapshot.counts.waiting ? (
           <EmptyState>
             {snapshot.counts.doing
               ? "当前任务还在进行中。等待中的事项不会自动开始。"

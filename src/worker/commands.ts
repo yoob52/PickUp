@@ -153,6 +153,7 @@ type TaskUpdate = {
   note?: string;
   status?: "todo" | "doing" | "paused" | "waiting" | "done" | "cancelled";
   waitReason?: string;
+  checkBackAt?: number | null;
   statusChangedAt?: number;
   statusRevision?: number;
   endedAt?: number | null;
@@ -171,6 +172,10 @@ function touchTask(
   if (update.status !== undefined) columns.push(["status", update.status]);
   if (update.waitReason !== undefined)
     columns.push(["wait_reason", update.waitReason]);
+  if (update.checkBackAt !== undefined)
+    columns.push(["check_back_at", update.checkBackAt]);
+  else if (update.status !== undefined && update.status !== "waiting")
+    columns.push(["check_back_at", null]);
   if (update.statusChangedAt !== undefined)
     columns.push(["status_changed_at", update.statusChangedAt]);
   if (update.statusRevision !== undefined)
@@ -241,7 +246,7 @@ export function createCommands(
   function findCurrentTask(): TaskRow | undefined {
     return db
       .prepare(
-        `SELECT id, title, note, status, wait_reason, created_at, updated_at,
+        `SELECT id, title, note, status, wait_reason, check_back_at, created_at, updated_at,
                 status_changed_at, status_revision, ended_at, version,
                 (SELECT count(*) FROM breakpoints b WHERE b.task_id = t.id) AS breakpoint_count,
                 (SELECT b.seq FROM breakpoints b WHERE b.task_id = t.id ORDER BY b.seq DESC LIMIT 1)
@@ -566,10 +571,12 @@ export function createCommands(
       const input = parseInput(markWaitingSchema, raw);
       const type: CommandType = "markWaiting";
       const reason = input.reason.trim();
+      const checkBackAt = input.checkBackAt;
       const hash = payloadHash(type, [
         input.task.taskId,
         input.task.expectedVersion,
         reason,
+        checkBackAt,
       ]);
       const prior = findReceipt<MarkWaitingValue>(input.commandId, type, hash);
       if (prior) return prior;
@@ -577,20 +584,21 @@ export function createCommands(
       const task = requireTask(input.task.taskId);
       requireVersion(task, input.task.expectedVersion);
       if (task.status === "waiting") {
-        if (reason === task.wait_reason)
+        if (reason === task.wait_reason && checkBackAt === task.check_back_at)
           return commitNoop(
             input.commandId,
             type,
             hash,
-            { type, taskId: task.id, reasonUpdated: false },
+            { type, taskId: task.id, updated: false, nextUpCleared: false },
             now,
           );
         const revision = bumpRevision(db);
-        touchTask(db, task.id, { waitReason: reason }, now);
+        touchTask(db, task.id, { waitReason: reason, checkBackAt }, now);
         const value: MarkWaitingValue = {
           type,
           taskId: task.id,
-          reasonUpdated: true,
+          updated: true,
+          nextUpCleared: false,
         };
         writeReceipt(input.commandId, type, hash, value, now, revision);
         return { value, revision };
@@ -607,6 +615,7 @@ export function createCommands(
         {
           status: "waiting",
           waitReason: reason,
+          checkBackAt,
           statusChangedAt: now,
           statusRevision: revision,
         },
@@ -616,7 +625,8 @@ export function createCommands(
       const value: MarkWaitingValue = {
         type,
         taskId: task.id,
-        reasonUpdated: true,
+        updated: true,
+        nextUpCleared: clearNextUpFor(task.id),
       };
       writeReceipt(input.commandId, type, hash, value, now, revision);
       return { value, revision };
@@ -837,6 +847,10 @@ export function createCommands(
       if (isEndedStatus(task.status))
         throw DomainError.stateConflict(
           "已结束的事项不能作为下次开工的第一件事。",
+        );
+      if (task.status === "waiting")
+        throw DomainError.stateConflict(
+          "等待中的事项不能作为下次开工的第一件事，请先转为待处理。",
         );
       if (state.next_up_task_id === task.id)
         return commitNoop(
