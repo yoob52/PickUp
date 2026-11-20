@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from "node:crypto";
+import { sha256 } from "@noble/hashes/sha256";
+import { bytesToHex } from "@noble/hashes/utils";
 import type { ZodType } from "zod";
 import {
   DEFAULT_PREFERENCES,
@@ -215,9 +216,7 @@ export function createCommands(
   }
 
   function payloadHash(type: CommandType, fields: unknown[]): string {
-    return createHash("sha256")
-      .update(JSON.stringify([type, ...fields]))
-      .digest("hex");
+    return bytesToHex(sha256(JSON.stringify([type, ...fields])));
   }
 
   function requireTask(taskId: string): TaskRow {
@@ -338,7 +337,7 @@ export function createCommands(
       const prior = findReceipt<CreateTaskValue>(input.commandId, type, hash);
       if (prior) return prior;
       const now = Date.now();
-      const taskId = randomUUID();
+      const taskId = globalThis.crypto.randomUUID();
       const revision = bumpRevision(db);
       db.prepare(
         `INSERT INTO tasks(id, title, note, status, created_at, updated_at, status_changed_at, status_revision)

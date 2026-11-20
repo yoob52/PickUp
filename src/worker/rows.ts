@@ -1,8 +1,8 @@
-import type Database from "better-sqlite3";
+import type { SqliteDatabase } from "./sqlite";
 import type { BreakpointSummary, TaskSummary } from "../shared/contracts";
 import type { TaskStatus } from "../shared/task";
 
-export type SqliteDatabase = Database.Database;
+export type { SqliteDatabase } from "./sqlite";
 
 export type TaskRow = {
   id: string;
