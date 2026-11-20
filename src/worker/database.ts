@@ -7,11 +7,12 @@ import {
   BackendUnavailableError,
   IntegrityError,
   MigrationFailedError,
-  SchemaTooNewError,
 } from "./errors";
-import { MIGRATIONS, SCHEMA_VERSION } from "./migrations";
+import { SCHEMA_VERSION } from "./migrations";
+import { migrateSchema, migrationSource, schemaVersion } from "./migrate";
 import { createQueries } from "./queries";
-import type { SqliteDatabase } from "./rows";
+
+type SqliteDatabase = Database.Database;
 
 const BACKUP_DIRECTORY = "backups";
 const BACKUP_PREFIX = "pickup-pre-upgrade-";
@@ -23,21 +24,6 @@ function applyPragmas(db: SqliteDatabase): void {
   db.pragma("journal_mode = DELETE");
   db.pragma("synchronous = EXTRA");
   db.pragma("busy_timeout = 1000");
-}
-
-function schemaVersion(db: SqliteDatabase): number {
-  return db.pragma("user_version", { simple: true }) as number;
-}
-
-function tableCount(db: SqliteDatabase): number {
-  return (
-    db
-      .prepare(
-        `SELECT count(*) AS total FROM sqlite_master
-         WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`,
-      )
-      .get() as { total: number }
-  ).total;
 }
 
 function rotateBackups(directory: string): void {
@@ -92,25 +78,14 @@ function createUpgradeBackup(
 }
 
 function migrate(db: SqliteDatabase, dbPath: string): string | null {
-  const from = schemaVersion(db);
+  const from = migrationSource(db);
   if (from === SCHEMA_VERSION) return null;
-  if (from > SCHEMA_VERSION) throw new SchemaTooNewError(from, SCHEMA_VERSION);
-  if (from < 0) throw new IntegrityError("数据库 schema 版本号异常。");
   let backupPath: string | null = null;
-  if (from === 0) {
-    if (tableCount(db) > 0)
-      throw new IntegrityError(
-        "数据库缺少版本信息但已存在数据表，已停止初始化以避免覆盖现有文件。",
-      );
-  } else {
+  if (from !== 0) {
     backupPath = createUpgradeBackup(db, dbPath, from);
   }
-  const pending = MIGRATIONS.filter((migration) => migration.version > from);
   try {
-    db.transaction(() => {
-      for (const migration of pending) db.exec(migration.sql);
-      db.pragma(`user_version = ${SCHEMA_VERSION}`);
-    })();
+    migrateSchema(db);
   } catch (error) {
     throw new MigrationFailedError(
       "数据库升级失败，事务已回滚，原数据库与保护副本均保留。",

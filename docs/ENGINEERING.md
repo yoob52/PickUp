@@ -11,6 +11,8 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
 | 直接依赖 | 精确版本 |
 | --- | --- |
 | `better-sqlite3` | `12.11.1` |
+| `@noble/hashes` | `1.8.0` |
+| `@sqlite.org/sqlite-wasm` | `3.50.4-build1` |
 | `lucide-react` | `1.43.0` |
 | `react` | `19.3.0` |
 | `react-dom` | `19.3.0` |
@@ -33,7 +35,7 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
 | `vite` | `7.3.6` |
 | `vitest` | `4.1.11` |
 
-全部直接依赖使用精确版本；传递依赖由 package-lock.json 固定。`.npmrc` 设置 save-exact 和 npm 官方 registry。正式验证使用 `npm ci`，不采用 `--legacy-peer-deps` 或强行忽略相容性。本轮后端实现未新增任何依赖：命令、查询、校验和测试都复用已锁定的 better-sqlite3、zod、Vitest 与 Playwright。
+全部直接依赖使用精确版本；传递依赖由 package-lock.json 固定。`.npmrc` 设置 save-exact 和 npm 官方 registry。正式验证使用 `npm ci`，不采用 `--legacy-peer-deps` 或强行忽略相容性。驱动可移植层使用 `@noble/hashes` 同步计算兼容既有回执的 SHA-256，使用官方 `@sqlite.org/sqlite-wasm` 验证相同命令与查询；尚未接入移动宿主或 OPFS。
 
 选取依据：electron-vite 5 的 peer 范围支持 Vite 7，故搭配 Vite 7.3.6 与 React 插件 5.2.0；TypeScript 5.9.3 和 Vitest 4.1.11 已通过实际类型/测试构建。Electron 42.11.3 与 better-sqlite3 12.11.1 有匹配 Windows x64 / ABI 146 预编译文件。更高版本尝试缺少对应预编译文件，触发本机未安装的 C++ 编译工具链，因此没有锁定该组合。当前选择是已验证组合，不宣称所有包均为最新版本。
 
@@ -52,8 +54,10 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
   - `commands.ts`：全部写命令的领域规则、回执幂等、版本校验与同步事务。
   - `queries.ts`：工作区快照、分页列表、详情、收尾查询、回执查询。
   - `rows.ts`：行映射、排序 SQL、revision 与状态历史辅助。
+  - `sqlite.ts`、`sqlite-wasm-driver.ts`：最小同步驱动契约与 oo1 适配器；整数读取与 better-sqlite3 默认模式一致（number，大整数可能损失精度）。
+  - `migrate.ts`：无 Node 依赖的版本守卫与事务迁移；桌面升级前备份仍由 `database.ts` 负责。
   - `errors.ts`：领域错误、schema/迁移/一致性/连接错误与启动诊断文案。
-  - `migrations/`：`001.sql` 初始结构 + `index.ts` 顺序迁移清单（当前 schema 版本 1）。
+  - `migrations/`：`001.sql` 初始结构、`002.sql` 等待回看字段 + `index.ts` 顺序迁移清单（当前 schema 版本 2）。
 - `src/main/`
   - `index.ts`：单实例、生命周期、资源协议、桌面宿主与 worker 装配。
   - `desktop.ts`：主窗口/唯一 capture/widget、托盘、全局快捷键、登录项、关闭隐藏、完全退出与草稿 flush。
@@ -77,7 +81,7 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
 | `npm run start` | 运行已有 out 构建；首次需先 build |
 | `npm run typecheck` | 分别检查 Node/Electron 与 Web 配置，strict、未使用声明检查 |
 | `npm run format` / `format:check` | 格式化 / 检查源码、测试和配置 |
-| `npm test` | Vitest：契约边界、状态规则、日期计算、IPC allowlist 一致性、组件行为 |
+| `npm test` | 以 Electron 的 Node 模式运行 Vitest，匹配 better-sqlite3 ABI；覆盖契约、组件及两驱动的共享 store 场景 |
 | `npm run check` | 类型 + 格式 + 单元/组件测试 |
 | `npm run build` | 输出 main/preload/worker/renderer 到 out |
 | `npm run test:integration` | 构建后通过 Electron 运行真实 worker/SQLite 的 16 组集成场景 |

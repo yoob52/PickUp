@@ -2324,26 +2324,30 @@ async function waitingNextUpReference(dir: string): Promise<void> {
   }
 }
 
+export const storeScenarios: [string, (dir: string) => Promise<void>][] = [
+  ["新库初始化、创建、幂等回执与同名事项", basicAndIdempotency],
+  ["状态转换表与非法转换", statusTransitions],
+  ["切换与暂停事务各阶段失败后完整回滚", switchRollback],
+  ["提交成功但响应丢失后的原请求重试与重启恢复", commitLossAndRestart],
+  ["两窗口竞争、过期版本与自我切换", concurrencyAndVersions],
+  ["完成、取消、重新打开与 nextUp 引用", nextUpAndEndStates],
+  ["等待事项不作为下次开工第一件事", waitingNextUpReference],
+  ["草稿版本冲突与提交时清空", drafts],
+  ["偏好按字段更新与版本检查", preferences],
+  ["空断点、编辑与稳定排序、分页", breakpointsAndOrdering],
+  ["本地日期边界、跨日与状态不变", dailyReviewAndLocalDates],
+  ["每日收尾两种结果", dailyReviewFinishing],
+  ["收尾期间当前任务变化必须冲突", dailyReviewCurrentTaskMismatch],
+  ["命令来源状态校验与六种状态行为", commandSourceStatusGuards],
+  ["收尾查询的日期边界与状态不变", dailyReviewBoundaries],
+];
+
 /* ----------------------------------------------------------------- 入口 */
 export async function runIntegration(): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), "pickup-integration-"));
   const checks: string[] = [];
   const scenarios: [string, (dir: string) => Promise<void>][] = [
-    ["新库初始化、创建、幂等回执与同名事项", basicAndIdempotency],
-    ["状态转换表与非法转换", statusTransitions],
-    ["切换与暂停事务各阶段失败后完整回滚", switchRollback],
-    ["提交成功但响应丢失后的原请求重试与重启恢复", commitLossAndRestart],
-    ["两窗口竞争、过期版本与自我切换", concurrencyAndVersions],
-    ["完成、取消、重新打开与 nextUp 引用", nextUpAndEndStates],
-    ["等待事项不作为下次开工第一件事", waitingNextUpReference],
-    ["草稿版本冲突与提交时清空", drafts],
-    ["偏好按字段更新与版本检查", preferences],
-    ["空断点、编辑与稳定排序、分页", breakpointsAndOrdering],
-    ["本地日期边界、跨日与状态不变", dailyReviewAndLocalDates],
-    ["每日收尾两种结果", dailyReviewFinishing],
-    ["收尾期间当前任务变化必须冲突", dailyReviewCurrentTaskMismatch],
-    ["命令来源状态校验与六种状态行为", commandSourceStatusGuards],
-    ["收尾查询的日期边界与状态不变", dailyReviewBoundaries],
+    ...storeScenarios,
     ["worker 启动退出、初始化失败与关闭语义", workerLifecycle],
     ["启动失败保护与版本守卫", recoveryAndVersionGuards],
   ];

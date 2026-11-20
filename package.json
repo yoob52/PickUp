@@ -15,7 +15,7 @@
     "dev": "electron-vite dev",
     "start": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
-    "test": "vitest run",
+    "test": "node scripts/run-vitest.mjs",
     "build": "npm run typecheck && electron-vite build",
     "test:integration": "npm run build && node scripts/run-integration.mjs",
     "test:e2e": "npm run build && playwright test",
@@ -28,6 +28,8 @@
     "format:check": "prettier --check src tests scripts *.ts *.json *.yml"
   },
   "dependencies": {
+    "@noble/hashes": "1.8.0",
+    "@sqlite.org/sqlite-wasm": "3.50.4-build1",
     "better-sqlite3": "12.11.1",
     "lucide-react": "1.43.0",
     "react": "19.3.0",
