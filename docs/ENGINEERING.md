@@ -88,7 +88,7 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
 | `npm run check` | 类型 + 格式 + 单元/组件测试 |
 | `npm run build` | 输出 main/preload/worker/renderer 到 out |
 | `npm run build:mobile` | 独立 Vite 构建，共享 React UI + 移动 API + Web Worker + SQLite WASM 到 out/mobile；不修改桌面构建 |
-| `npm run test:mobile` | 构建移动 Web 产物，使用 Chromium 对实际 OPFS 验证创建、开始、重载持久化及 OPFS 不可用错误 |
+| `npm run test:mobile` | 构建桌面与移动产物，Chromium 验证 OPFS、移动交互和真实 relay + Electron 桌面库配对收敛；Linux 需 DISPLAY |
 | `npm run test:integration` | 构建后通过 Electron 运行真实 worker/SQLite 的 16 组集成场景 |
 | `npm run test:e2e` | 构建后运行 Playwright Electron 自动化（桥接、独立 capture、界面闭环、视觉、规模） |
 | `npm run rebuild:native` | 为锁定 Electron/架构准备 better-sqlite3 原生模块 |
@@ -97,13 +97,13 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
 
 移动 Web 可运行 `npx vite preview --config vite.mobile.config.ts` 后访问 `http://127.0.0.1:4174`。需要安全上下文（localhost 或 HTTPS）及支持 OPFS 同步访问句柄的浏览器；不需要 COOP/COEP。首次运行浏览器测试需 `npx playwright install chromium`。存储位置固定为当前 origin 的 `/pickup-sahpool`，池内主文件 `/pickup.sqlite`；不同端口、协议或域名的数据相互隔离。不得清空该目录作为启动恢复手段。
 
-移动 API / 存储宿主不调用原生插件，Android 壳见下节。只读 `PickupAPI.host` 区分 `desktop` / `mobile`，不检测 user agent。移动宿主的“记一件事”在当前页面打开共享记录表单，“现在处理”或“稍后处理”提交后回到主界面；关闭或返回先保存草稿，失败保留输入。窗口控制、桌面入口、设置与退出操作不在移动 UI 显示；直接调用桌面专用 API 仍返回 `VALIDATION_ERROR`，不伪造系统设置成功。一次仅一个页面持有存储池；并发打开会明确报错，关闭占用页后重新加载。页面隐藏不停止已接收事务；离开页面时释放 worker，BFCache 恢复时重新加载连接。
+移动 API / 存储宿主不调用原生插件；只有 Android 同步 sheet 的扫码操作调用官方条码插件，见下节。只读 `PickupAPI.host` 区分 `desktop` / `mobile`，不检测 user agent。移动宿主的“记一件事”在当前页面打开共享记录表单，“现在处理”或“稍后处理”提交后回到主界面；关闭或返回先保存草稿，失败保留输入。窗口控制、桌面入口、设置与退出操作不在移动 UI 显示；直接调用桌面专用 API 仍返回 `VALIDATION_ERROR`，不伪造系统设置成功。一次仅一个页面持有存储池；并发打开会明确报错，关闭占用页后重新加载。页面隐藏不停止已接收事务；离开页面时释放 worker，BFCache 恢复时重新加载连接。
 
 移动布局由 `data-host="mobile"` 限定：单列、44px 触控目标、中文长文本换行、安全区留白；通过 Visual Viewport 调整键盘打开时的表单可见高度。共享 Modal 使用浏览器 history 管理移动覆盖层，Android 返回键先关闭详情/表单（键盘显示时系统先收起键盘）；不新增返回键或键盘插件。桌面仍使用独立记录窗口和原窗口布局。`npm run test:mobile` 在 Chromium 的 393×851 触屏项目中覆盖空状态、记录/开始、详情/返回、暂停/完成、稍后处理、草稿、失败保留输入和横向溢出，同时保留 OPFS 持久化/不可用/并发页用例。
 
 Android `MainActivity` 仅桥接系统 UI：使用已有 AndroidX 的返回键回调调用 WebView `goBack`（无历史时交回系统），通过 `WindowInsetsCompat` 为状态栏、导航栏、刘海与输入法预留原生边距。键盘边距随系统 IME 更新，使 Visual Viewport 与输入滚动同步；状态栏/导航栏使用深色图标匹配浅色界面。无需新增插件或依赖，任务规则仍完全在共享 TypeScript 层。
 
-手机采用独立 shell，不渲染桌面 `.topbar`、侧栏或窗口按钮。顶部仅保留紧凑品牌标识；底部安全区导航包含“工作台 / 今日收尾”和居中的“记一件事”主操作，始终位于拇指可达区域。当前任务卡保持主视觉；恢复信息采用轻量无卡片样式，移除手机上的重复捕获条、统计面板和收尾宣传卡，避免桌面导航缩小后直接搬到手机。
+手机采用独立 shell，不渲染桌面 `.topbar`、侧栏或窗口按钮。顶部保留紧凑品牌标识与同步云图标；底部安全区导航包含“工作台 / 今日收尾”和居中的“记一件事”主操作，始终位于拇指可达区域。当前任务卡保持主视觉；恢复信息采用轻量无卡片样式，移除手机上的重复捕获条、统计面板和收尾宣传卡，避免桌面导航缩小后直接搬到手机。
 
 ### 离线同步基础（PR6）
 
@@ -121,19 +121,31 @@ next-up 按选择 HLC 合并，并检查目标任务的全部结束/等待事件
 
 ### 桌面加密同步（PR8）
 
-`sync-client.ts` 使用 fetch/WebCrypto，不依赖 Electron 或 Node 模块；只有桌面 Node worker 创建实例，移动 API 对五个同步方法返回既有 unsupported 错误。`sync-crypto.ts` 实现随机 32 字节 rootKey、HKDF-SHA256、AES-256-GCM 和版本化配对载荷。注册 token 只用于一次注册请求，不进入数据库、状态 DTO 或日志。同步配置里的 rootKey 与数据库一样需要保护，升级保护副本也可能包含它；这里未引入系统钥匙串。
+`sync-client.ts` 使用 fetch/WebCrypto，不依赖 Electron 或 Node 模块；桌面 Node worker 与移动 Web Worker 共用。`sync-crypto.ts` 实现随机 32 字节 rootKey、HKDF-SHA256、AES-256-GCM 和版本化配对载荷。注册 token 只用于桌面的一次注册请求，不进入数据库、状态 DTO 或日志；手机仅通过配对加入。同步配置里的 rootKey 与数据库一样需要保护，升级保护副本也可能包含它；这里未引入系统钥匙串。
 
 schema 4 的 `sync_config` 保存本机服务器、根密钥、推/拉游标、上次成功/错误和退避状态，`sync_uploads` 保留所有已加密的上传条目，直到停止同步。后者保证请求成功但回包丢失、进程重启或服务器回退后仍复用完全相同的随机 nonce/密文，符合服务端 `(deviceId,clientSeq)` 幂等规则。两表都不导出。确认上传后事务推进本机序号但保留密文；拉取整页先全部验证解密，再在一个事务中合并并推进 serverSeq，失败不应用部分页面。schema 5 增加最后一条拉取事件的 deviceId/clientSeq 锚点，与游标在同一事务保存。N>0 从 after=N−1 请求，首条必须为相同身份的 seq N，验证后丢弃重叠行；缺失或不匹配则事务清零推拉游标与锚点，重新下载、重传完整 outbox，并记录连续性重建。N=0 从 after=0 请求，不验证锚点；旧配置没有锚点时也安全重建，即使其他设备已重新填满中继也不依赖高水位下降。
 
 本地业务提交后按新增 outbox 序号防抖 2 秒；worker 每 60 秒和启动时补同步，也可手动“立即同步”。同一时刻只运行一个循环，网络等待不占 SQLite 事务、不阻塞本地记录。每轮先上传，再拉取，慢拉取或拉取超时不阻塞该轮的本地上传。拉取每页 50 条（含连续性重叠行，最大密文页约 4.2 MiB）；响应流累计超过 48 MiB 则中止，不信任 Content-Length。每次请求 20 秒超时（含读取正文），禁止跟随重定向以避免凭据泄露。失败以 5 秒倍增至 5 分钟，成功重置；401/403 持久停止并显示“需要重新配对”。上传每批最多 500 条，另按 UTF-8 JSON 请求体的 1 MiB 和单密文 64 KiB 拆包。收到远程数据后通过 worker → main → 全窗口广播刷新；同步状态也复用该通知。
 
-固定 API 是 `enableSync({serverUrl,registrationToken})`、`disableSync()`、`getSyncStatus()`、`syncNow()`、`getPairingPayload()`，经过 Zod IPC allowlist。停止保留任务与 outbox，再次启用创建新空间；不撤销旧二维码或其他设备。配对二维码仅 desktop settings 渲染，使用精确锁定的 qrcode 包；不修改 Electron CSP。
+固定 API 是 `enableSync({serverUrl,registrationToken})`、`disableSync()`、`getSyncStatus()`、`syncNow()`、`getPairingPayload()`，经过 Zod IPC allowlist。桌面另有无参数 `copyPairingPayload()`：main 向 worker 读取当前载荷后写入系统剪贴板，只返回确认，不开放任意剪贴板读写，也不放宽 renderer 权限。停止保留任务与 outbox，再次启用创建新空间；不撤销旧二维码或其他设备。配对二维码仅 desktop settings 渲染，使用精确锁定的 qrcode 包；不修改 Electron CSP。
 
-验证：`npm run check` 包含密钥/篡改/载荷、原子游标、断线重推、401/403、定时/防抖/退避与真实 HTTP relay + native/WASM 两库收敛。`DISPLAY=:0 npm run test:e2e -- tests/e2e/sync.spec.ts` 覆盖设置启用、立即同步和二维码；服务端另运行 `npm run server:test`。Android 真机配对不在本轮范围。
+验证：`npm run check` 包含密钥/篡改/载荷、原子游标、断线重推、401/403、定时/防抖/退避与真实 HTTP relay + native/WASM 两库收敛。`DISPLAY=:0 npm run test:e2e -- tests/e2e/sync.spec.ts` 覆盖设置启用、立即同步、二维码和复制配对码；服务端另运行 `npm run server:test`。
+
+### 手机前台同步与配对（PR9）
+
+移动 Web Worker 在同一 WASM/OPFS 连接上创建 `SyncClient`。`pairWithPayload(payload)` 在 API registry 校验输入、在 worker 用既有版本化 parser 校验 URL/rootKey，经单一 `saveConfig` 路径保存同一 `sync_config`，立即运行首次同步。没有注册请求或 token；配对前的本地 outbox 也保留并上传。移动端开放状态/立即同步/停止；`enableSync` 与 `getPairingPayload` 仍为 desktop-only。401/403 持久停止后可重新扫码或粘贴，已启用时须先停止再换空间。停止只清本机配置与密文缓存，不清任务/outbox、不撤销其他设备。
+
+schema 6 增加本机 `upload_device_id`：每次新启用/配对生成独立的上传身份，持续重试和连续性重建复用它；旧配置为空时继续沿用原 store deviceId 和已有密文，不改变已发布会话。这样停止清密文后再次加入同一空间时，新 nonce 不会撞上旧 `(deviceId,clientSeq)` 的幂等记录；领域事件 ID/HLC 与持久 store deviceId 不变，旧事件仍按 ID 合并去重。此身份不进入同步事件流。
+
+页面以 `visibilitychange` 转发前台状态，worker 启动时默认 inactive；可见时启动 60 秒周期、2 秒本地提交防抖、回到可见时触发同步，隐藏时清计时器并中止请求，不把主动取消记作网络失败。**没有后台服务、后台同步或保活。** 本地数据库事务不依赖网络。远程应用/状态通过 worker `changed` → `MobileWorkerClient` → `onStateChanged` 刷新，订阅和页面计时器在释放时清理。
+
+`MobileSyncSheet` 复用 Modal/history 返回处理，紧凑顶栏用 Lucide 云图标进入；状态、上次同步、重试错误与停止在同一 sheet 展示。仅 Android 使用精确锁定的官方 `@capacitor/barcode-scanner@2.2.6`（2.x 为 Capacitor 7 兼容线）；扫码启动原生相机权限提示，拒绝/取消时保留可用的“粘贴配对码”。浏览器不调用原生扫码。插件最低 Android SDK 26，因此壳的最低版本升至 Android 8.0；Manifest 声明 CAMERA、可选相机硬件和 INTERNET。
+
+移动 CSP 的 connect-src 仅同源、HTTPS 和 `http://localhost:*`。Android 网络安全配置默认禁止明文，只允许 `localhost` 开发地址；`https://localhost` 来源需在 relay CORS allowlist。打包不依赖外部 Web 资源，离线记录照常。手机配对/模拟器 `adb reverse` 步骤见 [SYNC-SERVER.md](SYNC-SERVER.md#手机加入已有空间)。`npm run test:mobile` 增加真实 relay + Electron better-sqlite3 桌面库与浏览器 WASM 库的粘贴配对、双向收敛、错误与返回验证。
 
 ### Android 壳（Capacitor 7）
 
-`capacitor.config.ts` 固定应用 ID `com.yoob52.pickup`、名称 `PickUp`、资源目录 `out/mobile`。提交的 `android/` 是 Capacitor 生成的原生工程；同步产生的 Web 资源、机器本地配置、Gradle 缓存和 APK 按生成工程的 `.gitignore` 排除。未增加插件，沿用移动 `PickupAPI` 与 WebView history 返回/默认生命周期行为。
+`capacitor.config.ts` 固定应用 ID `com.yoob52.pickup`、名称 `PickUp`、资源目录 `out/mobile`。提交的 `android/` 是 Capacitor 生成的原生工程；同步产生的 Web 资源、机器本地配置、Gradle 缓存和 APK 按生成工程的 `.gitignore` 排除。仅增加官方条码插件用于扫码，沿用移动 `PickupAPI` 与 WebView history 返回/默认生命周期行为。
 
 需要 Node/npm（同本工程）、JDK 21、Android SDK platform 35 和 build-tools 35.0.0。Linux VM 示例：
 
@@ -149,7 +161,7 @@ adb -s emulator-5554 install -r android/app/build/outputs/apk/debug/app-debug.ap
 adb -s emulator-5554 shell am start -n com.yoob52.pickup/.MainActivity
 ```
 
-`android:sync` 每次先构建共享 Web 产物再同步；修改 Web 代码后需重新同步和构建 APK。`android:apk` 使用工程 Gradle wrapper 生成 debug APK（Windows 可在 `android` 下运行 `gradlew.bat assembleDebug`）。Gradle/SDK 首次构建需要下载依赖，应用运行不需要网络：Manifest 不申请 INTERNET 权限，所有脚本、图片、WASM 均随 APK 打包，无远程 server URL。
+`android:sync` 每次先构建共享 Web 产物再同步；修改 Web 代码后需重新同步和构建 APK。`android:apk` 使用工程 Gradle wrapper 生成 debug APK（Windows 可在 `android` 下运行 `gradlew.bat assembleDebug`）。Gradle/SDK 首次构建需要下载依赖；所有脚本、图片、WASM 随 APK 打包，本地操作无需联网。Manifest 的 INTERNET 只为用户主动配置的同步，未配对时不访问中继。
 
 #### Android CI 与发布签名
 

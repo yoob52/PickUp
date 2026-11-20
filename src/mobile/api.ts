@@ -36,6 +36,9 @@ export function createMobileAPI(
 ): { api: PickupAPI; dispose: () => void } {
   const changes = new Set<(revision: number) => void>();
   const days = new Set<() => void>();
+  const unsubscribe = client.onStateChanged?.((revision) =>
+    notify(changes, revision),
+  );
   let day = localDayKey(Date.now());
   let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -66,10 +69,12 @@ export function createMobileAPI(
 
   const api: PickupAPI = {
     enableSync: unsupported,
-    disableSync: unsupported,
-    getSyncStatus: unsupported,
-    syncNow: unsupported,
+    pairWithPayload: (payload) => invoke("pairWithPayload", payload),
+    disableSync: () => invoke("disableSync"),
+    getSyncStatus: () => invoke("getSyncStatus"),
+    syncNow: () => invoke("syncNow"),
     getPairingPayload: unsupported,
+    copyPairingPayload: unsupported,
     host: "mobile",
     getWorkspaceSnapshot: () => invoke("getWorkspaceSnapshot"),
     listTasks: (input) => invoke("listTasks", input),
@@ -133,6 +138,7 @@ export function createMobileAPI(
   return {
     api: Object.freeze(api),
     dispose: () => {
+      unsubscribe?.();
       clearTimeout(timer);
       page.removeEventListener("visibilitychange", visible);
       days.clear();

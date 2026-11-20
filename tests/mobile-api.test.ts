@@ -21,7 +21,7 @@ function setup() {
 }
 
 describe("mobile API boundary", () => {
-  it("does not expose sync or pairing before mobile support is implemented", async () => {
+  it("keeps registration and exporting pairing codes desktop-only", async () => {
     const { api, send, dispose } = setup();
     try {
       for (const result of [
@@ -29,10 +29,8 @@ describe("mobile API boundary", () => {
           serverUrl: "https://example.com",
           registrationToken: "x".repeat(40),
         }),
-        await api.disableSync(),
-        await api.getSyncStatus(),
-        await api.syncNow(),
         await api.getPairingPayload(),
+        await api.copyPairingPayload(),
       ])
         expect(result).toMatchObject({
           ok: false,
@@ -40,6 +38,32 @@ describe("mobile API boundary", () => {
           retryable: false,
         });
       expect(send).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+  it("wires joining, status, manual sync and disabling through the validated registry", async () => {
+    const { api, send, dispose } = setup();
+    try {
+      expect(await api.pairWithPayload("")).toMatchObject({
+        ok: false,
+        code: "VALIDATION_ERROR",
+      });
+      expect(send).not.toHaveBeenCalled();
+      await api.pairWithPayload(" pickup-sync:1:test ");
+      expect(send).toHaveBeenLastCalledWith(
+        { kind: "pairWithPayload", payload: "pickup-sync:1:test" },
+        { timeoutMs: 120000 },
+      );
+      await api.getSyncStatus();
+      expect(send).toHaveBeenLastCalledWith({ kind: "getSyncStatus" });
+      await api.syncNow();
+      expect(send).toHaveBeenLastCalledWith(
+        { kind: "syncNow" },
+        { timeoutMs: 120000 },
+      );
+      await api.disableSync();
+      expect(send).toHaveBeenLastCalledWith({ kind: "disableSync" });
     } finally {
       dispose();
     }
@@ -241,6 +265,26 @@ class FakeWorker {
 }
 
 describe("mobile worker transport", () => {
+  it("forwards remote state notifications and honors sync request timeouts", async () => {
+    vi.useFakeTimers();
+    const worker = new FakeWorker();
+    const client = new MobileWorkerClient(worker as unknown as Worker);
+    const { api, dispose } = createMobileAPI(client);
+    const listener = vi.fn();
+    api.onStateChanged(listener);
+    worker.emit({ ready: true });
+    worker.emit({ changed: 9 });
+    expect(listener).toHaveBeenCalledWith(9);
+    const pending = api.syncNow();
+    await vi.advanceTimersByTimeAsync(20000);
+    const { requestId } = worker.postMessage.mock.calls[0][0];
+    worker.emit({ requestId, result: { ok: true, value: null, revision: 9 } });
+    expect(await pending).toMatchObject({ ok: true });
+    dispose();
+    worker.emit({ changed: 10 });
+    expect(listener).toHaveBeenCalledTimes(1);
+    client.dispose();
+  });
   it("waits for readiness and correlates replies", async () => {
     const worker = new FakeWorker();
     const client = new MobileWorkerClient(worker as unknown as Worker);

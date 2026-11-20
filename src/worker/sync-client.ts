@@ -13,6 +13,7 @@ import {
   fromBase64url,
   generateRootKey,
   pairingPayload,
+  parsePairingPayload,
   type SyncKeys,
 } from "./sync-crypto";
 import type { SqliteDatabase } from "./sqlite";
@@ -20,6 +21,7 @@ import type { SqliteDatabase } from "./sqlite";
 type Config = {
   server_url: string;
   root_key: string;
+  upload_device_id: string | null;
   pushed_cursor: number;
   pulled_cursor: number;
   pulled_device_id: string | null;
@@ -66,6 +68,7 @@ export class SyncClient {
   private interval: ReturnType<typeof setInterval> | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private knownSeq: number;
+  private active = true;
 
   constructor(
     private readonly db: SqliteDatabase,
@@ -113,9 +116,20 @@ export class SyncClient {
     };
   }
   start(): void {
-    if (this.closed || this.interval) return;
+    if (this.closed || !this.active || this.interval) return;
     this.interval = setInterval(() => this.automatic(), 60_000);
     if (this.config()) this.schedule(0);
+  }
+  async setActive(active: boolean): Promise<void> {
+    this.active = active;
+    clearTimeout(this.timer);
+    clearInterval(this.interval);
+    this.interval = undefined;
+    if (!active) this.controller.abort();
+    await this.inFlight?.catch(() => this.status());
+    if (this.closed || this.active !== active) return;
+    this.controller = new AbortController();
+    if (active) this.start();
   }
   localCommitted(): void {
     const seq = this.latestSeq();
@@ -125,7 +139,7 @@ export class SyncClient {
   }
   private schedule(delay: number): void {
     const c = this.config();
-    if (this.closed || !c || c.stopped) return;
+    if (this.closed || !this.active || !c || c.stopped) return;
     clearTimeout(this.timer);
     this.timer = setTimeout(
       () => this.automatic(),
@@ -134,7 +148,13 @@ export class SyncClient {
   }
   private automatic(): void {
     const c = this.config();
-    if (this.closed || !c || c.stopped || (c.retry_at ?? 0) > Date.now())
+    if (
+      this.closed ||
+      !this.active ||
+      !c ||
+      c.stopped ||
+      (c.retry_at ?? 0) > Date.now()
+    )
       return;
     void this.syncNow().catch((error) => {
       if (!(error instanceof DomainError)) console.error("sync-cycle-failed");
@@ -152,7 +172,8 @@ export class SyncClient {
       AbortSignal.timeout(20_000),
     ]);
     try {
-      const response = await this.fetcher(url, {
+      const fetcher = this.fetcher;
+      const response = await fetcher(url, {
         method: body === undefined ? "GET" : "POST",
         redirect: "error",
         signal,
@@ -230,14 +251,7 @@ export class SyncClient {
         throw new DomainError("SYNC_ERROR", "同步服务器注册回执无效。", false);
       if (this.closed)
         throw new DomainError("SYNC_ERROR", "同步已关闭。", false);
-      this.db.transaction(() => {
-        this.db.prepare("DELETE FROM sync_uploads").run();
-        this.db
-          .prepare(
-            "INSERT INTO sync_config(singleton,server_url,root_key) VALUES(1,?,?)",
-          )
-          .run(parsed.data.serverUrl, rootKey);
-      })();
+      this.saveConfig(parsed.data.serverUrl, rootKey);
       this.schedule(2000);
       this.notify();
       return this.status();
@@ -249,6 +263,28 @@ export class SyncClient {
     const c = this.config();
     if (!c) throw DomainError.validation("请先启用同步。");
     return pairingPayload(c.server_url, c.root_key);
+  }
+  private saveConfig(serverUrl: string, rootKey: string): void {
+    this.db.transaction(() => {
+      this.db.prepare("DELETE FROM sync_uploads").run();
+      this.db
+        .prepare(
+          "INSERT INTO sync_config(singleton,server_url,root_key,upload_device_id) VALUES(1,?,?,?)",
+        )
+        .run(serverUrl, rootKey, crypto.randomUUID());
+    })();
+  }
+  async pair(payload: string): Promise<SyncStatus> {
+    if (this.closed || this.configuring || !this.active)
+      throw DomainError.stateConflict("请在前台等待同步设置完成后重试。");
+    const parsed = parsePairingPayload(payload);
+    const config = this.config();
+    if (config && !config.stopped)
+      throw DomainError.stateConflict("请先停止现有同步，再配对其他设备。");
+    if (config) await this.disable();
+    this.saveConfig(parsed.serverUrl, parsed.rootKey);
+    this.notify();
+    return this.syncNow();
   }
   async disable(): Promise<SyncStatus> {
     if (this.configuring)
@@ -278,7 +314,7 @@ export class SyncClient {
   }
   syncNow(): Promise<SyncStatus> {
     if (this.inFlight) return this.inFlight.then(() => this.status());
-    if (this.closed || this.configuring)
+    if (this.closed || this.configuring || !this.active)
       return Promise.reject(
         DomainError.stateConflict("同步设置正在更新或已关闭。"),
       );
@@ -296,6 +332,7 @@ export class SyncClient {
           .run(Date.now());
       })
       .catch((error) => {
+        if (this.controller.signal.aborted) throw error;
         const failures = Math.min(config.failures + 1, 7);
         const stopped = error instanceof AuthenticationError;
         const message =
@@ -324,7 +361,7 @@ export class SyncClient {
   }
   private async cycle(config: Config): Promise<void> {
     const keys = await deriveSyncKeys(config.root_key);
-    const deviceId = this.deviceId();
+    const deviceId = config.upload_device_id ?? this.deviceId();
     const url = config.server_url + `/v1/spaces/${keys.spaceId}/changes`;
     if (
       config.pulled_cursor &&

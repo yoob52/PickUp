@@ -36,6 +36,8 @@ import type { EnableSyncInput, SyncStatus } from "./sync-contracts";
 
 /** main → worker 的固定命令集合；worker 串行处理。 */
 export type WorkerRequest =
+  | { kind: "pairWithPayload"; payload: string }
+  | { kind: "setSyncForeground"; visible: boolean }
   | { kind: "enableSync"; input: EnableSyncInput }
   | { kind: "disableSync" }
   | { kind: "getSyncStatus" }

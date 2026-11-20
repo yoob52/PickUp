@@ -2,6 +2,7 @@ import { useRef, type ReactNode } from "react";
 import logo from "../../../../docs/logo.png";
 import {
   LayoutDashboard,
+  Cloud,
   Minus,
   Plus,
   SlidersHorizontal,
@@ -19,6 +20,7 @@ type Props = {
   onCapture: () => void;
   onReview: () => void;
   onSettings: () => void;
+  onSync: () => void;
   children: ReactNode;
 };
 
@@ -27,6 +29,7 @@ export function AppShell({
   onCapture,
   onReview,
   onSettings,
+  onSync,
   children,
 }: Props) {
   const notify = useToast();
@@ -44,6 +47,9 @@ export function AppShell({
         <header className="mobile-header">
           <img src={logo} alt="" draggable={false} />
           <span>接着 PickUp</span>
+          <IconButton label="打开同步" onClick={onSync}>
+            <Cloud size={20} />
+          </IconButton>
         </header>
         <main className="main" ref={mainRef}>
           {children}

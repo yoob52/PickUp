@@ -519,10 +519,12 @@ export type CommandOutcome =
 
 export type PickupAPI = {
   enableSync(input: EnableSyncInput): Promise<Result<SyncStatus>>;
+  pairWithPayload(payload: string): Promise<Result<SyncStatus>>;
   disableSync(): Promise<Result<SyncStatus>>;
   getSyncStatus(): Promise<Result<SyncStatus>>;
   syncNow(): Promise<Result<SyncStatus>>;
   getPairingPayload(): Promise<Result<string>>;
+  copyPairingPayload(): Promise<Result<null>>;
   readonly host: "desktop" | "mobile";
   getWorkspaceSnapshot(): Promise<Result<WorkspaceSnapshot>>;
   listTasks(input: ListTasksInput): Promise<Result<Page<TaskSummary>>>;

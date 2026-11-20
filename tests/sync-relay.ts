@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import { createRelay } from "../server/src/relay";
 
-export async function startSyncRelay() {
+export async function startSyncRelay(allowedOrigins: string[] = []) {
   const directory = await mkdtemp(join(tmpdir(), "pickup-client-relay-"));
   const token = crypto.randomUUID() + crypto.randomUUID();
   const create = () =>
@@ -14,7 +14,7 @@ export async function startSyncRelay() {
       {
         registrationToken: token,
         dataDir: directory,
-        allowedOrigins: [],
+        allowedOrigins,
         port: 8787,
       },
       () => {},

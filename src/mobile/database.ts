@@ -12,6 +12,7 @@ import {
   schemaVersion,
 } from "../worker/migrate";
 import { SCHEMA_VERSION } from "../worker/migrations";
+import { SyncClient } from "../worker/sync-client";
 import {
   BackendUnavailableError,
   IntegrityError,
@@ -95,6 +96,7 @@ export function openPoolStore(
       ).version,
       schemaVersion: SCHEMA_VERSION,
       backupPath,
+      createSyncClient: (notify: () => void) => new SyncClient(db, notify),
       close: () => db.close(),
     };
   } catch (error) {

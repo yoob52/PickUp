@@ -1,4 +1,10 @@
-import { BrowserWindow, app, ipcMain, type IpcMainInvokeEvent } from "electron";
+import {
+  BrowserWindow,
+  app,
+  clipboard,
+  ipcMain,
+  type IpcMainInvokeEvent,
+} from "electron";
 import { z, type ZodType } from "zod";
 import {
   mainWindowActionSchema,
@@ -54,6 +60,21 @@ export function registerIpcHandlers(
   desktop: DesktopHost,
 ): void {
   client.onStateChanged(notifyStateChanged);
+  register("pickup:copyPairingPayload", noInput, false, async (client) => {
+    const result = await client.send<string>({ kind: "getPairingPayload" });
+    if (!result.ok) return result;
+    try {
+      clipboard.writeText(result.value);
+      return { ok: true, value: null, revision: result.revision };
+    } catch {
+      return {
+        ok: false,
+        code: "SYSTEM_SETTING_ERROR",
+        message: "无法写入剪贴板，请稍后重试。",
+        retryable: true,
+      };
+    }
+  });
   register(
     "pickup:updatePreference",
     updatePreferenceSchema,

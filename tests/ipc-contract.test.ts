@@ -5,14 +5,18 @@ import type { StoreClient } from "../src/main/worker-client";
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
   handle: vi.fn(),
+  send: vi.fn(),
+  writeText: vi.fn(),
+  fromWebContents: vi.fn().mockReturnValue(null),
   exposed: undefined as unknown,
   listeners: new Map<string, (...args: unknown[]) => void>(),
 }));
 
 vi.mock("electron", () => ({
   app: { isPackaged: false },
+  clipboard: { writeText: mocks.writeText },
   BrowserWindow: {
-    fromWebContents: () => null,
+    fromWebContents: mocks.fromWebContents,
     getAllWindows: () => [],
   },
   ipcMain: { handle: mocks.handle },
@@ -56,7 +60,7 @@ function collectChannels(): string[] {
 }
 
 beforeAll(() => {
-  const send = vi.fn();
+  const send = mocks.send;
   const windowOk = async (action: WindowAction) => ({
     ok: true as const,
     value: { type: "window" as const, action },
@@ -97,6 +101,54 @@ beforeAll(() => {
 });
 
 describe("IPC 契约一致性", () => {
+  it("copies only the worker's pairing code through a trusted fixed API and reports clipboard failures", async () => {
+    const handler = mocks.handle.mock.calls.find(
+      ([channel]) => channel === "pickup:copyPairingPayload",
+    )![1];
+    const frame = { url: "pickup://app/index.html" };
+    const event = { sender: { mainFrame: frame }, senderFrame: frame };
+    mocks.fromWebContents.mockReturnValue({});
+    try {
+      expect(await handler(event, "arbitrary clipboard content")).toMatchObject(
+        { ok: false, code: "VALIDATION_ERROR" },
+      );
+      expect(mocks.writeText).not.toHaveBeenCalled();
+      mocks.send.mockResolvedValueOnce({
+        ok: false,
+        code: "VALIDATION_ERROR",
+        message: "请先启用同步。",
+        retryable: false,
+      });
+      expect(await handler(event)).toMatchObject({
+        ok: false,
+        code: "VALIDATION_ERROR",
+      });
+      expect(mocks.writeText).not.toHaveBeenCalled();
+      mocks.send.mockResolvedValue({
+        ok: true,
+        value: "pickup-sync:1:test",
+        revision: 3,
+      });
+      expect(await handler(event)).toEqual({
+        ok: true,
+        value: null,
+        revision: 3,
+      });
+      expect(mocks.send).toHaveBeenLastCalledWith({
+        kind: "getPairingPayload",
+      });
+      expect(mocks.writeText).toHaveBeenCalledWith("pickup-sync:1:test");
+      mocks.writeText.mockImplementationOnce(() => {
+        throw new Error("clipboard unavailable");
+      });
+      expect(await handler(event)).toMatchObject({
+        ok: false,
+        code: "SYSTEM_SETTING_ERROR",
+      });
+    } finally {
+      mocks.fromWebContents.mockReturnValue(null);
+    }
+  });
   it("preload identifies the desktop host", () => {
     expect(api().host).toBe("desktop");
   });

@@ -30,10 +30,11 @@ import {
   type WorkspaceSnapshot,
 } from "./contracts";
 import { localDayRangeUtc } from "./local-date";
-import { enableSyncSchema } from "./sync-contracts";
+import { enableSyncSchema, pairingInputSchema } from "./sync-contracts";
 import type { WorkerRequest } from "./worker-protocol";
 
 export type StoreSender = {
+  onStateChanged?(listener: (revision: number) => void): () => void;
   send<T = unknown>(
     request: WorkerRequest,
     options?: { timeoutMs?: number },
@@ -71,6 +72,13 @@ function register<S extends ZodType, V>(
 
 register("pickup:enableSync", enableSyncSchema, false, (client, input) =>
   client.send({ kind: "enableSync", input }, { timeoutMs: 25000 }),
+);
+register(
+  "pickup:pairWithPayload",
+  pairingInputSchema,
+  false,
+  (client, payload) =>
+    client.send({ kind: "pairWithPayload", payload }, { timeoutMs: 120000 }),
 );
 register("pickup:disableSync", noInput, false, (client) =>
   client.send({ kind: "disableSync" }),
