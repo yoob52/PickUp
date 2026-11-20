@@ -2,6 +2,10 @@
 
 ## 2026-11-20 · 移动布局与交互（PR4）
 
+机主反馈后的手机结构改版：不再复用桌面顶栏/侧栏，采用品牌小标题、底部“工作台 / 今日收尾”导航与居中记录操作。恢复区减轻边框与留白，移除重复统计/收尾面板。新增 DOM 断言禁止 `.topbar/.sidebar/.window-controls/.side-nav` 出现在移动宿主，验证底部导航完整可见、标题高度小于 60px，继续覆盖原触屏流程。
+
+改版后重新通过 `npm run check`（9 个文件 / 127 项）、`npm run test:mobile`（5 项）、桌面构建、17 组集成场景和 3 项相关 Electron E2E；重建、安装 APK 后重新点击验证完整流程，并从底部打开“今日收尾”、通过 Android 返回关闭、点击“工作台”回顶。模拟器实测品牌标题 48px、底部导航 73px、桌面 chrome 节点数为 0，无页面异常或横向溢出。以下 `pr4-*.png` 已刷新并实际查看，新增 `pr4-review.png`；主界面和空状态证明无桌面顶栏、顶部导航或窗口按钮，覆盖层右上角仅保留关闭该表单的按钮。改版日志为 `~/android-setup/pr4-owner-*.log`。
+
 共享 renderer 按只读 `PickupAPI.host` 切换宿主能力。移动端通过全屏覆盖层复用记录表单，记录/现在处理/稍后处理后返回工作台，关闭/返回保存草稿；不显示桌面窗口控件、桌面入口及系统偏好设置。手机采用单列、长中文换行、44px 触控目标和安全区留白；桌面保留独立记录窗口与原布局。
 
 - `npm run check`：类型、格式、9 个文件 / 127 项单元与组件测试通过；含 desktop/mobile 能力分支、移动宿主忽略 widget URL、草稿关闭失败保留输入、只读宿主标记及 IPC 契约。
@@ -84,27 +88,27 @@
 
 ## 1. 本轮检查
 
-| 检查 | 命令 | 结果 |
-| --- | --- | --- |
-| 类型/格式/单元 | `npm run check` | 通过。6 个文件、54 个测试（原 46 + bounds/收尾分页/桌面相关 UI） |
-| 集成 | `npm run test:integration` | 通过。16 组 Electron+SQLite 场景 |
-| 端到端（源码构建） | `npx playwright test` | 通过。6 个用例（桥接×3、桌面窗口、界面闭环、视觉） |
-| 规模 | `npx playwright test tests/e2e/scale.spec.ts` | 通过。1000 件任务；见 `docs/verification/scale-results.json` |
-| 打包 | `npm run pack`（npmmirror 仅当前 shell） | 通过。`dist/win-unpacked` |
-| 安装包 | `npm run dist` | 通过。`dist/PickUp Setup 0.1.0.exe` |
-| 解包产物 E2E | `PICKUP_PACKAGED_EXE=dist/win-unpacked/PickUp.exe` | 5 通过；视觉用例在 30s 默认超时下失败，加长后源码构建视觉通过 |
-| 安装包内应用 | 静默安装到临时目录后跑 `desktop.spec` | 通过 |
-| 覆盖安装/卸载 | 同一目录再次 `/S`，然后卸载 | 安装与卸载 exit 0；卸载后 `PickUp.exe` 不存在 |
+| 检查               | 命令                                               | 结果                                                             |
+| ------------------ | -------------------------------------------------- | ---------------------------------------------------------------- |
+| 类型/格式/单元     | `npm run check`                                    | 通过。6 个文件、54 个测试（原 46 + bounds/收尾分页/桌面相关 UI） |
+| 集成               | `npm run test:integration`                         | 通过。16 组 Electron+SQLite 场景                                 |
+| 端到端（源码构建） | `npx playwright test`                              | 通过。6 个用例（桥接×3、桌面窗口、界面闭环、视觉）               |
+| 规模               | `npx playwright test tests/e2e/scale.spec.ts`      | 通过。1000 件任务；见 `docs/verification/scale-results.json`     |
+| 打包               | `npm run pack`（npmmirror 仅当前 shell）           | 通过。`dist/win-unpacked`                                        |
+| 安装包             | `npm run dist`                                     | 通过。`dist/PickUp Setup 0.1.0.exe`                              |
+| 解包产物 E2E       | `PICKUP_PACKAGED_EXE=dist/win-unpacked/PickUp.exe` | 5 通过；视觉用例在 30s 默认超时下失败，加长后源码构建视觉通过    |
+| 安装包内应用       | 静默安装到临时目录后跑 `desktop.spec`              | 通过                                                             |
+| 覆盖安装/卸载      | 同一目录再次 `/S`，然后卸载                        | 安装与卸载 exit 0；卸载后 `PickUp.exe` 不存在                    |
 
 ### 1.1 产物
 
 版本 `0.1.0`。SHA-256：
 
-| 文件 | 哈希 | 大小 |
-| --- | --- | --- |
-| `dist/win-unpacked/PickUp.exe` | `7B132397DBCE487D11D42167041898E4E634DDE17DCC5944CD5B08977F41EB56` | 235128320 |
-| `dist/win-unpacked/resources/app.asar` | `D9A20DFBBDE7826E396A3BB44E00CBE078E914462C3761F610721047F2AFAA50` | 40142095 |
-| `dist/PickUp Setup 0.1.0.exe` | `6CDE93B7627B830EF27667E25B39CF6C2DD62E0114558E345F713CF7077631D6` | 108484170 |
+| 文件                                   | 哈希                                                               | 大小      |
+| -------------------------------------- | ------------------------------------------------------------------ | --------- |
+| `dist/win-unpacked/PickUp.exe`         | `7B132397DBCE487D11D42167041898E4E634DDE17DCC5944CD5B08977F41EB56` | 235128320 |
+| `dist/win-unpacked/resources/app.asar` | `D9A20DFBBDE7826E396A3BB44E00CBE078E914462C3761F610721047F2AFAA50` | 40142095  |
+| `dist/PickUp Setup 0.1.0.exe`          | `6CDE93B7627B830EF27667E25B39CF6C2DD62E0114558E345F713CF7077631D6` | 108484170 |
 
 renderer 资源：`out/renderer/assets/index-Bv0xPFRr.js`。源码提交 `2051730`（`feature/mvp-p0`）。asar 由该提交的源码构建；本句是事后写入的提交号，不在包内。
 
@@ -112,11 +116,11 @@ renderer 资源：`out/renderer/assets/index-Bv0xPFRr.js`。源码提交 `205173
 
 ### 1.2 性能（本机，n 见 JSON）
 
-| 操作 | P50 | P95 | max | n |
-| --- | --- | --- | --- | --- |
-| createTask | 22 ms | 44 ms | 422 ms | 1000 |
-| switchTask | 10 ms | 249 ms | 249 ms | 20 |
-| showCapture（IPC 往返） | 11 ms | 25 ms | 25 ms | 20 |
+| 操作                    | P50   | P95    | max    | n    |
+| ----------------------- | ----- | ------ | ------ | ---- |
+| createTask              | 22 ms | 44 ms  | 422 ms | 1000 |
+| switchTask              | 10 ms | 249 ms | 249 ms | 20   |
+| showCapture（IPC 往返） | 11 ms | 25 ms  | 25 ms  | 20   |
 
 showCapture 从 renderer 调用到主进程返回，**不是**操作系统快捷键按下到标题可输入。规模夹具：1000 件任务，前 10 件各 10 条短断点。
 
@@ -135,19 +139,19 @@ showCapture 从 renderer 调用到主进程返回，**不是**操作系统快捷
 
 ## 3. 未验证
 
-| 项 | 限制 | 复验 |
-| --- | --- | --- |
-| OS 全局快捷键按下 | 自动化不能可靠注入系统热键 | 安装后按 Ctrl+Alt+N，标题可输入 |
-| 快捷键被其他程序占用 | 未人为占用 | 用系统已占用组合保存，应 `SHORTCUT_CONFLICT` |
-| 托盘点击 | Playwright 不操作托盘 | 点托盘「打开 / 记一件事 / 完全退出」 |
-| 开机启动读回 | e2e 跳过 `setLoginItemSettings` | 正式包打开开关，任务管理器启动项对照 |
-| 真实午夜 / 改系统时间 | 只用定时器与 `TZ` | 打开收尾跨 00:00 |
-| 拔插显示器 / 改 DPI | 仅 `visibleBounds` 单测 | 拔屏后 widget 仍可见 |
-| 睡眠恢复 | 已监听 `powerMonitor` | 睡眠再打开收尾日期 |
-| 磁盘满 / 权限拒绝 | 故障注入非实盘 | 只读目录或磁盘满 |
-| SIGKILL / 掉电 | 仅 worker 退出注入 | 任务管理器结束进程后重启 |
-| Authenticode / SmartScreen | NotSigned | 签名后再验 |
-| 向正式 `%APPDATA%/PickUp` 写入 | 禁止 | 试用安装走默认路径，卸载后数据仍在 |
+| 项                             | 限制                            | 复验                                         |
+| ------------------------------ | ------------------------------- | -------------------------------------------- |
+| OS 全局快捷键按下              | 自动化不能可靠注入系统热键      | 安装后按 Ctrl+Alt+N，标题可输入              |
+| 快捷键被其他程序占用           | 未人为占用                      | 用系统已占用组合保存，应 `SHORTCUT_CONFLICT` |
+| 托盘点击                       | Playwright 不操作托盘           | 点托盘「打开 / 记一件事 / 完全退出」         |
+| 开机启动读回                   | e2e 跳过 `setLoginItemSettings` | 正式包打开开关，任务管理器启动项对照         |
+| 真实午夜 / 改系统时间          | 只用定时器与 `TZ`               | 打开收尾跨 00:00                             |
+| 拔插显示器 / 改 DPI            | 仅 `visibleBounds` 单测         | 拔屏后 widget 仍可见                         |
+| 睡眠恢复                       | 已监听 `powerMonitor`           | 睡眠再打开收尾日期                           |
+| 磁盘满 / 权限拒绝              | 故障注入非实盘                  | 只读目录或磁盘满                             |
+| SIGKILL / 掉电                 | 仅 worker 退出注入              | 任务管理器结束进程后重启                     |
+| Authenticode / SmartScreen     | NotSigned                       | 签名后再验                                   |
+| 向正式 `%APPDATA%/PickUp` 写入 | 禁止                            | 试用安装走默认路径，卸载后数据仍在           |
 
 ## 4. 与上一轮口径
 

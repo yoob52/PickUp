@@ -38,6 +38,38 @@ export function AppShell({
     if (!result.ok) notify(result.message, "error");
   }
 
+  if (mobile) {
+    return (
+      <div className="app-shell mobile-shell">
+        <header className="mobile-header">
+          <img src={logo} alt="" draggable={false} />
+          <span>接着 PickUp</span>
+        </header>
+        <main className="main" ref={mainRef}>
+          {children}
+        </main>
+        <nav className="mobile-bottom-nav" aria-label="手机导航">
+          <button
+            type="button"
+            aria-current="page"
+            onClick={() => mainRef.current?.scrollTo({ top: 0 })}
+          >
+            <LayoutDashboard size={22} aria-hidden="true" />
+            <span>工作台</span>
+          </button>
+          <button type="button" className="mobile-capture" onClick={onCapture}>
+            <Plus size={22} aria-hidden="true" />
+            <span>记一件事</span>
+          </button>
+          <button type="button" onClick={onReview}>
+            <Sunset size={22} aria-hidden="true" />
+            <span>今日收尾</span>
+          </button>
+        </nav>
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -54,37 +86,33 @@ export function AppShell({
           <Button icon={<Plus size={15} />} onClick={onCapture}>
             记一件事
           </Button>
-          {!mobile ? (
-            <IconButton label="打开设置" onClick={onSettings}>
-              <SlidersHorizontal size={16} />
-            </IconButton>
-          ) : null}
+          <IconButton label="打开设置" onClick={onSettings}>
+            <SlidersHorizontal size={16} />
+          </IconButton>
         </div>
-        {!mobile ? (
-          <div className="window-controls" role="group" aria-label="窗口控制">
-            <button
-              type="button"
-              aria-label="最小化"
-              onClick={() => void controlWindow("minimize")}
-            >
-              <Minus size={14} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              aria-label="最大化或还原"
-              onClick={() => void controlWindow("toggleMaximize")}
-            >
-              <Square size={12} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              aria-label="关闭主窗口"
-              onClick={() => void controlWindow("close")}
-            >
-              <X size={16} aria-hidden="true" />
-            </button>
-          </div>
-        ) : null}
+        <div className="window-controls" role="group" aria-label="窗口控制">
+          <button
+            type="button"
+            aria-label="最小化"
+            onClick={() => void controlWindow("minimize")}
+          >
+            <Minus size={14} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            aria-label="最大化或还原"
+            onClick={() => void controlWindow("toggleMaximize")}
+          >
+            <Square size={12} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            aria-label="关闭主窗口"
+            onClick={() => void controlWindow("close")}
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
       </header>
       <div className="layout">
         <aside className="sidebar">

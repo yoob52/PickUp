@@ -158,7 +158,20 @@ it.each(["desktop", "mobile"] as const)(
     expect(screen.queryByRole("button", { name: "打开设置" }) !== null).toBe(
       host === "desktop",
     );
-    fireEvent.click(screen.getAllByRole("button", { name: "记一件事" })[0]);
+    expect(document.querySelector(".topbar") !== null).toBe(host === "desktop");
+    expect(document.querySelector(".sidebar") !== null).toBe(
+      host === "desktop",
+    );
+    expect(screen.queryByRole("navigation", { name: "主导航" }) !== null).toBe(
+      host === "desktop",
+    );
+    const capture =
+      host === "mobile"
+        ? within(
+            screen.getByRole("navigation", { name: "手机导航" }),
+          ).getByRole("button", { name: "记一件事" })
+        : screen.getAllByRole("button", { name: "记一件事" })[0];
+    fireEvent.click(capture);
     if (host === "desktop") {
       expect(bridge.showCapture).toHaveBeenCalledOnce();
       expect(screen.queryByRole("dialog")).toBeNull();

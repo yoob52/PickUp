@@ -43,11 +43,24 @@ test("phone capture, detail/back, pause and complete stay in-app without desktop
   ).toBeVisible();
   await expect(page.getByRole("group", { name: "窗口控制" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "打开设置" })).toHaveCount(0);
+  await expect(
+    page.locator(".topbar, .sidebar, .window-controls, .side-nav"),
+  ).toHaveCount(0);
+  await expect(page.locator(".mobile-header button")).toHaveCount(0);
+  const navigation = page.getByRole("navigation", { name: "手机导航" });
+  await expect(navigation).toBeInViewport({ ratio: 1 });
+  expect(
+    await navigation.evaluate(
+      (node) => node.getBoundingClientRect().top > innerHeight - 100,
+    ),
+  ).toBe(true);
+  expect(
+    await page
+      .locator(".mobile-header")
+      .evaluate((node) => node.getBoundingClientRect().height),
+  ).toBeLessThan(60);
   await noOverflow(page);
-  await page
-    .getByRole("button", { name: "记一件事", exact: true })
-    .first()
-    .tap();
+  await navigation.getByRole("button", { name: "记一件事", exact: true }).tap();
   await page.getByRole("button", { name: "现在处理", exact: true }).tap();
   await expect(page.getByText("请填写任务标题", { exact: true })).toBeVisible();
   const title =
