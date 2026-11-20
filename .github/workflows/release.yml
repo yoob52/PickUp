@@ -121,7 +121,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          notes="Code signing policy: https://github.com/${GH_REPO}#code-signing-policy"
+          notes="Code signing policy: https://github.com/${GH_REPO}#code-signing-policy (free code signing provided by SignPath.io, certificate by SignPath Foundation)"
           args=("$RELEASE_TAG" --verify-tag --generate-notes --notes "$notes" --title "PickUp $RELEASE_TAG")
           if [[ "$RELEASE_TAG" == *-* ]]; then
             args+=(--prerelease --latest=false)
