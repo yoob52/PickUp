@@ -148,7 +148,7 @@ adb -s emulator-5554 shell am start -n com.yoob52.pickup/.MainActivity
 - `ANDROID_KEY_PASSWORD`：签名私钥密码。
 - `ANDROID_KEY_ALIAS`：签名条目的 alias。
 
-非 fork PR 且四项完整时，工作流将 keystore 解码到 `$RUNNER_TEMP`，以环境变量 `ANDROID_KEYSTORE_FILE` 加三个密码/alias 变量交给 Gradle，构建结束即删除临时 keystore。缺少全部 secrets 时，release variant 使用 Android debug keystore 签名（不是未签名 APK）；job summary 明确显示 `release-signed` 或 `debug-signed: secrets missing`，并附证书 SHA-256。fork PR 永远走无 secrets 的 fallback。只设置部分 secrets 明确失败，不会悄悄降级。
+生产签名 secrets 仅在 push 到 main、push `v*` 标签、或从 main 手动触发时注入受 step 条件保护的构建步骤；所有 PR（包括同仓库分支）以及其他来源的手动触发都跳过该步骤，使用独立的无 secrets 环境进行 debug 签名构建。继续使用仓库 secrets，不需要创建 GitHub Environment 或移动现有 secrets。可信步骤在四项完整时将 keystore 解码到 `$RUNNER_TEMP`，以环境变量 `ANDROID_KEYSTORE_FILE` 加三个密码/alias 变量交给 Gradle，构建结束即删除临时 keystore。缺少全部 secrets 时，release variant 同样使用 Android debug keystore 签名（不是未签名 APK）；job summary 明确显示 `release-signed` 或 `debug-signed: secrets missing`，并附证书 SHA-256。可信步骤只设置部分 secrets 时明确失败，不会悄悄降级。
 
 本地 `assembleRelease` 使用相同规则：同时设置 `ANDROID_KEYSTORE_FILE`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_PASSWORD`、`ANDROID_KEY_ALIAS` 即为正式签名；全部不设置则 debug 签名；部分设置立即报错。不要在命令行传密码或打开 shell tracing。debug 签名只用于测试，runner 的 debug key 不保证跨次构建一致，不能用于长期分发或升级。
 
