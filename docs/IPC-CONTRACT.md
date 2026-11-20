@@ -226,7 +226,7 @@ const result = await window.pickup.switchTask({
 
 ### 4.7 completeTask / cancelTask / reopenTask
 
-- `completeTask`：任意未结束状态 → `done`，写 `ended_at`；返回 `wasCurrent`（是否结束了当前任务）与 `nextUpCleared`（是否清除了命中的下次开工引用）。
+- `completeTask`：任意未结束状态 → `done`，写 `ended_at` 并将任务版本递增一次；返回 `wasCurrent`（是否结束了当前任务）与 `nextUpCleared`（是否清除了命中的下次开工引用）。结果提示用完成时的 `expectedVersion + 1` 重新打开，避免影响后来改变的任务。
 - `cancelTask`：同上 → `cancelled`，与完成分开统计，不计入“今天完成”。
 - 已结束任务再次结束返回 `STATE_CONFLICT`。
 - `reopenTask`：**仅接受 `done`/`cancelled`** 作为来源状态 → `todo`，清空有效 `ended_at`，保留断点与状态历史，**不抢占**当前任务；未结束状态（`todo`/`doing`/`paused`/`waiting`）在领域校验阶段返回 `STATE_CONFLICT`。共享转换表中的 `waiting → todo`（条件满足回到待处理）只能由 `resolveWaiting` 使用。

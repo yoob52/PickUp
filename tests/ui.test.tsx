@@ -313,6 +313,69 @@ it("opens switch flow when starting another task while one is current", async ()
   expect(screen.getAllByText("处理线上故障").length).toBeGreaterThan(0);
 });
 
+it.each([
+  { conflict: false, message: "已重新打开，断点历史仍然保留。" },
+  { conflict: true, message: "任务状态已变化，请刷新后重试。" },
+])(
+  "reopens only the completed task version (conflict=$conflict)",
+  async ({ conflict, message }) => {
+    const current = task({
+      id: "11111111-1111-1111-1111-111111111111",
+      title: "整理更新说明",
+      status: "doing",
+      version: 4,
+    });
+    const initial = emptyWorkspaceSnapshot();
+    const completed = { ...emptyWorkspaceSnapshot(), revision: 12 };
+    const completeTask = vi.fn<PickupAPI["completeTask"]>().mockResolvedValue(
+      ok(
+        {
+          type: "completeTask",
+          taskId: current.id,
+          wasCurrent: true,
+          nextUpCleared: false,
+        },
+        12,
+      ),
+    );
+    const reopenTask = vi
+      .fn<PickupAPI["reopenTask"]>()
+      .mockResolvedValue(
+        conflict
+          ? { ok: false, code: "STATE_CONFLICT", message, retryable: true }
+          : ok({ type: "reopenTask", taskId: current.id }, 13),
+      );
+    window.pickup = createApi({
+      getWorkspaceSnapshot: vi
+        .fn()
+        .mockResolvedValueOnce(
+          ok({ ...initial, currentTask: current, revision: 11 }, 11),
+        )
+        .mockResolvedValue(ok(completed, 12)),
+      completeTask,
+      reopenTask,
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "完成" }));
+    const reopen = await screen.findByRole("button", { name: "重新打开" });
+    expect(reopenTask).not.toHaveBeenCalled();
+    fireEvent.click(reopen);
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(reopenTask).toHaveBeenCalledExactlyOnceWith({
+      commandId: expect.any(String),
+      task: { taskId: current.id, expectedVersion: 5 },
+    });
+    expect(reopenTask.mock.calls[0][0].commandId).not.toBe(
+      completeTask.mock.calls[0][0].commandId,
+    );
+    expect(
+      screen.queryByRole("button", { name: "重新打开" }),
+    ).not.toBeInTheDocument();
+  },
+);
+
 it("moves focus into the capture window and hides it with Escape", async () => {
   const hideCapture = vi
     .fn()

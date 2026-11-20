@@ -18,6 +18,7 @@ import {
 import { formatDateTime, nextStepText } from "../lib/format";
 import { Button, Field, StatusDot } from "../ui/primitives";
 import { Modal } from "../ui/Modal";
+import { ToastActionTarget } from "../ui/Toast";
 
 type Props = {
   onClose: () => void;
@@ -228,6 +229,7 @@ export function DailyReviewDialog({
 
   return (
     <Modal eyebrow="今日收尾" title="把今天收好。" onClose={onClose}>
+      <ToastActionTarget />
       <p className="helper" style={{ marginTop: 0 }}>
         未结束的事情都会留在这里。选一件作为下一次开工的第一件事，选择本身不会开始任务；等待中的事项需先转为待处理。
       </p>
