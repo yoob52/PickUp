@@ -696,6 +696,6 @@ schema 3 为设备创建持久 UUID，为任务内容/状态分别保存 HLC，�
 
 在离线合并之上增加独立 `SyncClient`，由桌面 worker 持有生命周期、网络与计时器；SQLite 仍只有同步短事务。等待 fetch/WebCrypto 时，worker 可继续处理本地命令。主进程只转发 API 与变更广播，renderer 只持有设置表单/状态 DTO，密钥不进入普通状态通知。移动宿主暂不创建客户端，也不开放设置入口。
 
-schema 4 的本机 `sync_config` 与上传密文 `sync_uploads` 不参与原始事件流。上传以本地 outbox seq 作为 clientSeq，随机加密后先持久化密文，保证不确定结果重试不改变字节；确认后事务推进游标并继续保留密文。下载使用独立 serverSeq 游标，整页鉴权解密后调用既有 `applyRemoteChanges`，并在外层同一事务推进下载游标；任何校验/事务错误保留旧游标。自己的设备事件跳过应用。每轮先拉取，空页的服务器真实序号低于已存游标则事务清零推拉游标、记录回退，并用原密文重传完整 outbox；随后上传，循环直到推拉均无新条目。
+schema 4 的本机 `sync_config` 与上传密文 `sync_uploads` 不参与原始事件流。上传以本地 outbox seq 作为 clientSeq，随机加密后先持久化密文，保证不确定结果重试不改变字节；确认后事务推进游标并继续保留密文。下载使用独立 serverSeq 游标，整页鉴权解密后调用既有 `applyRemoteChanges`，并在外层同一事务推进下载游标；任何校验/事务错误保留旧游标。自己的设备事件跳过应用。schema 5 将最后拉取事件的 deviceId/clientSeq 身份与游标 N 一同保存；N>0 时从 N−1 拉取，校验首条身份和序号后丢弃重叠行。锚点缺失或变化时事务清零推拉游标与锚点、记录连续性重建，并用原密文重传完整 outbox；N=0 无需锚点。循环直到推拉均无新条目。
 
 rootKey 仅存在本机数据库和明确请求的桌面配对载荷中；服务器只收到派生 spaceId/authKey 与密文。HKDF salt/info、AES-GCM 版本与 AAD 属于客户端协议，见 [部署与配对说明](SYNC-SERVER.md)。rootKey 泄露等于完整空间访问；本轮无密钥轮换、单设备吊销、系统钥匙串或移动端扫码。备份 SQLite 也必须按密钥材料保护。

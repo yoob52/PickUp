@@ -202,62 +202,106 @@ it("reuses persisted ciphertext after a lost upload response, including a client
 });
 
 describe.each([false, true])("%s WASM transactional pull", (wasm) => {
-  it("replays identical ciphertext after restoring an older relay backup and converges with another device", async () => {
-    const server = await relay(),
-      a = open(wasm),
-      b = open(!wasm);
-    const first = client(a),
-      second = client(b);
-    create(a, "备份中的任务");
-    await first.enable({
-      serverUrl: server.url,
-      registrationToken: server.token,
-    });
-    const pairing = parsePairingPayload(first.pairing());
-    const keys = await deriveSyncKeys(pairing.rootKey);
-    seed(b, server.url, pairing.rootKey);
-    await first.syncNow();
-    await second.syncNow();
-    await first.syncNow();
-    const snapshot = await server.backup();
-    create(a, "备份后的电脑任务");
-    create(b, "备份后的另一设备任务");
-    for (let i = 0; i < 3; i++) {
-      await first.syncNow();
-      await second.syncNow();
-    }
-    const download = async () => {
-      const response = await fetch(
-        `${server.url}/v1/spaces/${keys.spaceId}/changes?limit=500`,
-        { headers: { Authorization: `Bearer ${keys.authKey}` } },
-      );
-      const page = (await response.json()) as {
-        changes: { deviceId: string; clientSeq: number; blob: string }[];
-      };
-      return page.changes
-        .map(({ deviceId, clientSeq, blob }) => ({ deviceId, clientSeq, blob }))
-        .sort(
-          (a, b) =>
-            a.deviceId.localeCompare(b.deviceId) || a.clientSeq - b.clientSeq,
-        );
-    };
-    const before = await download();
-    await server.restore(snapshot);
+  it("restarts a pre-anchor cursor safely and keeps N=0 without an anchor", async () => {
+    const db = open(wasm);
+    seed(db, "https://relay.example.com");
+    db.prepare("UPDATE sync_config SET pulled_cursor=7,pushed_cursor=7").run();
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
-    for (let i = 0; i < 3; i++) {
-      await first.syncNow();
-      await second.syncNow();
-    }
-    expect(warning).toHaveBeenCalledWith("sync-relay-rollback");
-    expect(await download()).toEqual(before);
-    create(a, "恢复后继续记录");
-    for (let i = 0; i < 2; i++) {
-      await first.syncNow();
-      await second.syncNow();
-    }
-    expect(state(a)).toEqual(state(b));
-    expect(createQueries(b).workspaceSnapshot().counts.todo).toBe(4);
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        Response.json({ changes: [], lastServerSeq: 0, more: false }),
+      );
+    const sync = client(db, fetcher);
+    await sync.syncNow();
+    expect(cursor(db)).toEqual({ pushed_cursor: 0, pulled_cursor: 0 });
+    expect(
+      db
+        .prepare("SELECT pulled_device_id,pulled_client_seq FROM sync_config")
+        .get(),
+    ).toEqual({ pulled_device_id: null, pulled_client_seq: null });
+    await sync.syncNow();
+    expect(warning).toHaveBeenCalledTimes(1);
+    for (const [url] of fetcher.mock.calls)
+      expect(String(url)).toContain("after=0&");
   });
+  it.each([false, true])(
+    "replays identical ciphertext after restoring an older relay backup (refilled: %s)",
+    async (refilled) => {
+      const server = await relay(),
+        a = open(wasm),
+        b = open(!wasm);
+      const first = client(a),
+        second = client(b);
+      create(a, "备份中的任务");
+      await first.enable({
+        serverUrl: server.url,
+        registrationToken: server.token,
+      });
+      const pairing = parsePairingPayload(first.pairing());
+      const keys = await deriveSyncKeys(pairing.rootKey);
+      seed(b, server.url, pairing.rootKey);
+      await first.syncNow();
+      await second.syncNow();
+      await first.syncNow();
+      const snapshot = await server.backup();
+      create(a, "备份后的电脑任务");
+      create(b, "备份后的另一设备任务");
+      for (let i = 0; i < 3; i++) {
+        await first.syncNow();
+        await second.syncNow();
+      }
+      const download = async () => {
+        const response = await fetch(
+          `${server.url}/v1/spaces/${keys.spaceId}/changes?limit=500`,
+          { headers: { Authorization: `Bearer ${keys.authKey}` } },
+        );
+        const page = (await response.json()) as {
+          changes: { deviceId: string; clientSeq: number; blob: string }[];
+        };
+        return page.changes
+          .map(({ deviceId, clientSeq, blob }) => ({
+            deviceId,
+            clientSeq,
+            blob,
+          }))
+          .sort(
+            (a, b) =>
+              a.deviceId.localeCompare(b.deviceId) || a.clientSeq - b.clientSeq,
+          );
+      };
+      const before = await download();
+      const oldCursor = cursor(a).pulled_cursor;
+      await server.restore(snapshot);
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      if (refilled) {
+        await second.syncNow();
+        create(b, "另一设备重新填满中继");
+        await second.syncNow();
+        expect((await download()).length).toBeGreaterThanOrEqual(oldCursor);
+        create(a, "恢复期间待上传的任务");
+        warning.mockClear();
+      }
+      await first.syncNow();
+      expect(warning).toHaveBeenCalledWith("sync-relay-continuity-reset");
+      for (let i = 0; i < 3; i++) {
+        await first.syncNow();
+        await second.syncNow();
+      }
+      const restored = await download();
+      for (const change of before) expect(restored).toContainEqual(change);
+      if (!refilled) expect(restored).toEqual(before);
+      create(a, "恢复后继续记录");
+      for (let i = 0; i < 2; i++) {
+        await first.syncNow();
+        await second.syncNow();
+      }
+      expect(state(a)).toEqual(state(b));
+      expect(createQueries(b).workspaceSnapshot().counts.todo).toBe(
+        refilled ? 6 : 4,
+      );
+    },
+  );
   it("never applies a partial page or advances the cursor on invalid ciphertext", async () => {
     const db = open(wasm),
       source = open(wasm),
