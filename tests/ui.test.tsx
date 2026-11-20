@@ -149,6 +149,66 @@ it("shows a database error instead of an empty workspace", async () => {
   expect(screen.queryByText("现在准备做什么？")).not.toBeInTheDocument();
 });
 
+it("filters task rows by status from the task list tabs", async () => {
+  const unfinished = [
+    task({ id: "todo", title: "整理交付清单" }),
+    task({ id: "paused", title: "校对上线说明", status: "paused" }),
+    task({ id: "waiting", title: "等设计确认", status: "waiting" }),
+  ];
+  const ended = task({ id: "done", title: "提交周报", status: "done" });
+  window.pickup = createApi({
+    getWorkspaceSnapshot: vi.fn().mockResolvedValue(
+      ok({
+        ...emptyWorkspaceSnapshot(),
+        unfinished,
+        counts: {
+          todo: 1,
+          doing: 0,
+          paused: 1,
+          waiting: 1,
+          done: 1,
+          cancelled: 0,
+          unfinished: 3,
+        },
+      }),
+    ),
+    listTasks: vi
+      .fn()
+      .mockResolvedValue(
+        ok({ items: [ended], total: 1, offset: 0, limit: 50, hasMore: false }),
+      ),
+  });
+  render(<App />);
+  const board = within(
+    await screen.findByRole("region", { name: "任务与恢复" }),
+  );
+  const tabs = within(board.getByRole("tablist", { name: "任务筛选" }));
+  const visibleTitles = () =>
+    unfinished
+      .filter(({ title }) => board.queryByText(title, { exact: true }))
+      .map(({ title }) => title);
+  expect(tabs.getByRole("tab", { name: "未结束" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(visibleTitles()).toEqual(unfinished.map(({ title }) => title));
+
+  for (const [name, { title }] of [
+    ["待处理", unfinished[0]],
+    ["暂停", unfinished[1]],
+    ["等待", unfinished[2]],
+  ] as const) {
+    const tab = tabs.getByRole("tab", { name });
+    fireEvent.click(tab);
+    expect(tab).toHaveAttribute("aria-selected", "true");
+    expect(visibleTitles()).toEqual([title]);
+  }
+
+  fireEvent.click(tabs.getByRole("tab", { name: "已结束" }));
+  expect(await board.findByText(ended.title)).toBeInTheDocument();
+  expect(visibleTitles()).toEqual([]);
+});
+
 it("retains input on failed save and reuses command ID on retry", async () => {
   const createTask = vi.fn().mockResolvedValue({
     ok: false,

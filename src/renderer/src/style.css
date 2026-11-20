@@ -375,8 +375,6 @@ html[data-window="main"] #root {
 .nav-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
   width: 100%;
   min-height: 40px;
   padding: 8px 12px;
@@ -412,27 +410,6 @@ html[data-window="main"] #root {
   align-items: center;
   gap: 10px;
   font-size: 13px;
-}
-
-.nav-count {
-  min-width: 22px;
-  padding: 1px 7px;
-  color: var(--muted);
-  background: #15171c0d;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-
-.nav-item.active .nav-count {
-  color: var(--accent-strong);
-  background: var(--accent-soft);
-}
-
-.review-nav {
-  margin-top: 10px;
 }
 
 .sidebar-bottom {
@@ -2169,14 +2146,9 @@ html[data-window="widget"] #root {
   }
   .nav-item {
     padding: 8px;
-    gap: 6px;
   }
   .nav-left {
     gap: 8px;
-  }
-  .nav-count {
-    min-width: 18px;
-    padding: 1px 5px;
   }
   .side-label {
     margin-left: 8px;
@@ -2262,8 +2234,7 @@ html[data-window="widget"] #root {
     padding: 14px 7px;
   }
   .sidebar-bottom,
-  .side-label,
-  .nav-count {
+  .side-label {
     display: none;
   }
   .nav-item {
