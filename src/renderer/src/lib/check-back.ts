@@ -15,7 +15,7 @@ export function useDueCheckBacks(tasks: readonly TaskSummary[]): TaskSummary[] {
     const delay = Math.min(Math.max(next - Date.now(), 0), MAX_TIMER_DELAY);
     const timer = window.setTimeout(() => setNow(Date.now()), delay);
     return () => window.clearTimeout(timer);
-  }, [next]);
+  }, [next, now]);
 
   return dueCheckBacks(tasks, now);
 }

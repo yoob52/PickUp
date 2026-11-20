@@ -691,3 +691,37 @@ it("does not offer waiting tasks as the first thing to start next time", async (
     }),
   ).toBeInTheDocument();
 });
+
+it("resurfaces a check-back set further out than the longest timer delay", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const day = 24 * 60 * 60 * 1000;
+    const waiting = task({
+      id: "99999999-9999-9999-9999-999999999999",
+      title: "等季度预算批复",
+      status: "waiting",
+      checkBackAt: Date.now() + 30 * day,
+    });
+    window.pickup = createApi({
+      getWorkspaceSnapshot: vi
+        .fn()
+        .mockResolvedValue(ok(waitingSnapshot([waiting]))),
+    });
+    render(<App />);
+    expect(
+      await screen.findByText(/等待中的事项不会自动开始/),
+    ).toBeInTheDocument();
+    await act(async () => {
+      vi.advanceTimersByTime(25 * day);
+    });
+    expect(screen.queryByRole("group", { name: "到点回看" })).toBeNull();
+    await act(async () => {
+      vi.advanceTimersByTime(5 * day);
+    });
+    expect(
+      await screen.findByRole("group", { name: "到点回看" }),
+    ).toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
+});
