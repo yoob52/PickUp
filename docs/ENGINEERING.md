@@ -180,7 +180,7 @@ adb -s emulator-5554 shell am start -n com.yoob52.pickup/.MainActivity
 
 本地 `assembleRelease` 使用相同规则：同时设置 `ANDROID_KEYSTORE_FILE`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_PASSWORD`、`ANDROID_KEY_ALIAS` 即为正式签名；全部不设置则 debug 签名；部分设置立即报错。不要在命令行传密码或打开 shell tracing。debug 签名只用于测试，runner 的 debug key 不保证跨次构建一致，不能用于长期分发或升级。
 
-标签必须为 `vX.Y.Z`；CI 传入 `-PpickupVersionName=X.Y.Z -PpickupVersionCode=$GITHUB_RUN_NUMBER`。非标签构建保留 Gradle 默认版本，不因 run number 改变。Android 的 run number 只在该工作流内单调增加，发布前核对 versionCode 高于所有已分发版本。标签成功构建后，仅 publish job 获取 `contents: write`，通过 gh CLI 上传 `app-release.apk` 到同名 GitHub Release。现有 Windows 工作流负责创建共享 Release，标签仍须匹配根 package.json 版本；Android 最多等待 30 分钟，避免并发创建冲突。若 Windows 发版失败，修复其 Release 后仅重跑 Android publish job。同名 APK 已存在时上传失败，不覆盖已发布产物；下载前务必检查该 run summary 的签名模式，标签本身不保证已设置正式密钥。
+标签必须为 `vX.Y.Z`；CI 仅传入 `-PpickupVersionName=X.Y.Z`，非标签构建默认读取根 package.json 的 version。Gradle 统一按 `major*10000 + minor*100 + patch` 计算 versionCode，不接受独立的 versionCode 覆盖，也不使用 run number：`1.0.0 → 10000`、`1.0.1 → 10001`、`1.1.0 → 10100`、`2.0.0 → 20000`。同一版本的本地和标签构建代码相同。只接受无前导零的三段数字版本，minor / patch 必须在 0..99，结果必须在 Android 的 1..2100000000 范围内；越界直接失败，保证受支持版本的顺序严格递增。标签成功构建后，仅 publish job 获取 `contents: write`，通过 gh CLI 上传 `app-release.apk` 到同名 GitHub Release。现有 Windows 工作流负责创建共享 Release，标签仍须匹配根 package.json 版本；Android 最多等待 30 分钟，避免并发创建冲突。若 Windows 发版失败，修复其 Release 后仅重跑 Android publish job。同名 APK 已存在时上传失败，不覆盖已发布产物；下载前务必检查该 run summary 的签名模式，标签本身不保证已设置正式密钥。
 
 正式分发前创建并妥善备份唯一的长期私钥：keystore 加密保存到至少两个独立离线/受控位置，密码与 alias 存入单独的密码管理器，限制 Actions secrets 管理权限，并记录公开证书 SHA-256。不要依赖 GitHub secret 导出作为备份，不要用测试生成的临时 key 发正式版本。丢失或更换密钥通常不能覆盖安装旧版本；debug 与 release 证书不同也不能直接覆盖安装，卸载会删除应用私有数据，应先保护已有数据。轮换需要单独规划 Android 签名继承策略，本工作流不提供密钥找回。
 

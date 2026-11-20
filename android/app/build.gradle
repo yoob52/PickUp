@@ -1,5 +1,16 @@
 apply plugin: 'com.android.application'
 
+def packageVersion = new groovy.json.JsonSlurper().parse(rootProject.file('../package.json')).version
+def pickupVersion = providers.gradleProperty('pickupVersionName').getOrElse(packageVersion)
+if (!(pickupVersion ==~ /(?:0|[1-9][0-9]{0,5})\.(?:0|[1-9][0-9]?)\.(?:0|[1-9][0-9]?)/)) {
+    throw new GradleException('Android version must be canonical X.Y.Z with minor and patch in 0..99.')
+}
+def (major, minor, patch) = pickupVersion.tokenize('.').collect { it.toInteger() }
+def pickupCode = major * 10000L + minor * 100L + patch
+if (pickupCode < 1 || pickupCode > 2100000000L) {
+    throw new GradleException('Android versionCode must be in 1..2100000000.')
+}
+
 def releaseSigning = ['ANDROID_KEYSTORE_FILE', 'ANDROID_KEYSTORE_PASSWORD', 'ANDROID_KEY_PASSWORD', 'ANDROID_KEY_ALIAS']
     .collectEntries { name -> [(name): providers.environmentVariable(name).orNull] }
 def signingValues = releaseSigning.values().count { value -> value != null && !value.isEmpty() }
@@ -18,8 +29,8 @@ android {
         applicationId "com.yoob52.pickup"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode providers.gradleProperty('pickupVersionCode').map { it.toInteger() }.getOrElse(1)
-        versionName providers.gradleProperty('pickupVersionName').getOrElse('1.0')
+        versionCode pickupCode.toInteger()
+        versionName pickupVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

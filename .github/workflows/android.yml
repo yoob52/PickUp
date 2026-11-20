@@ -75,7 +75,7 @@ jobs:
               echo '::error::Android release tags must have the form vX.Y.Z.'
               exit 1
             fi
-            args+=("-PpickupVersionName=${GITHUB_REF_NAME#v}" "-PpickupVersionCode=$GITHUB_RUN_NUMBER")
+            args+=("-PpickupVersionName=${GITHUB_REF_NAME#v}")
           fi
           ./gradlew "${args[@]}"
       - name: Build untrusted APK with debug signing
@@ -91,7 +91,7 @@ jobs:
               echo '::error::Android release tags must have the form vX.Y.Z.'
               exit 1
             fi
-            args+=("-PpickupVersionName=${GITHUB_REF_NAME#v}" "-PpickupVersionCode=$GITHUB_RUN_NUMBER")
+            args+=("-PpickupVersionName=${GITHUB_REF_NAME#v}")
           fi
           ./gradlew "${args[@]}"
       - name: Verify APK and report certificate
