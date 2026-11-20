@@ -679,6 +679,49 @@ describe.each(["better-sqlite3", "sqlite-wasm"] as const)(
       },
     );
 
+    it.each(["complete", "cancel"] as const)(
+      "does not resurrect a choice cleared by an unseen %s after reopen",
+      (action) => {
+        const time = vi.spyOn(Date, "now").mockReturnValue(1000);
+        const a = open(),
+          b = open();
+        const id = create(a);
+        settled(a, b);
+        createCommands(a).setNextUp({
+          commandId: uuid(),
+          taskId: id,
+          expectedNextUpVersion: readAppState(a).next_up_version,
+        });
+        const cursor = listChangesSince(b, 0, 1000).cursor;
+        time.mockReturnValue(2000);
+        const input = { commandId: uuid(), task: ref(b, id) };
+        if (action === "complete") createCommands(b).completeTask(input);
+        else createCommands(b).cancelTask(input);
+        const ended = listChangesSince(b, cursor, 1000);
+        expect(changes(b).filter((c) => c.entity === "next-up")).toEqual([]);
+        time.mockReturnValue(3000);
+        createCommands(b).reopenTask({ commandId: uuid(), task: ref(b, id) });
+        const reopened = listChangesSince(b, ended.cursor, 1000).changes;
+        applyRemoteChanges(a, reopened);
+        applyRemoteChanges(a, ended.changes);
+        settled(a, b);
+        expect(readAppState(a).next_up_task_id).toBeNull();
+        expect(readAppState(b).next_up_task_id).toBeNull();
+        expect(state(a)).toEqual(state(b));
+        time.mockReturnValue(4000);
+        createCommands(a).setNextUp({
+          commandId: uuid(),
+          taskId: id,
+          expectedNextUpVersion: readAppState(a).next_up_version,
+        });
+        settled(a, b);
+        applyRemoteChanges(a, [...ended.changes, ...reopened]);
+        expect(readAppState(a).next_up_task_id).toBe(id);
+        expect(readAppState(b).next_up_task_id).toBe(id);
+        expect(state(a)).toEqual(state(b));
+      },
+    );
+
     it.each([false, true])(
       "restores the user's next-up choice when it arrives before reopen: %s",
       (choiceFirst) => {

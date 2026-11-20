@@ -424,8 +424,13 @@ function materializeNextUp(db: SqliteDatabase): void {
           .prepare("SELECT status FROM tasks WHERE id = ?")
           .get(change.payload.taskId) as { status: string } | undefined);
   const invalid =
-    task !== undefined &&
-    ["done", "cancelled", "waiting"].includes(task.status);
+    (task !== undefined &&
+      ["done", "cancelled", "waiting"].includes(task.status)) ||
+    db
+      .prepare(
+        "SELECT 1 FROM sync_changes WHERE entity = 'task-status' AND entity_id = ? AND hlc >= ? AND json_extract(payload, '$.status') IN ('done','cancelled','waiting') LIMIT 1",
+      )
+      .get(change.payload.taskId, change.hlc) !== undefined;
   const id = task && !invalid ? change.payload.taskId : null;
   db.prepare(
     `UPDATE app_state SET next_up_task_id = ?, next_up_hlc = ?, next_up_version = next_up_version + 1
