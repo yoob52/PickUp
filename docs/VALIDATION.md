@@ -2,7 +2,7 @@
 
 ## 2026-11-20 · 1.0.0 发版准备（未打标签）
 
-根 package.json / package-lock.json 版本统一为 `1.0.0`；Android 默认 `versionName=1.0.0`、`versionCode=10000`，仍允许现有 Gradle 属性覆盖。`v1.0.0` 标签将触发 Windows NSIS 构建并创建包含安装器和 SHA-256 校验文件的 Release；Android 标签构建沿用 `versionName=1.0.0` / `versionCode=GITHUB_RUN_NUMBER`，有完整签名 secrets 才正式签名，等待 Windows 创建同名 Release 后追加 APK。未修改工作流，未推送标签或创建 Release。
+根 package.json / package-lock.json 版本统一为 `1.0.0`；Android 默认从 package.json 读取版本，标签构建仅覆盖 versionName，所有构建统一按 `major*10000 + minor*100 + patch` 计算 versionCode（`1.0.0 → 10000`，`1.0.1 → 10001`）。minor / patch 限定为 0..99，拒绝非法版本或 Android 整数范围溢出，避免版本码碰撞或降级。`v1.0.0` 标签将触发 Windows NSIS 构建并创建包含安装器和 SHA-256 校验文件的 Release；Android 有完整签名 secrets 才正式签名，等待 Windows 创建同名 Release 后追加 APK。修正 Android 工作流，不再使用 GITHUB_RUN_NUMBER；未推送标签或创建 Release。
 
 新增 `tests/real-server.test.ts`：默认启动隔离本地中继，使用 better-sqlite3 与 WASM 两个 store 注册临时账户、双向创建和同步、处理 doing 冲突并验证完成胜者后不自动恢复被压制任务。运行 `npm test -- tests/real-server.test.ts`；只有明确提供 `PICKUP_E2E_SERVER_URL=https://your-server.example` 才访问外部服务。账户为 `e2e+<ts>@pickup.test`，成功后撤销会话；外部服务没有账户删除接口，临时账户与少量密文仍会保留。
 
