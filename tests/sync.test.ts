@@ -510,6 +510,71 @@ describe.each(["better-sqlite3", "sqlite-wasm"] as const)(
       expect(a.prepare("SELECT * FROM sync_device").get()).toEqual(clock);
     });
 
+    it.each(["start", "switch"] as const)(
+      "honors an explicit %s after observing future-clock starts",
+      (action) => {
+        const time = vi.spyOn(Date, "now").mockReturnValue(1000);
+        const a = open(),
+          b = open();
+        const suppressed = create(a),
+          current = create(a),
+          target = create(a);
+        settled(a, b);
+        if (action === "switch") {
+          time.mockReturnValue(100000);
+          createCommands(a).startTask({
+            commandId: uuid(),
+            task: ref(a, suppressed),
+          });
+        }
+        time.mockReturnValue(200000);
+        createCommands(b).startTask({
+          commandId: uuid(),
+          task: ref(b, current),
+        });
+        settled(a, b);
+        const observed = changes(a)
+          .filter(
+            (c) => c.entity === "task-status" && c.payload.status === "doing",
+          )
+          .map((c) => c.hlc)
+          .sort()
+          .at(-1)!;
+        time.mockReturnValue(1);
+        if (action === "switch") {
+          const result = createCommands(a).switchTask({
+            commandId: uuid(),
+            from: ref(a, current),
+            to: ref(a, target),
+          });
+          expect(result.value.switched).toBe(true);
+        } else {
+          createCommands(a).pauseTask({
+            commandId: uuid(),
+            task: ref(a, current),
+          });
+          expect(
+            createCommands(a).startTask({
+              commandId: uuid(),
+              task: ref(a, target),
+            }).value.started,
+          ).toBe(true);
+        }
+        expect(
+          a.prepare("SELECT id FROM tasks WHERE status='doing'").all(),
+        ).toEqual([{ id: target }]);
+        const started = changes(a)
+          .filter((c) => c.entity === "task-status" && c.entityId === target)
+          .at(-1)!;
+        expect(started.hlc > observed).toBe(true);
+        settled(a, b);
+        expect(state(a)).toEqual(state(b));
+        expect(
+          b.prepare("SELECT id FROM tasks WHERE status='doing'").all(),
+        ).toEqual([{ id: target }]);
+      },
+    );
+
     it.each([false, true])(
       "preserves completion when the following start is delivered first: %s",
       (startFirst) => {

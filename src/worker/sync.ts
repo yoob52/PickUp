@@ -102,6 +102,13 @@ function nextClock(db: SqliteDatabase, now: number, remote?: string): string {
   const device = db
     .prepare("SELECT id, last_hlc FROM sync_device WHERE singleton = 1")
     .get() as Device;
+  const observed = db
+    .prepare(
+      "SELECT max(hlc) AS hlc FROM sync_changes WHERE entity = 'task-status' AND json_extract(payload, '$.status') = 'doing'",
+    )
+    .get() as { hlc: string | null };
+  if (observed.hlc !== null && (remote === undefined || observed.hlc > remote))
+    remote = observed.hlc;
   const hlc =
     remote === undefined
       ? tick(device.last_hlc, device.id, now)
@@ -441,7 +448,7 @@ function materializeDoing(db: SqliteDatabase, now: number): void {
   materializeAppendOnly(db, ids);
   const doing = db
     .prepare(
-      "SELECT id, status_hlc, status_changed_at, status_revision FROM tasks WHERE status = 'doing' ORDER BY status_changed_at DESC, status_hlc DESC, id ASC",
+      "SELECT id, status_hlc, status_changed_at, status_revision FROM tasks WHERE status = 'doing' ORDER BY status_hlc DESC, id ASC",
     )
     .all() as {
     id: string;
