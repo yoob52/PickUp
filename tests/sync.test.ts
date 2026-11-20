@@ -510,6 +510,60 @@ describe.each(["better-sqlite3", "sqlite-wasm"] as const)(
       expect(a.prepare("SELECT * FROM sync_device").get()).toEqual(clock);
     });
 
+    it.each(["complete", "pause", "cancel"] as const)(
+      "does not resume a suppressed start after the winner's %s",
+      (action) => {
+        const time = vi.spyOn(Date, "now").mockReturnValue(1000);
+        const a = open(),
+          b = open(),
+          c = open();
+        const first = create(a),
+          second = create(a);
+        settled(a, b);
+        applyRemoteChanges(c, changes(a));
+        time.mockReturnValue(2000);
+        createCommands(a).startTask({ commandId: uuid(), task: ref(a, first) });
+        time.mockReturnValue(3000);
+        createCommands(b).startTask({
+          commandId: uuid(),
+          task: ref(b, second),
+        });
+        settled(a, b);
+        time.mockReturnValue(4000);
+        const input = { commandId: uuid(), task: ref(b, second) };
+        if (action === "complete") createCommands(b).completeTask(input);
+        else if (action === "pause") createCommands(b).pauseTask(input);
+        else createCommands(b).cancelTask(input);
+        expect(
+          b.prepare("SELECT id FROM tasks WHERE status='doing'").all(),
+        ).toEqual([]);
+        settled(a, b);
+        for (const event of changes(b).reverse())
+          applyRemoteChanges(c, [event]);
+        settled(a, c);
+        settled(a, b);
+        expect(state(a)).toEqual(state(b));
+        expect(state(a)).toEqual(state(c));
+        expect(
+          a.prepare("SELECT status FROM tasks WHERE id=?").get(first),
+        ).toEqual({ status: "paused" });
+        expect(
+          a
+            .prepare(
+              "SELECT count(*) AS n FROM task_transitions WHERE task_id=? AND from_status='doing' AND to_status='paused'",
+            )
+            .get(first),
+        ).toEqual({ n: 1 });
+        time.mockReturnValue(1);
+        createCommands(a).startTask({ commandId: uuid(), task: ref(a, first) });
+        expect(
+          a.prepare("SELECT id FROM tasks WHERE status='doing'").all(),
+        ).toEqual([{ id: first }]);
+        settled(a, b);
+        expect(state(a)).toEqual(state(b));
+      },
+    );
+
     it.each(["start", "switch"] as const)(
       "honors an explicit %s after observing future-clock starts",
       (action) => {

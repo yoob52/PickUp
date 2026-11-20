@@ -456,21 +456,24 @@ function materializeDoing(db: SqliteDatabase, now: number): void {
     status_changed_at: number;
     status_revision: number;
   }[];
-  const winner = doing[0];
-  for (const loser of doing.slice(1)) {
+  const latestStart = db
+    .prepare(
+      "SELECT entity_id, hlc FROM sync_changes WHERE entity = 'task-status' AND json_extract(payload, '$.status') = 'doing' ORDER BY hlc DESC, entity_id ASC LIMIT 1",
+    )
+    .get() as { entity_id: string; hlc: string } | undefined;
+  for (const loser of doing.filter(
+    (row) =>
+      latestStart !== undefined &&
+      (row.status_hlc < latestStart.hlc ||
+        (row.status_hlc === latestStart.hlc && row.id > latestStart.entity_id)),
+  )) {
     db.prepare(
-      "UPDATE tasks SET status = 'paused', status_changed_at = ?, status_revision = ?, version = version + 1 WHERE id = ?",
-    ).run(winner.status_changed_at, winner.status_revision, loser.id);
+      "UPDATE tasks SET status = 'paused', version = version + 1 WHERE id = ?",
+    ).run(loser.id);
     const hash = bytesToHex(
       sha256(
         new TextEncoder().encode(
-          JSON.stringify([
-            "doing-conflict",
-            loser.id,
-            loser.status_hlc,
-            winner.id,
-            winner.status_hlc,
-          ]),
+          JSON.stringify(["suppressed-start", loser.id, loser.status_hlc]),
         ),
       ),
     );
@@ -479,8 +482,8 @@ function materializeDoing(db: SqliteDatabase, now: number): void {
       task_id: loser.id,
       from_status: "doing" as const,
       to_status: "paused" as const,
-      changed_at: winner.status_changed_at,
-      revision: winner.status_revision,
+      changed_at: loser.status_changed_at,
+      revision: loser.status_revision,
     };
     if (!db.prepare("SELECT 1 FROM sync_changes WHERE id = ?").get(id))
       insertChange(
@@ -489,20 +492,14 @@ function materializeDoing(db: SqliteDatabase, now: number): void {
           id,
           entityId: id,
           entity: "transition",
-          hlc: winner.status_hlc,
+          hlc: loser.status_hlc,
           payload,
         },
         now,
       );
     db.prepare(
       "INSERT OR IGNORE INTO task_transitions(id,hlc,task_id,from_status,to_status,changed_at,revision) VALUES(?, ?, ?, 'doing','paused',?,?)",
-    ).run(
-      id,
-      winner.status_hlc,
-      loser.id,
-      payload.changed_at,
-      payload.revision,
-    );
+    ).run(id, loser.status_hlc, loser.id, payload.changed_at, payload.revision);
   }
   db.exec("DELETE FROM sync_dirty");
   db.exec(
