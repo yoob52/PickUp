@@ -96,3 +96,39 @@ test("从详情完成并重新打开暂停的任务，保留断点且不打断�
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("今日收尾的键盘用户可以在对话框内重新打开任务", async () => {
+  const directory = await tempData();
+  const application = await launch(launchEnvironment(directory));
+  try {
+    const page = await windowByKind(application, "main");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const title = "检查发布说明";
+    await captureTask(application, page, title);
+
+    await page.getByRole("button", { name: "今日收尾", exact: true }).click();
+    const review = page.getByRole("dialog", { name: "把今天收好。" });
+    await review.getByRole("button", { name: new RegExp(title) }).click();
+    const detail = page.getByRole("dialog", { name: title });
+    await detail.getByRole("button", { name: "完成", exact: true }).click();
+    await expect(detail).toHaveCount(0);
+    const reopen = review.getByRole("button", { name: "重新打开" });
+    await expect(reopen).toBeVisible();
+
+    await review.getByRole("button", { name: "关闭" }).focus();
+    await page.keyboard.press("Tab");
+    await expect(reopen).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(
+      page.getByText("已重新打开，断点历史仍然保留。"),
+    ).toBeVisible();
+    await expect(review).toBeVisible();
+    await page.keyboard.press("Tab");
+    await expect(
+      review.getByRole("button", { name: new RegExp(title) }),
+    ).toBeFocused();
+  } finally {
+    await application.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

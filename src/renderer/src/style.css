@@ -1272,6 +1272,16 @@ html[data-window="main"] #root {
   outline-color: #ffffff;
 }
 
+.toast-action-target:focus {
+  outline: none;
+}
+
+.toast.in-dialog {
+  position: static;
+  max-width: none;
+  margin-bottom: 12px;
+}
+
 /* The widget is small: keep feedback over the brand label, clear of the actions. */
 html[data-window="widget"] .toast {
   top: 12px;
