@@ -376,34 +376,104 @@ it("splits uploads at the one MiB wire limit rather than skipping large valid ba
   expect(cursor(db).pushed_cursor).toBe(listChangesSince(db, 0, 1000).cursor);
 });
 
-it("aborts a request after twenty seconds and records the timeout without moving cursors", async () => {
-  vi.useFakeTimers();
-  const db = open();
-  seed(db, "https://relay.example.com");
-  const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
-    const controller = new AbortController();
-    setTimeout(() => controller.abort(), ms);
-    return controller.signal;
-  });
-  const fetcher = vi.fn<typeof fetch>().mockImplementation(
-    (_url, options) =>
-      new Promise((_resolve, reject) => {
-        options!.signal!.addEventListener(
-          "abort",
-          () => reject(new Error("aborted")),
-          { once: true },
-        );
-      }),
-  );
-  const sync = client(db, fetcher);
-  const pending = expect(sync.syncNow()).rejects.toThrow("超时");
-  await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
-  expect(timeout).toHaveBeenCalledWith(20000);
-  await vi.advanceTimersByTimeAsync(20000);
-  await pending;
-  expect(cursor(db)).toEqual({ pushed_cursor: 0, pulled_cursor: 0 });
-  expect(sync.status().error).toContain("超时");
-});
+it.each(["headers", "body"])(
+  "aborts stalled %s after twenty seconds and records the timeout without moving cursors",
+  async (phase) => {
+    vi.useFakeTimers();
+    const db = open();
+    seed(db, "https://relay.example.com");
+    const timeout = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockImplementation((ms) => {
+        const controller = new AbortController();
+        setTimeout(() => controller.abort(), ms);
+        return controller.signal;
+      });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (_url, options) => {
+        if (phase === "body")
+          return new Response(
+            new ReadableStream({
+              start(controller) {
+                options!.signal!.addEventListener(
+                  "abort",
+                  () => controller.error(new Error("aborted")),
+                  { once: true },
+                );
+              },
+            }),
+          );
+        return new Promise((_resolve, reject) => {
+          options!.signal!.addEventListener(
+            "abort",
+            () => reject(new Error("aborted")),
+            { once: true },
+          );
+        });
+      });
+    const sync = client(db, fetcher);
+    const pending = expect(sync.syncNow()).rejects.toThrow("超时");
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    expect(timeout).toHaveBeenCalledWith(20000);
+    await vi.advanceTimersByTimeAsync(20000);
+    await pending;
+    expect(cursor(db)).toEqual({ pushed_cursor: 0, pulled_cursor: 0 });
+    expect(sync.status().error).toContain("超时");
+  },
+);
+
+it.each([false, true])(
+  "bounds streamed responses at 48 MiB (oversized: %s)",
+  async (oversized) => {
+    const db = open();
+    seed(db, "https://relay.example.com");
+    const cancel = vi.fn();
+    const chunk = new Uint8Array(1024 * 1024).fill(32);
+    const json = new TextEncoder().encode(
+      JSON.stringify({ changes: [], lastServerSeq: 0, more: false }),
+    );
+    let remaining = 48 * 1024 * 1024 + (oversized ? 1 : 0);
+    let signal!: AbortSignal;
+    let reads = 0;
+    const sync = client(db, async (_url, options) => {
+      signal = options!.signal!;
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            reads++;
+            if (!remaining) return controller.close();
+            if (remaining > 48 * 1024 * 1024 - json.length) {
+              controller.enqueue(json);
+              remaining -= json.length;
+            } else {
+              const value = chunk.subarray(
+                0,
+                Math.min(chunk.length, remaining),
+              );
+              remaining -= value.length;
+              controller.enqueue(value);
+            }
+          },
+          cancel,
+        }),
+      );
+    });
+    if (oversized) {
+      await expect(sync.syncNow()).rejects.toMatchObject({
+        code: "SYNC_ERROR",
+        message: expect.stringContaining("48 MiB"),
+      });
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(signal.aborted).toBe(true);
+      expect(sync.status().error).toContain("48 MiB");
+      expect(cursor(db)).toEqual({ pushed_cursor: 0, pulled_cursor: 0 });
+    } else {
+      await expect(sync.syncNow()).resolves.toMatchObject({ error: null });
+    }
+    expect(reads).toBeLessThanOrEqual(51);
+  },
+);
 
 it("rejects invalid registration and preserves the disabled state and local data", async () => {
   const server = await relay(),

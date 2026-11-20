@@ -29,6 +29,7 @@ type Config = {
   retry_at: number | null;
 };
 const sequence = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+const MAX_RESPONSE_BYTES = 48 * 1024 * 1024;
 const downloadSchema = z.strictObject({
   changes: z
     .array(
@@ -142,14 +143,17 @@ export class SyncClient {
     authKey: string,
     body?: unknown,
   ): Promise<unknown> {
+    const controller = new AbortController();
+    const signal = AbortSignal.any([
+      this.controller.signal,
+      controller.signal,
+      AbortSignal.timeout(20_000),
+    ]);
     try {
       const response = await this.fetcher(url, {
         method: body === undefined ? "GET" : "POST",
         redirect: "error",
-        signal: AbortSignal.any([
-          this.controller.signal,
-          AbortSignal.timeout(20_000),
-        ]),
+        signal,
         headers: {
           Authorization: `Bearer ${authKey}`,
           ...(body === undefined ? {} : { "Content-Type": "application/json" }),
@@ -164,8 +168,35 @@ export class SyncClient {
           `同步服务器返回错误（${response.status}），请检查地址或稍后重试。`,
           true,
         );
-      return await response.json();
+      if (!response.body) throw new Error("Missing response body");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      const parts: string[] = [];
+      let size = 0;
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          signal.throwIfAborted();
+          if (done) break;
+          size += value.byteLength;
+          if (size > MAX_RESPONSE_BYTES) {
+            controller.abort();
+            await reader.cancel();
+            throw new DomainError(
+              "SYNC_ERROR",
+              "同步服务器响应超过 48 MiB 限制。",
+              false,
+            );
+          }
+          parts.push(decoder.decode(value, { stream: true }));
+        }
+        parts.push(decoder.decode());
+      } finally {
+        reader.releaseLock();
+      }
+      return JSON.parse(parts.join("")) as unknown;
     } catch (error) {
+      controller.abort();
       if (error instanceof DomainError) throw error;
       throw new DomainError(
         "SYNC_ERROR",
