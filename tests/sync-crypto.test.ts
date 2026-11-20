@@ -92,6 +92,8 @@ it("round trips versioned pairing payloads, rejecting invalid roots, versions an
       { u: "https://example.com", k: "short" },
       { u: "http://example.com", k: rootKey },
       { u: "https://user:pass@example.com", k: rootKey },
+      { u: "https://example.com?", k: rootKey },
+      { u: "https://example.com#", k: rootKey },
       { u: "https://example.com", k: rootKey, extra: 1 },
       { u: "https://example.com" },
     ].map(
@@ -104,6 +106,13 @@ it("round trips versioned pairing payloads, rejecting invalid roots, versions an
 });
 
 describe("server URL policy", () => {
+  it.each([
+    ["https://EXAMPLE.com:443/", "https://example.com"],
+    ["https://example.com/sync/", "https://example.com/sync"],
+    ["https://example.com/path%3F%23/", "https://example.com/path%3F%23"],
+  ])("normalizes %s", (input, expected) => {
+    expect(serverUrlSchema.parse(input)).toBe(expected);
+  });
   it.each([
     "https://example.com",
     "https://example.com/sync/",
@@ -121,6 +130,11 @@ describe("server URL policy", () => {
     "https://user:pass@example.com",
     "https://example.com?token=secret",
     "https://example.com#fragment",
+    "https://example.com?",
+    "https://example.com#",
+    "https://example.com/sync/?",
+    "https://example.com/sync/#",
+    "https://example.com?#",
   ])("rejects %s", (value) =>
     expect(serverUrlSchema.safeParse(value).success).toBe(false),
   );

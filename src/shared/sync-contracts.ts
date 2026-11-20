@@ -13,8 +13,8 @@ export const serverUrlSchema = z
         )) ||
       url.username ||
       url.password ||
-      url.search ||
-      url.hash
+      url.href.includes("?") ||
+      url.href.includes("#")
     ) {
       ctx.addIssue({
         code: "custom",
