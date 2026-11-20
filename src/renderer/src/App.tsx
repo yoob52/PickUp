@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { getWindowKind } from "./window-kind";
 import { WorkspaceProvider } from "./state/workspace";
 import { ToastProvider } from "./ui/Toast";
@@ -6,8 +7,39 @@ import { MainApp } from "./views/MainApp";
 import { WidgetApp } from "./views/WidgetApp";
 
 export function App() {
-  const kind = getWindowKind();
+  const mobile = window.pickup.host === "mobile";
+  const kind = mobile ? "main" : getWindowKind();
   document.documentElement.dataset.window = kind;
+  document.documentElement.dataset.host = window.pickup.host;
+  useEffect(() => {
+    if (!mobile) return;
+    const viewport = window.visualViewport;
+    function resize() {
+      document.documentElement.style.setProperty(
+        "--mobile-height",
+        `${viewport?.height ?? window.innerHeight}px`,
+      );
+      document.documentElement.style.setProperty(
+        "--mobile-top",
+        `${viewport?.offsetTop ?? 0}px`,
+      );
+      const active = document.activeElement;
+      if (
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement
+      )
+        active.scrollIntoView({ block: "nearest" });
+    }
+    resize();
+    viewport?.addEventListener("resize", resize);
+    viewport?.addEventListener("scroll", resize);
+    return () => {
+      viewport?.removeEventListener("resize", resize);
+      viewport?.removeEventListener("scroll", resize);
+      document.documentElement.style.removeProperty("--mobile-height");
+      document.documentElement.style.removeProperty("--mobile-top");
+    };
+  }, [mobile]);
   return (
     <WorkspaceProvider>
       <ToastProvider>

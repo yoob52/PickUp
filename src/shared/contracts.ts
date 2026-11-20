@@ -516,6 +516,7 @@ export type CommandOutcome =
 /* --------------------------------------------------------------- 渲染进程 API */
 
 export type PickupAPI = {
+  readonly host: "desktop" | "mobile";
   getWorkspaceSnapshot(): Promise<Result<WorkspaceSnapshot>>;
   listTasks(input: ListTasksInput): Promise<Result<Page<TaskSummary>>>;
   getTaskDetail(input: TaskDetailInput): Promise<Result<TaskDetail>>;

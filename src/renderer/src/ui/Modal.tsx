@@ -7,6 +7,7 @@ import {
 } from "react";
 import { X } from "lucide-react";
 import { IconButton } from "./primitives";
+import { useMobileBack } from "./useMobileBack";
 
 const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
@@ -24,10 +25,11 @@ export function Modal({
   eyebrow?: string;
   wide?: boolean;
   stacked?: boolean;
-  onClose: () => void;
+  onClose: () => void | boolean | Promise<void | boolean | undefined>;
   children: ReactNode;
   labelledBy?: string;
 }) {
+  useMobileBack(onClose);
   const dialog = useRef<HTMLElement>(null);
   const opener = useRef<Element | null>(null);
   if (opener.current === null && typeof document !== "undefined") {
@@ -41,10 +43,14 @@ export function Modal({
     const focusables = () =>
       node ? [...node.querySelectorAll<HTMLElement>(FOCUSABLE)] : [];
     const preferred =
-      node?.querySelector<HTMLElement>(
-        "input:not([disabled]), textarea:not([disabled])",
-      ) ?? focusables().find((item) => !item.hasAttribute("data-close"));
-    (preferred ?? focusables()[0])?.focus();
+      window.pickup.host === "mobile"
+        ? focusables()[0]
+        : (node?.querySelector<HTMLElement>(
+            "input:not([disabled]), textarea:not([disabled])",
+          ) ?? focusables().find((item) => !item.hasAttribute("data-close")));
+    (preferred ?? focusables()[0])?.focus(
+      window.pickup.host === "mobile" ? { preventScroll: true } : undefined,
+    );
     return () => {
       const previous = opener.current;
       if (previous instanceof HTMLElement && previous.isConnected)

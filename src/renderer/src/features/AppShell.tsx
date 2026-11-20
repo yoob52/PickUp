@@ -30,6 +30,7 @@ export function AppShell({
   children,
 }: Props) {
   const notify = useToast();
+  const mobile = window.pickup.host === "mobile";
   const mainRef = useRef<HTMLElement>(null);
 
   async function controlWindow(action: MainWindowAction) {
@@ -53,33 +54,37 @@ export function AppShell({
           <Button icon={<Plus size={15} />} onClick={onCapture}>
             记一件事
           </Button>
-          <IconButton label="打开设置" onClick={onSettings}>
-            <SlidersHorizontal size={16} />
-          </IconButton>
+          {!mobile ? (
+            <IconButton label="打开设置" onClick={onSettings}>
+              <SlidersHorizontal size={16} />
+            </IconButton>
+          ) : null}
         </div>
-        <div className="window-controls" role="group" aria-label="窗口控制">
-          <button
-            type="button"
-            aria-label="最小化"
-            onClick={() => void controlWindow("minimize")}
-          >
-            <Minus size={14} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            aria-label="最大化或还原"
-            onClick={() => void controlWindow("toggleMaximize")}
-          >
-            <Square size={12} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            aria-label="关闭主窗口"
-            onClick={() => void controlWindow("close")}
-          >
-            <X size={16} aria-hidden="true" />
-          </button>
-        </div>
+        {!mobile ? (
+          <div className="window-controls" role="group" aria-label="窗口控制">
+            <button
+              type="button"
+              aria-label="最小化"
+              onClick={() => void controlWindow("minimize")}
+            >
+              <Minus size={14} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-label="最大化或还原"
+              onClick={() => void controlWindow("toggleMaximize")}
+            >
+              <Square size={12} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-label="关闭主窗口"
+              onClick={() => void controlWindow("close")}
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
       </header>
       <div className="layout">
         <aside className="sidebar">

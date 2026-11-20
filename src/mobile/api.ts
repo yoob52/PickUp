@@ -65,6 +65,7 @@ export function createMobileAPI(
   }
 
   const api: PickupAPI = {
+    host: "mobile",
     getWorkspaceSnapshot: () => invoke("getWorkspaceSnapshot"),
     listTasks: (input) => invoke("listTasks", input),
     getTaskDetail: (input) => invoke("getTaskDetail", input),
@@ -125,7 +126,7 @@ export function createMobileAPI(
     onPrepareClose: () => () => {},
   };
   return {
-    api,
+    api: Object.freeze(api),
     dispose: () => {
       clearTimeout(timer);
       page.removeEventListener("visibilitychange", visible);

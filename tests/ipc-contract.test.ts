@@ -44,7 +44,7 @@ function api(): PickupAPI {
 function collectChannels(): string[] {
   const channels = new Set<string>();
   for (const [name, value] of Object.entries(api())) {
-    if (name.startsWith("on")) continue;
+    if (name.startsWith("on") || typeof value !== "function") continue;
     mocks.invoke.mockClear();
     (value as (input: unknown) => unknown)(undefined);
     expect(mocks.invoke, `${name} 必须调用单一 channel`).toHaveBeenCalledTimes(
@@ -94,6 +94,9 @@ beforeAll(() => {
 });
 
 describe("IPC 契约一致性", () => {
+  it("preload identifies the desktop host", () => {
+    expect(api().host).toBe("desktop");
+  });
   it("preload 暴露的每个业务方法都有 main 侧固定处理函数", () => {
     const channels = collectChannels();
     const registered = [...registeredChannels()].sort();

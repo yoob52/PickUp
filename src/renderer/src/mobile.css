@@ -1,0 +1,267 @@
+html[data-host="mobile"] {
+  scroll-padding-block: 20px;
+}
+
+html[data-host="mobile"] body {
+  min-width: 0;
+}
+
+[data-host="mobile"] .app-shell {
+  height: var(--mobile-height, 100dvh);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+[data-host="mobile"] .topbar {
+  height: auto;
+  min-height: 72px;
+  padding: calc(12px + env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right)) 12px
+    max(16px, env(safe-area-inset-left));
+  gap: 12px;
+  -webkit-app-region: no-drag;
+}
+
+[data-host="mobile"] .topbar .brand-lockup > div:last-child {
+  display: block;
+}
+
+[data-host="mobile"] .topbar .brand-name {
+  font-size: 16px;
+}
+
+[data-host="mobile"] .topbar .brand-meta,
+[data-host="mobile"] .topbar .quiet-chip,
+[data-host="mobile"] .topbar .date-stamp,
+[data-host="mobile"] .sidebar-bottom,
+[data-host="mobile"] .side-label {
+  display: none;
+}
+
+[data-host="mobile"] .topbar .btn {
+  width: auto;
+  min-height: 44px;
+  padding: 0 14px;
+  gap: 6px;
+  font-size: 14px;
+}
+
+[data-host="mobile"] .layout {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+[data-host="mobile"] .sidebar {
+  height: auto;
+  padding: 4px max(16px, env(safe-area-inset-right)) 8px
+    max(16px, env(safe-area-inset-left));
+  border-right: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+[data-host="mobile"] .side-nav {
+  display: flex;
+  gap: 8px;
+}
+
+[data-host="mobile"] .nav-item {
+  min-height: 44px;
+  padding: 10px 14px;
+}
+
+[data-host="mobile"] .nav-left {
+  gap: 8px;
+  font-size: 14px;
+}
+
+[data-host="mobile"] .main {
+  padding: 20px max(16px, env(safe-area-inset-right))
+    calc(24px + env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
+}
+
+[data-host="mobile"] .dashboard-grid,
+[data-host="mobile"] .lower-grid,
+[data-host="mobile"] .workspace-aside,
+[data-host="mobile"] .detail-grid,
+[data-host="mobile"] .switch-context {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+[data-host="mobile"] .context-arrow {
+  transform: rotate(90deg);
+}
+
+[data-host="mobile"] .current-card {
+  min-height: 260px;
+  padding: 24px;
+}
+
+[data-host="mobile"] .current-content h2 {
+  font-size: 26px;
+  line-height: 1.4;
+}
+
+[data-host="mobile"] .current-content h2,
+[data-host="mobile"] .next-line,
+[data-host="mobile"] .task-title,
+[data-host="mobile"] .task-sub,
+[data-host="mobile"] .endday-title,
+[data-host="mobile"] .endday-sub,
+[data-host="mobile"] .context-box strong,
+[data-host="mobile"] .modal h2 {
+  overflow-wrap: anywhere;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  -webkit-line-clamp: unset;
+}
+
+[data-host="mobile"] button,
+[data-host="mobile"] .btn,
+[data-host="mobile"] .icon-button,
+[data-host="mobile"] .modal-head .icon-button {
+  min-width: 44px;
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
+[data-host="mobile"] .icon-button,
+[data-host="mobile"] .modal-head .icon-button {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+
+[data-host="mobile"] .current-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+[data-host="mobile"] .capture-trigger {
+  min-height: 64px;
+  padding: 14px 16px;
+  gap: 12px;
+}
+
+[data-host="mobile"] .capture-placeholder {
+  white-space: normal;
+  font-size: 14px;
+  text-align: left;
+}
+
+[data-host="mobile"] .capture-key,
+[data-host="mobile"] .capture-cta {
+  display: none;
+}
+
+[data-host="mobile"] .task-board .section-head {
+  padding: 16px 8px;
+  gap: 14px;
+}
+
+[data-host="mobile"] .filter-tabs {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+[data-host="mobile"] .filter-tab {
+  padding: 6px 2px;
+}
+
+[data-host="mobile"] .task-row {
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 14px 8px;
+  align-items: start;
+}
+
+[data-host="mobile"] .task-row > .status-dot {
+  margin-top: 8px;
+}
+
+[data-host="mobile"] .task-title {
+  font-size: 15px;
+}
+
+[data-host="mobile"] .task-row > .status-mark {
+  grid-column: 2;
+}
+
+[data-host="mobile"] .task-row > .row-actions {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  flex-direction: column;
+  gap: 4px;
+}
+
+[data-host="mobile"] .modal-backdrop {
+  top: var(--mobile-top, 0px);
+  height: var(--mobile-height, 100dvh);
+  bottom: auto;
+  padding: 0;
+}
+
+[data-host="mobile"] .modal,
+[data-host="mobile"] .modal.detail-modal {
+  width: 100%;
+  max-width: 600px;
+  height: 100%;
+  max-height: 100%;
+  padding: calc(20px + env(safe-area-inset-top))
+    max(20px, env(safe-area-inset-right))
+    calc(20px + env(safe-area-inset-bottom))
+    max(20px, env(safe-area-inset-left));
+  border: 0;
+  border-radius: 0;
+  overscroll-behavior: contain;
+  scroll-padding-block: 100px;
+}
+
+[data-host="mobile"] .modal-head {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+[data-host="mobile"] .modal h2 {
+  font-size: 24px;
+}
+
+[data-host="mobile"] .field input,
+[data-host="mobile"] .field textarea,
+[data-host="mobile"] select {
+  max-width: 100%;
+  min-height: 48px;
+  font-size: 16px;
+  scroll-margin-block: 80px;
+}
+
+[data-host="mobile"] .field textarea {
+  min-height: 112px;
+}
+
+[data-host="mobile"] .modal .modal-actions {
+  margin-inline: -20px;
+  padding: 16px 20px calc(16px + env(safe-area-inset-bottom));
+}
+
+[data-host="mobile"] .modal-actions > .btn {
+  flex: 1 1 auto;
+}
+
+[data-host="mobile"] .toast {
+  left: max(16px, env(safe-area-inset-left));
+  right: max(16px, env(safe-area-inset-right));
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  max-width: none;
+}
+
+[data-host="mobile"] .workspace-footer {
+  flex-direction: column;
+  gap: 4px;
+}
+
+[data-host="mobile"] .fatal-screen {
+  padding: calc(24px + env(safe-area-inset-top)) 20px;
+  overflow-wrap: anywhere;
+}

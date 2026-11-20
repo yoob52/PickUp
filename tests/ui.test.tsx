@@ -22,7 +22,10 @@ import type {
 } from "../src/shared/contracts";
 import { emptyWorkspaceSnapshot } from "../src/shared/task";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.history.replaceState(null, "", "/");
+});
 
 function unused(): Promise<never> {
   return Promise.reject(new Error("unexpected bridge call"));
@@ -54,6 +57,7 @@ function task(
 
 function createApi(overrides: Partial<PickupAPI> = {}): PickupAPI {
   return {
+    host: "desktop",
     getWorkspaceSnapshot: unused,
     listTasks: unused,
     getTaskDetail: unused,
@@ -133,6 +137,78 @@ function renderCapture() {
 async function openCapture() {
   return screen.findByLabelText("标题");
 }
+
+it.each(["desktop", "mobile"] as const)(
+  "uses %s host capabilities rather than viewport or user agent",
+  async (host) => {
+    if (host === "mobile")
+      window.history.replaceState(null, "", "/?window=widget");
+    const bridge = createApi({
+      host,
+      getWorkspaceSnapshot: vi
+        .fn()
+        .mockResolvedValue(ok(emptyWorkspaceSnapshot())),
+    });
+    window.pickup = bridge;
+    render(<App />);
+    await screen.findByText("现在准备做什么？");
+    expect(screen.queryByRole("group", { name: "窗口控制" }) !== null).toBe(
+      host === "desktop",
+    );
+    expect(screen.queryByRole("button", { name: "打开设置" }) !== null).toBe(
+      host === "desktop",
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "记一件事" })[0]);
+    if (host === "desktop") {
+      expect(bridge.showCapture).toHaveBeenCalledOnce();
+      expect(screen.queryByRole("dialog")).toBeNull();
+    } else {
+      expect(
+        await screen.findByRole("dialog", { name: "记下新一件事。" }),
+      ).toBeInTheDocument();
+      expect(bridge.showCapture).not.toHaveBeenCalled();
+      expect(bridge.getDesktopState).not.toHaveBeenCalled();
+      fireEvent.click(
+        within(screen.getByRole("dialog")).getAllByRole("button", {
+          name: "关闭",
+        })[0],
+      );
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(bridge.hideCapture).not.toHaveBeenCalled();
+    }
+  },
+);
+
+it("retains mobile capture and its input if draft close fails", async () => {
+  const bridge = createApi({
+    host: "mobile",
+    getWorkspaceSnapshot: vi
+      .fn()
+      .mockResolvedValue(ok(emptyWorkspaceSnapshot())),
+    saveDraft: vi.fn().mockResolvedValue({
+      ok: false,
+      code: "DB_UNAVAILABLE",
+      message: "草稿保存失败",
+      retryable: true,
+    }),
+  });
+  window.pickup = bridge;
+  render(<App />);
+  fireEvent.click(
+    (await screen.findAllByRole("button", { name: "记一件事" }))[0],
+  );
+  fireEvent.change(await screen.findByLabelText("标题"), {
+    target: { value: "尚未保存的输入" },
+  });
+  fireEvent.click(
+    within(screen.getByRole("dialog")).getAllByRole("button", {
+      name: "关闭",
+    })[0],
+  );
+  expect(await screen.findByText("草稿保存失败")).toBeInTheDocument();
+  expect(screen.getByLabelText("标题")).toHaveValue("尚未保存的输入");
+  expect(bridge.hideCapture).not.toHaveBeenCalled();
+});
 
 it("shows a database error instead of an empty workspace", async () => {
   window.pickup = createApi({

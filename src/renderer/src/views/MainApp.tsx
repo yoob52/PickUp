@@ -6,6 +6,7 @@ import { useWorkspace } from "../state/workspace";
 import { Button, NoticeBar } from "../ui/primitives";
 import { useToast, type ToastAction } from "../ui/Toast";
 import { AppShell } from "../features/AppShell";
+import { CaptureApp } from "./CaptureApp";
 import { CurrentCard } from "../features/CurrentCard";
 import { DailyReviewDialog } from "../features/DailyReview";
 import { ResumePanel } from "../features/ResumePanel";
@@ -28,9 +29,14 @@ type Overlay =
     }
   | { type: "detail"; taskId: string }
   | { type: "wait"; task: TaskSummary }
-  | { type: "settings" };
+  | { type: "settings" }
+  | { type: "capture" };
 
 export function MainApp() {
+  function openCapture() {
+    if (window.pickup.host === "mobile") setOverlay({ type: "capture" });
+    else void window.pickup.showCapture();
+  }
   const { snapshot, phase, error, notice, refresh } = useWorkspace();
   const notify = useToast();
   const [overlay, setOverlay] = useState<Overlay | null>(null);
@@ -89,7 +95,7 @@ export function MainApp() {
         return;
       if (event.key.toLowerCase() === "n") {
         event.preventDefault();
-        void window.pickup.showCapture();
+        openCapture();
       }
     }
     window.addEventListener("keydown", onKey);
@@ -232,7 +238,7 @@ export function MainApp() {
   return (
     <AppShell
       connection={connection}
-      onCapture={() => void window.pickup.showCapture()}
+      onCapture={openCapture}
       onReview={() => setReviewOpen(true)}
       onSettings={() => setOverlay({ type: "settings" })}
     >
@@ -266,7 +272,7 @@ export function MainApp() {
       <section className="dashboard-grid" aria-label="当前工作">
         <CurrentCard
           current={snapshot.currentTask}
-          onCapture={() => void window.pickup.showCapture()}
+          onCapture={openCapture}
           onChoose={() => focusBoard("todo")}
           onPause={() => {
             if (snapshot.currentTask)
@@ -297,11 +303,7 @@ export function MainApp() {
           onChangeNext={() => setReviewOpen(true)}
         />
       </section>
-      <button
-        type="button"
-        className="capture-trigger"
-        onClick={() => void window.pickup.showCapture()}
-      >
+      <button type="button" className="capture-trigger" onClick={openCapture}>
         <Plus size={17} aria-hidden="true" />
         <span className="capture-placeholder">
           有件新事？先记在这里，不打断当前工作。
@@ -408,7 +410,10 @@ export function MainApp() {
           onNotice={notify}
         />
       ) : null}
-      {overlay?.type === "settings" ? (
+      {overlay?.type === "capture" ? (
+        <CaptureApp onClose={() => setOverlay(null)} />
+      ) : null}
+      {overlay?.type === "settings" && window.pickup.host === "desktop" ? (
         <SettingsDialog onClose={() => setOverlay(null)} onNotice={notify} />
       ) : null}
     </AppShell>

@@ -1,19 +1,24 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { TaskSummary } from "../../../shared/contracts";
 import { invokeCommand, newCommandId, taskRef } from "../lib/command";
 import { useWorkspace } from "../state/workspace";
 import { NoticeBar } from "../ui/primitives";
 import { useToast } from "../ui/Toast";
+import { Modal } from "../ui/Modal";
 import { CaptureForm, type CaptureFormHandle } from "../features/CaptureForm";
 import { SwitchFlow } from "../features/SwitchFlow";
 
-export function CaptureApp() {
+export function CaptureApp({ onClose }: { onClose?: () => void } = {}) {
   const { snapshot, phase, error, notice, refresh } = useWorkspace();
   const notify = useToast();
   const [switchTo, setSwitchTo] = useState<TaskSummary | null>(null);
   const formRef = useRef<CaptureFormHandle>(null);
 
   async function hide() {
+    if (window.pickup.host === "mobile") {
+      onClose?.();
+      return;
+    }
     await window.pickup.hideCapture();
   }
 
@@ -79,9 +84,7 @@ export function CaptureApp() {
   }
 
   return (
-    <main className="capture-window">
-      <div className="modal-eyebrow">快速记录</div>
-      <h1>记下新一件事。</h1>
+    <CaptureSurface onClose={() => formRef.current?.tryClose()}>
       {notice ? <NoticeBar tone="error">{notice}</NoticeBar> : null}
       <CaptureForm
         ref={formRef}
@@ -96,7 +99,7 @@ export function CaptureApp() {
           to={switchTo}
           onClose={() => {
             setSwitchTo(null);
-            void hide();
+            if (window.pickup.host === "desktop") void hide();
           }}
           onDone={async () => {
             setSwitchTo(null);
@@ -106,6 +109,26 @@ export function CaptureApp() {
           onNotice={notify}
         />
       ) : null}
+    </CaptureSurface>
+  );
+}
+
+function CaptureSurface({
+  onClose,
+  children,
+}: {
+  onClose: () => Promise<boolean> | undefined;
+  children: ReactNode;
+}) {
+  return window.pickup.host === "mobile" ? (
+    <Modal title="记下新一件事。" eyebrow="快速记录" onClose={onClose}>
+      {children}
+    </Modal>
+  ) : (
+    <main className="capture-window">
+      <div className="modal-eyebrow">快速记录</div>
+      <h1>记下新一件事。</h1>
+      {children}
     </main>
   );
 }
