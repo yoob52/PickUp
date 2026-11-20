@@ -56,6 +56,15 @@ type Config = {
 };
 const sequence = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const MAX_RESPONSE_BYTES = 48 * 1024 * 1024;
+class QuotaError extends DomainError {
+  constructor() {
+    super(
+      "SYNC_ERROR",
+      "账户存储配额已满；远端记录仍会下载，请联系管理员调整配额。",
+      true,
+    );
+  }
+}
 const downloadSchema = z.strictObject({
   changes: z
     .array(
@@ -122,7 +131,9 @@ export class SyncClient {
   private latestSeq(): number {
     return (
       this.db
-        .prepare("SELECT coalesce(max(seq),0) AS seq FROM sync_changes")
+        .prepare(
+          "SELECT coalesce(max(seq),0) AS seq FROM sync_changes WHERE substr(hlc,29) = (SELECT id FROM sync_device WHERE singleton=1)",
+        )
         .get() as { seq: number }
     ).seq;
   }
@@ -218,7 +229,7 @@ export class SyncClient {
       });
       if (response.status === 401 || response.status === 403)
         throw new AuthenticationError();
-      if (!response.ok)
+      if (!response.ok && response.status !== 413)
         throw new DomainError(
           "SYNC_ERROR",
           `同步服务器返回错误（${response.status}），请检查地址或稍后重试。`,
@@ -250,7 +261,21 @@ export class SyncClient {
       } finally {
         reader.releaseLock();
       }
-      return JSON.parse(parts.join("")) as unknown;
+      const value: unknown = JSON.parse(parts.join(""));
+      if (!response.ok) {
+        if (
+          z
+            .object({ error: z.object({ code: z.literal("QUOTA_EXCEEDED") }) })
+            .safeParse(value).success
+        )
+          throw new QuotaError();
+        throw new DomainError(
+          "SYNC_ERROR",
+          `同步服务器返回错误（${response.status}），请检查地址或稍后重试。`,
+          true,
+        );
+      }
+      return value;
     } catch (error) {
       controller.abort();
       if (error instanceof DomainError) throw error;
@@ -732,6 +757,7 @@ export class SyncClient {
     const keys = await deriveSyncKeys(config.root_key);
     const deviceId = config.upload_device_id ?? this.deviceId();
     const url = config.server_url + `/v1/spaces/${keys.spaceId}/changes`;
+    let quota: QuotaError | undefined;
     if (
       config.pulled_cursor &&
       (config.pulled_device_id === null || config.pulled_client_seq === null)
@@ -740,7 +766,15 @@ export class SyncClient {
     for (;;) {
       if (this.controller.signal.aborted)
         throw new DomainError("SYNC_ERROR", "同步已取消。", false);
-      const pushed = await this.push(config, keys, deviceId, url);
+      let pushed = 0;
+      if (!quota) {
+        try {
+          pushed = await this.push(config, keys, deviceId, url);
+        } catch (error) {
+          if (!(error instanceof QuotaError)) throw error;
+          quota = error;
+        }
+      }
       const parsed = downloadSchema.safeParse(
         await this.request(
           url + `?after=${Math.max(0, config.pulled_cursor - 1)}&limit=50`,
@@ -760,6 +794,7 @@ export class SyncClient {
           anchor.clientSeq !== config.pulled_client_seq
         ) {
           this.resetContinuity(config);
+          quota = undefined;
           continue;
         }
         page.changes.shift();
@@ -810,9 +845,11 @@ export class SyncClient {
       if (
         !pushed &&
         !page.changes.length &&
-        this.latestSeq() <= config.pushed_cursor
-      )
+        (quota || this.latestSeq() <= config.pushed_cursor)
+      ) {
+        if (quota) throw quota;
         return;
+      }
     }
   }
   private resetContinuity(config: Config): void {
@@ -836,7 +873,12 @@ export class SyncClient {
     deviceId: string,
     url: string,
   ): Promise<number> {
-    const page = listChangeEntriesSince(this.db, config.pushed_cursor, 500);
+    const page = listChangeEntriesSince(
+      this.db,
+      config.pushed_cursor,
+      500,
+      true,
+    );
     const changes: { clientSeq: number; blob: string }[] = [];
     let size = new TextEncoder().encode(
       JSON.stringify({ deviceId, changes: [] }),

@@ -1,5 +1,7 @@
 // @vitest-environment node
 import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
+import { join } from "node:path";
 import initSqlite from "@sqlite.org/sqlite-wasm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCommands } from "../src/worker/commands";
@@ -275,6 +277,68 @@ it("calls fetch without a class receiver, as required by the browser WorkerGloba
 });
 
 it.each([false, true])(
+  "downloads every page of a full account without echoing remote history (pending local changes: %s)",
+  async (pending) => {
+    const server = await relay(),
+      a = open(),
+      b = open(true);
+    const first = client(a),
+      fetcher = vi.fn(fetch),
+      second = client(b, fetcher);
+    const input = {
+      serverUrl: server.url,
+      email: "full@example.com",
+      password: "a strong password",
+    };
+    for (let i = 0; i < 35; i++) create(a, `远端记录 ${i}`);
+    await first.account({ action: "register", ...input });
+    await first.syncNow();
+    const storage = new DatabaseSync(join(server.directory, "sync.sqlite"));
+    let stored: { count: number; bytes: number };
+    try {
+      stored = storage
+        .prepare(
+          "SELECT count(*) AS count, sum(length(blob)) AS bytes FROM changes",
+        )
+        .get() as typeof stored;
+    } finally {
+      storage.close();
+    }
+    expect(stored.count).toBeGreaterThan(50);
+    server.setQuota(stored.bytes);
+    if (pending) create(b, "尚待上传的本地记录");
+    await second.account({ action: "login", ...input });
+    if (pending) await expect(second.syncNow()).rejects.toThrow("配额");
+    else await second.syncNow();
+    expect(cursor(b).pulled_cursor).toBe(stored.count);
+    for (const row of a.prepare("SELECT id,title FROM tasks").all() as {
+      id: string;
+      title: string;
+    }[])
+      expect(
+        b.prepare("SELECT title FROM tasks WHERE id=?").get(row.id),
+      ).toEqual({ title: row.title });
+    const posts = fetcher.mock.calls.filter(
+      ([, options]) =>
+        options?.method === "POST" &&
+        String(options.body).includes("clientSeq"),
+    );
+    expect(posts).toHaveLength(pending ? 1 : 0);
+    if (pending) {
+      expect(second.status().error).toContain("配额");
+      expect(cursor(b).pushed_cursor).toBe(0);
+    } else {
+      expect(second.status().error).toBeNull();
+      expect(state(a)).toEqual(state(b));
+    }
+    expect(await second.syncNow().catch(() => second.status())).toMatchObject({
+      error: pending ? expect.stringContaining("配额") : null,
+    });
+    expect(cursor(b).pulled_cursor).toBe(stored.count);
+  },
+);
+
+it.each([false, true])(
   "registers on the phone, hands a separate session to desktop, recovers the same space (WASM=%s)",
   async (wasm) => {
     const server = await relay(),
@@ -462,6 +526,7 @@ describe.each([false, true])("%s WASM transactional pull", (wasm) => {
           );
       };
       const before = await download();
+      expect(before).toHaveLength(listChangesSince(a, 0, 1000).changes.length);
       const oldCursor = cursor(a).pulled_cursor;
       await server.restore(snapshot);
       const warning = vi.spyOn(console, "warn").mockImplementation(() => {});

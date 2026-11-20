@@ -282,6 +282,7 @@ export function listChangeEntriesSince(
   db: SqliteDatabase,
   cursor = 0,
   limit = 200,
+  localOnly = false,
 ): { entries: { seq: number; change: SyncChange }[]; cursor: number } {
   if (
     !Number.isSafeInteger(cursor) ||
@@ -293,7 +294,9 @@ export function listChangeEntriesSince(
     throw DomainError.validation("同步游标或分页大小无效。");
   const rows = db
     .prepare(
-      "SELECT seq, id, hlc, entity, entity_id, payload FROM sync_changes WHERE seq > ? ORDER BY seq LIMIT ?",
+      `SELECT seq, id, hlc, entity, entity_id, payload FROM sync_changes WHERE seq > ?
+       ${localOnly ? "AND substr(hlc,29) = (SELECT id FROM sync_device WHERE singleton=1)" : ""}
+       ORDER BY seq LIMIT ?`,
     )
     .all(cursor, limit) as ChangeRow[];
   return {
