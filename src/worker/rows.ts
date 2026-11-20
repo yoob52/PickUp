@@ -10,6 +10,7 @@ export type TaskRow = {
   note: string;
   status: TaskStatus;
   wait_reason: string;
+  check_back_at: number | null;
   created_at: number;
   updated_at: number;
   status_changed_at: number;
@@ -26,6 +27,7 @@ export const TASK_COLUMNS = `
   t.note AS note,
   t.status AS status,
   t.wait_reason AS wait_reason,
+  t.check_back_at AS check_back_at,
   t.created_at AS created_at,
   t.updated_at AS updated_at,
   t.status_changed_at AS status_changed_at,
@@ -97,6 +99,7 @@ export function mapTaskSummaries(
     note: row.note,
     status: row.status,
     waitReason: row.wait_reason,
+    checkBackAt: row.check_back_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     statusChangedAt: row.status_changed_at,

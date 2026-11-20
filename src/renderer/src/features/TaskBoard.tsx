@@ -3,7 +3,7 @@ import { ArrowUpRight, Play } from "lucide-react";
 import type { Page, TaskSummary } from "../../../shared/contracts";
 import type { TaskStatus } from "../../../shared/task";
 import { TASK_STATUS_LABEL } from "../../../shared/task";
-import { nextStepText } from "../lib/format";
+import { formatDateTime, nextStepText } from "../lib/format";
 import {
   EmptyState,
   IconButton,
@@ -117,7 +117,7 @@ function TaskRow({
 }) {
   const sub =
     task.status === "waiting"
-      ? task.waitReason || "等待条件"
+      ? waitingLine(task)
       : nextStepText(task) || task.note || "尚未留下说明";
   const startable =
     task.status === "todo" ||
@@ -169,4 +169,10 @@ function labelOf(filter: ListFilter): string {
   if (filter === "unfinished") return "当前工作区";
   if (filter === "ended") return "已结束";
   return TASK_STATUS_LABEL[filter as TaskStatus];
+}
+
+function waitingLine(task: TaskSummary): string {
+  const reason = task.waitReason || "等待条件";
+  if (task.checkBackAt === null) return reason;
+  return `${reason} · ${formatDateTime(task.checkBackAt)} 回看`;
 }

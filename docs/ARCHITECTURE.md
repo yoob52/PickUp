@@ -152,7 +152,7 @@ Task 使用 UUID 标识；允许同名标题。内部状态为 todo、doing、pa
 | startTask | todo / paused / waiting | 无当前任务时进入 doing；已有其他当前任务时返回 NEED_SWITCH，不直接修改 |
 | switchTask | doing + 可开始目标 | 原任务 paused、目标 doing，可附带原任务断点；一个事务 |
 | pauseTask | doing | paused，可附断点；允许无下一任务 |
-| markWaiting | todo / doing / paused | waiting，可选等待原因；原 doing 自然释放当前位 |
+| markWaiting | todo / doing / paused | waiting，可选等待原因与回看时间（check_back_at）；原 doing 自然释放当前位；清除命中的下次开工引用 |
 | resolveWaiting | waiting | todo；保留原断点和历史。**只接受 waiting**（命令来源前置条件见 21.9） |
 | completeTask / cancelTask | 任意未结束状态 | done / cancelled；记录结束时间，清除命中的下次开工引用 |
 | reopenTask | done / cancelled | todo，清空有效 ended_at，保留断点和状态历史；**只接受 done / cancelled**（命令来源前置条件见 21.9） |
@@ -161,7 +161,7 @@ Task 使用 UUID 标识；允许同名标题。内部状态为 todo、doing、pa
 
 当前任务始终查询 status = doing，不保存另一份 current_task_id。最新断点按断点序号选取；原始进展、下一步和参考内容分别保存。单句输入映射到 next_step，进展和参考为可选字段。
 
-恢复默认推荐最近进入 paused 的任务，按 status_changed_at DESC、status_revision DESC、id ASC 稳定排序。waiting 不参与默认推荐；“暂不开始”关闭本次恢复提示，不改变状态，不自动弹回。完成非当前任务只刷新列表，不触发强制恢复区域。
+恢复默认推荐最近进入 paused 的任务，按 status_changed_at DESC、status_revision DESC、id ASC 稳定排序。waiting 不参与默认推荐；设置了回看时间的 waiting 到点后在恢复区域显示为“到点回看”，只提示不改变状态、不自动开始；“暂不开始”关闭本次恢复提示，不改变状态，不自动弹回。完成非当前任务只刷新列表，不触发强制恢复区域。
 
 排序：todo 按 created_at ASC、id ASC；waiting 按状态进入时间降序；已结束按 ended_at DESC、status_revision DESC、id ASC。修改标题、备注、断点不修改 status_changed_at 或 status_revision。
 
@@ -197,6 +197,7 @@ CREATE TABLE tasks (
   note TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL CHECK (status IN ('todo','doing','paused','waiting','done','cancelled')),
   wait_reason TEXT NOT NULL DEFAULT '',
+  check_back_at INTEGER CHECK (check_back_at IS NULL OR status = 'waiting'), -- 002 迁移追加
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   status_changed_at INTEGER NOT NULL,
@@ -255,7 +256,7 @@ CREATE TABLE command_receipts (
 );
 ```
 
-条件唯一索引由 SQLite 原生支持 [R8]。外键仅保证任务引用存在，“next_up 必须是未结束任务”由所有相关写命令在同一事务内维护。标题空白和断点空白还需 TypeScript 按统一 trim 规则验证，SQL trim 不替代多语言输入校验。
+条件唯一索引由 SQLite 原生支持 [R8]。外键仅保证任务引用存在，“next_up 必须是未结束且非等待的任务”由所有相关写命令在同一事务内维护。标题空白和断点空白还需 TypeScript 按统一 trim 规则验证，SQL trim 不替代多语言输入校验。
 
 应用默认值通过版本化初始化写入：桌面入口启用、置顶关闭、开机启动关闭、快捷键 Ctrl+Alt+N；无任务、无示例数据、无下次事项。preferences_json 使用明确 schema 和版本化默认值，按单个偏好字段更新，避免窗口间整对象覆盖。
 

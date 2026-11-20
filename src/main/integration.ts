@@ -430,7 +430,7 @@ async function statusTransitions(dir: string): Promise<void> {
         reason: "等同事反馈日志",
       },
     });
-    assert.equal(waiting.value.reasonUpdated, true);
+    assert.equal(waiting.value.updated, true);
     state = await snapshot(client);
     assert.equal(state.counts.waiting, 1);
     assert.equal((await taskOf(client, taskA)).waitReason, "等同事反馈日志");
@@ -438,7 +438,7 @@ async function statusTransitions(dir: string): Promise<void> {
     assert.equal(state.resume, null);
 
     // 等待中重复标记：理由相同时不产生变更
-    const sameReason = await must<{ reasonUpdated: boolean }>(client, {
+    const sameReason = await must<{ updated: boolean }>(client, {
       kind: "markWaiting",
       input: {
         commandId: commandId(),
@@ -446,8 +446,64 @@ async function statusTransitions(dir: string): Promise<void> {
         reason: "等同事反馈日志",
       },
     });
-    assert.equal(sameReason.value.reasonUpdated, false);
+    assert.equal(sameReason.value.updated, false);
     assert.equal((await snapshot(client)).revision, state.revision);
+
+    // 何时回看：保存回看时间，未到点不进入默认恢复推荐
+    const checkBackAt = Date.now() + 60 * 60 * 1000;
+    const beforeSchedule = await taskOf(client, taskA);
+    const scheduled = await must<MarkWaitingValue>(client, {
+      kind: "markWaiting",
+      input: {
+        commandId: commandId(),
+        task: ref(await taskOf(client, taskA)),
+        reason: "等同事反馈日志",
+        checkBackAt,
+      },
+    });
+    assert.equal(scheduled.value.updated, true);
+    const scheduledTask = await taskOf(client, taskA);
+    assert.equal(scheduledTask.checkBackAt, checkBackAt);
+    assert.equal(scheduledTask.statusRevision, beforeSchedule.statusRevision);
+    assert.equal(scheduledTask.version, beforeSchedule.version + 1);
+    assert.equal((await snapshot(client)).resume, null);
+    const sameCheckBack = await must<MarkWaitingValue>(client, {
+      kind: "markWaiting",
+      input: {
+        commandId: commandId(),
+        task: ref(scheduledTask),
+        reason: "等同事反馈日志",
+        checkBackAt,
+      },
+    });
+    assert.equal(sameCheckBack.value.updated, false);
+    await expectError(
+      client,
+      {
+        kind: "markWaiting",
+        input: {
+          commandId: commandId(),
+          task: ref(scheduledTask),
+          reason: "",
+          checkBackAt: -1,
+        },
+      },
+      "VALIDATION_ERROR",
+    );
+
+    // 等待中的事项不能作为下次开工的第一件事
+    await expectError(
+      client,
+      {
+        kind: "setNextUp",
+        input: {
+          commandId: commandId(),
+          taskId: taskA,
+          expectedNextUpVersion: (await snapshot(client)).nextUpVersion,
+        },
+      },
+      "STATE_CONFLICT",
+    );
 
     const resolved = await must<{ taskId: string }>(client, {
       kind: "resolveWaiting",
@@ -457,6 +513,8 @@ async function statusTransitions(dir: string): Promise<void> {
     const resolvedTask = await taskOf(client, taskA);
     assert.equal(resolvedTask.status, "todo");
     assert.equal(resolvedTask.waitReason, "等同事反馈日志");
+    // 离开等待后回看时间随之清除
+    assert.equal(resolvedTask.checkBackAt, null);
 
     // 已结束状态下的非法命令
     const completed = await must<{ wasCurrent: boolean }>(client, {
@@ -1676,9 +1734,9 @@ async function recoveryAndVersionGuards(dir: string): Promise<void> {
     const state = await snapshot(secondRun);
     assert.equal(state.unfinished.length, 1);
     assert.equal(state.unfinished[0].id, created);
-    assert.equal(secondRun.schemaVersion, 1);
+    assert.equal(secondRun.schemaVersion, 2);
     assert.equal(secondRun.backupPath, null);
-    assert.equal((await readFile(stable)).readUInt32BE(60), 1);
+    assert.equal((await readFile(stable)).readUInt32BE(60), 2);
   } finally {
     await secondRun.close();
   }
@@ -2216,6 +2274,56 @@ async function workerLifecycle(dir: string): Promise<void> {
   }
 }
 
+async function waitingNextUpReference(dir: string): Promise<void> {
+  const client = await open(join(dir, "waiting-next-up.sqlite"));
+  try {
+    const taskId = await createTask(client, "等设计确认");
+    await must(client, {
+      kind: "setNextUp",
+      input: { commandId: commandId(), taskId, expectedNextUpVersion: 0 },
+    });
+    const waiting = await must<MarkWaitingValue>(client, {
+      kind: "markWaiting",
+      input: {
+        commandId: commandId(),
+        task: ref(await taskOf(client, taskId)),
+        reason: "等确认",
+        checkBackAt: Date.now() + 60_000,
+      },
+    });
+    assert.equal(waiting.value.nextUpCleared, true);
+    let state = await snapshot(client);
+    assert.equal(state.nextUp, null);
+    assert.equal(state.nextUpVersion, 2);
+    // 已到期的回看时间也只是回到恢复区域，不会自动开始
+    assert.equal(state.currentTask, null);
+    assert.equal(state.resume, null);
+    await expectError(
+      client,
+      {
+        kind: "setNextUp",
+        input: { commandId: commandId(), taskId, expectedNextUpVersion: 2 },
+      },
+      "STATE_CONFLICT",
+    );
+    await must(client, {
+      kind: "resolveWaiting",
+      input: {
+        commandId: commandId(),
+        task: ref(await taskOf(client, taskId)),
+      },
+    });
+    await must(client, {
+      kind: "setNextUp",
+      input: { commandId: commandId(), taskId, expectedNextUpVersion: 2 },
+    });
+    state = await snapshot(client);
+    assert.equal(state.nextUp?.taskId, taskId);
+  } finally {
+    await client.close();
+  }
+}
+
 /* ----------------------------------------------------------------- 入口 */
 export async function runIntegration(): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), "pickup-integration-"));
@@ -2227,6 +2335,7 @@ export async function runIntegration(): Promise<void> {
     ["提交成功但响应丢失后的原请求重试与重启恢复", commitLossAndRestart],
     ["两窗口竞争、过期版本与自我切换", concurrencyAndVersions],
     ["完成、取消、重新打开与 nextUp 引用", nextUpAndEndStates],
+    ["等待事项不作为下次开工第一件事", waitingNextUpReference],
     ["草稿版本冲突与提交时清空", drafts],
     ["偏好按字段更新与版本检查", preferences],
     ["空断点、编辑与稳定排序、分页", breakpointsAndOrdering],

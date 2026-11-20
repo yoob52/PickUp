@@ -2319,3 +2319,42 @@ html[data-window="widget"] #root {
     scroll-behavior: auto !important;
   }
 }
+
+.check-back-card {
+  margin-bottom: 12px;
+  background: var(--amber-soft);
+  box-shadow: inset 3px 0 0 var(--amber);
+}
+
+.check-back-card .recommend-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--amber);
+  background: var(--paper);
+}
+
+.check-back-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.check-back-presets button {
+  padding: 4px 10px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.check-back-presets button:hover:not(:disabled) {
+  border-color: var(--line-dark);
+}
+
+.check-back-presets button:focus-visible {
+  outline: 0;
+  box-shadow: var(--ring);
+}

@@ -150,6 +150,22 @@ describe("命令输入边界", () => {
     expect(
       markWaitingSchema.parse({ commandId: id, task, reason: "" }).reason,
     ).toBe("");
+    expect(
+      markWaitingSchema.parse({ commandId: id, task, reason: "" }).checkBackAt,
+    ).toBeNull();
+    expect(
+      markWaitingSchema.parse({
+        commandId: id,
+        task,
+        reason: "",
+        checkBackAt: 1_800_000_000_000,
+      }).checkBackAt,
+    ).toBe(1_800_000_000_000);
+    for (const checkBackAt of [0, -1, 1.5, "明天"])
+      expect(
+        markWaitingSchema.safeParse({ commandId: id, task, checkBackAt })
+          .success,
+      ).toBe(false);
     expect(completeLike(cancelTaskSchema)).toBe(true);
     expect(
       finishDailyReviewSchema.safeParse({

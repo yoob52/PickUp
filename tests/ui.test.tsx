@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -9,6 +10,7 @@ import {
 import "@testing-library/jest-dom/vitest";
 import { afterEach, expect, it, vi } from "vitest";
 import { App } from "../src/renderer/src/App";
+import { WaitDialog } from "../src/renderer/src/features/WaitDialog";
 import { CaptureApp } from "../src/renderer/src/views/CaptureApp";
 import { WorkspaceProvider } from "../src/renderer/src/state/workspace";
 import { ToastProvider } from "../src/renderer/src/ui/Toast";
@@ -37,6 +39,7 @@ function task(
     note: "",
     status: "todo",
     waitReason: "",
+    checkBackAt: null,
     createdAt: 1,
     updatedAt: 1,
     statusChangedAt: 1,
@@ -630,4 +633,218 @@ it("keeps unfinished review breakpoint after inspecting a task", async () => {
       name: "给当前任务补一句断点（可选）",
     }),
   ).toHaveValue("审核草稿：下一步检查日志");
+});
+
+function waitingSnapshot(tasks: TaskSummary[]): WorkspaceSnapshot {
+  return {
+    ...emptyWorkspaceSnapshot(),
+    unfinished: tasks,
+    counts: {
+      todo: 0,
+      doing: 0,
+      paused: 0,
+      waiting: tasks.length,
+      done: 0,
+      cancelled: 0,
+      unfinished: tasks.length,
+    },
+  };
+}
+
+it("resurfaces a waiting task in the resume area once its check-back time arrives", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const now = Date.now();
+    const waiting = task({
+      id: "44444444-4444-4444-4444-444444444444",
+      title: "等设计确认交互稿",
+      status: "waiting",
+      waitReason: "等设计确认",
+      checkBackAt: now + 60_000,
+    });
+    window.pickup = createApi({
+      getWorkspaceSnapshot: vi
+        .fn()
+        .mockResolvedValue(ok(waitingSnapshot([waiting]))),
+    });
+    render(<App />);
+    expect(
+      await screen.findByText(/等待中的事项不会自动开始/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "到点回看" })).toBeNull();
+
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+    const card = await screen.findByRole("group", { name: "到点回看" });
+    expect(within(card).getByText("等设计确认交互稿")).toBeInTheDocument();
+    expect(within(card).getByText("在等：等设计确认")).toBeInTheDocument();
+    expect(
+      within(card).getByRole("button", { name: "继续这件事" }),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByRole("button", { name: "稍后再看" }),
+    ).toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("submits the chosen check-back time when marking a task waiting", async () => {
+  const target = task({
+    id: "55555555-5555-5555-5555-555555555555",
+    title: "等法务回复",
+    version: 3,
+  });
+  const markWaiting = vi.fn().mockResolvedValue(
+    ok({
+      type: "markWaiting",
+      taskId: target.id,
+      updated: true,
+      nextUpCleared: false,
+    }),
+  );
+  window.pickup = createApi({ markWaiting });
+  const onDone = vi.fn();
+  render(
+    <WaitDialog
+      task={target}
+      onClose={() => {}}
+      onDone={onDone}
+      onNotice={() => {}}
+    />,
+  );
+  fireEvent.change(screen.getByLabelText("等待原因"), {
+    target: { value: "等法务确认条款" },
+  });
+  fireEvent.change(screen.getByLabelText("何时回看（可选）"), {
+    target: { value: "2099-01-02T09:30" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "标记等待" }));
+  await waitFor(() => expect(onDone).toHaveBeenCalled());
+  expect(markWaiting.mock.calls[0]?.[0]).toMatchObject({
+    task: { taskId: target.id, expectedVersion: 3 },
+    reason: "等法务确认条款",
+    checkBackAt: new Date(2099, 0, 2, 9, 30).getTime(),
+  });
+});
+
+it("rejects a check-back time in the past before submitting", async () => {
+  const markWaiting = vi.fn();
+  window.pickup = createApi({ markWaiting });
+  render(
+    <WaitDialog
+      task={task({ id: "66666666-6666-6666-6666-666666666666", title: "旧" })}
+      onClose={() => {}}
+      onDone={() => {}}
+      onNotice={() => {}}
+    />,
+  );
+  fireEvent.change(screen.getByLabelText("何时回看（可选）"), {
+    target: { value: "2000-01-01T09:00" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "标记等待" }));
+  expect(await screen.findByText("回看时间需要晚于现在。")).toBeInTheDocument();
+  expect(markWaiting).not.toHaveBeenCalled();
+});
+
+it("does not offer waiting tasks as the first thing to start next time", async () => {
+  const waiting = task({
+    id: "77777777-7777-7777-7777-777777777777",
+    title: "等供应商报价",
+    status: "waiting",
+  });
+  const paused = task({
+    id: "88888888-8888-8888-8888-888888888888",
+    title: "整理周报",
+    status: "paused",
+  });
+  const snapshot = {
+    ...waitingSnapshot([waiting, paused]),
+    counts: {
+      todo: 0,
+      doing: 0,
+      paused: 1,
+      waiting: 1,
+      done: 0,
+      cancelled: 0,
+      unfinished: 2,
+    },
+  };
+  window.pickup = createApi({
+    getWorkspaceSnapshot: vi.fn().mockResolvedValue(ok(snapshot)),
+    getDailyReview: vi.fn().mockResolvedValue(
+      ok({
+        dayKey: "2026-09-12",
+        startUtc: 1,
+        endUtc: 2,
+        currentTask: null,
+        completedToday: {
+          items: [],
+          total: 0,
+          offset: 0,
+          limit: 50,
+          hasMore: false,
+        },
+        unfinished: [waiting, paused],
+        counts: snapshot.counts,
+        nextUp: null,
+        nextUpVersion: 0,
+      }),
+    ),
+  });
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "今日收尾" }));
+  const dialog = await screen.findByRole("dialog", { name: "把今天收好。" });
+  const waitingRow = within(dialog)
+    .getByRole("button", { name: /等供应商报价/ })
+    .closest(".endday-item");
+  const pausedRow = within(dialog)
+    .getByRole("button", { name: /整理周报/ })
+    .closest(".endday-item");
+  expect(waitingRow).not.toBeNull();
+  expect(
+    within(waitingRow as HTMLElement).queryByRole("button", {
+      name: "选为第一件事",
+    }),
+  ).toBeNull();
+  expect(
+    within(pausedRow as HTMLElement).getByRole("button", {
+      name: "选为第一件事",
+    }),
+  ).toBeInTheDocument();
+});
+
+it("resurfaces a check-back set further out than the longest timer delay", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const day = 24 * 60 * 60 * 1000;
+    const waiting = task({
+      id: "99999999-9999-9999-9999-999999999999",
+      title: "等季度预算批复",
+      status: "waiting",
+      checkBackAt: Date.now() + 30 * day,
+    });
+    window.pickup = createApi({
+      getWorkspaceSnapshot: vi
+        .fn()
+        .mockResolvedValue(ok(waitingSnapshot([waiting]))),
+    });
+    render(<App />);
+    expect(
+      await screen.findByText(/等待中的事项不会自动开始/),
+    ).toBeInTheDocument();
+    await act(async () => {
+      vi.advanceTimersByTime(25 * day);
+    });
+    expect(screen.queryByRole("group", { name: "到点回看" })).toBeNull();
+    await act(async () => {
+      vi.advanceTimersByTime(5 * day);
+    });
+    expect(
+      await screen.findByRole("group", { name: "到点回看" }),
+    ).toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
 });
