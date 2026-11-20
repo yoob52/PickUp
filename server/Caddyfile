@@ -1,0 +1,3 @@
+{$PICKUP_DOMAIN} {
+    reverse_proxy sync:8787
+}

@@ -12,6 +12,8 @@
   },
   "packageManager": "npm@11.6.2",
   "scripts": {
+    "server:test": "npm --prefix server test",
+    "server:build": "npm --prefix server run build",
     "dev": "electron-vite dev",
     "start": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",

@@ -43,6 +43,8 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
 
 ## 2. 实际工程结构
 
+独立的自托管密文同步中继位于 `server/`，不依赖应用 worker 或 UI。部署、HTTPS、备份与升级见 [SYNC-SERVER.md](SYNC-SERVER.md)；根目录 `npm run server:test` 包含服务端类型检查，`npm run server:build` 输出独立 Node 24 产物。客户端加密与联网同步尚未接入。
+
 - `src/shared/`
   - `contracts.ts`：DTO、Zod 输入 schema、结果与错误码、命令结果值、`PickupAPI`。
   - `task.ts`：状态类型、中文名称、状态转换表与空快照（纯规则，不依赖 Electron/数据库）。
