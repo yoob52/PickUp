@@ -1909,6 +1909,11 @@ html[data-window="capture"] .modal .modal-actions {
   user-select: none;
 }
 
+/* The surface takes focus only to receive Escape; its ring would be clipped. */
+.widget-window:focus-visible {
+  outline: none;
+}
+
 .widget-toolbar {
   display: flex;
   align-items: center;
