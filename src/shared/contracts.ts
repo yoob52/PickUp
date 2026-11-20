@@ -1,9 +1,11 @@
 import { z } from "zod";
+import type { EnableSyncInput, SyncStatus } from "./sync-contracts";
 import { TASK_STATUSES, type StatusCounts, type TaskStatus } from "./task";
 
 /* ------------------------------------------------------------------ 通用 */
 
 export const appErrorCodeSchema = z.enum([
+  "SYNC_ERROR",
   "VALIDATION_ERROR",
   "NOT_FOUND",
   "STATE_CONFLICT",
@@ -516,6 +518,11 @@ export type CommandOutcome =
 /* --------------------------------------------------------------- 渲染进程 API */
 
 export type PickupAPI = {
+  enableSync(input: EnableSyncInput): Promise<Result<SyncStatus>>;
+  disableSync(): Promise<Result<SyncStatus>>;
+  getSyncStatus(): Promise<Result<SyncStatus>>;
+  syncNow(): Promise<Result<SyncStatus>>;
+  getPairingPayload(): Promise<Result<string>>;
   readonly host: "desktop" | "mobile";
   getWorkspaceSnapshot(): Promise<Result<WorkspaceSnapshot>>;
   listTasks(input: ListTasksInput): Promise<Result<Page<TaskSummary>>>;

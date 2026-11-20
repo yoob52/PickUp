@@ -53,6 +53,7 @@ export function registerIpcHandlers(
   client: StoreClient,
   desktop: DesktopHost,
 ): void {
+  client.onStateChanged(notifyStateChanged);
   register(
     "pickup:updatePreference",
     updatePreferenceSchema,

@@ -317,11 +317,12 @@ export function createRelay(
         const { after, limit } = input.data;
         const rows = db
           .prepare(
-            "SELECT server_seq,device_id,blob FROM changes WHERE space_id=? AND server_seq>? ORDER BY server_seq LIMIT ?",
+            "SELECT server_seq,device_id,client_seq,blob FROM changes WHERE space_id=? AND server_seq>? ORDER BY server_seq LIMIT ?",
           )
           .all(space.data, after, limit + 1) as {
           server_seq: number;
           device_id: string;
+          client_seq: number;
           blob: Uint8Array;
         }[];
         const selected = rows.slice(0, limit);
@@ -329,6 +330,7 @@ export function createRelay(
           changes: selected.map((c) => ({
             serverSeq: c.server_seq,
             deviceId: c.device_id,
+            clientSeq: c.client_seq,
             blob: Buffer.from(c.blob).toString("base64url"),
           })),
           lastServerSeq: selected.at(-1)?.server_seq ?? after,

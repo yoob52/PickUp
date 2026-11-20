@@ -11,6 +11,7 @@ import {
 import { SCHEMA_VERSION } from "./migrations";
 import { migrateSchema, migrationSource, schemaVersion } from "./migrate";
 import { createQueries } from "./queries";
+import { SyncClient } from "./sync-client";
 
 type SqliteDatabase = Database.Database;
 
@@ -143,6 +144,7 @@ export function openStore(
       sqliteVersion,
       schemaVersion: SCHEMA_VERSION,
       backupPath,
+      createSyncClient: (notify: () => void) => new SyncClient(db, notify),
       close: () => db.close(),
     };
   } catch (error) {

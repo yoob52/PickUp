@@ -46,6 +46,11 @@ export class StoreClient {
   private exited = false;
   private readySettled = false;
   private readonly pending = new Map<number, Pending>();
+  private readonly changeListeners = new Set<(revision: number) => void>();
+  onStateChanged(listener: (revision: number) => void): () => void {
+    this.changeListeners.add(listener);
+    return () => this.changeListeners.delete(listener);
+  }
   readonly ready: Promise<void>;
   sqliteVersion = "";
   schemaVersion = 0;
@@ -69,7 +74,12 @@ export class StoreClient {
       };
       this.worker.on(
         "message",
-        (message: WorkerBootMessage | WorkerResponse) => {
+        (message: WorkerBootMessage | WorkerResponse | { changed: number }) => {
+          if ("changed" in message) {
+            for (const listener of this.changeListeners)
+              listener(message.changed);
+            return;
+          }
           if ("ready" in message && message.ready) {
             this.sqliteVersion = message.sqliteVersion;
             this.schemaVersion = message.schemaVersion;

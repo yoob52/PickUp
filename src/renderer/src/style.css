@@ -1764,6 +1764,72 @@ html[data-window="widget"]:has(.widget-window.is-orb) .toast.has-action {
   border-bottom: 1px solid var(--line);
 }
 
+.sync-settings {
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+.sync-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.sync-heading h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+.sync-heading .helper,
+.sync-status .helper {
+  margin: 3px 0;
+  overflow-wrap: anywhere;
+}
+.sync-badge {
+  margin-left: auto;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.sync-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 15px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.sync-status strong {
+  font-size: 14px;
+}
+.sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+.sync-qr {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0;
+}
+.sync-qr img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+.sync-pairing-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.8;
+  font-size: 13px;
+}
+.sync-pairing-warning svg {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
 .toggle-row strong {
   display: block;
   color: var(--ink);

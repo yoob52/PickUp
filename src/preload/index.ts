@@ -9,6 +9,11 @@ function subscribe(channel: string, listener: (...args: unknown[]) => void) {
 
 /** 只暴露固定业务方法；不透传任意 channel，也不暴露原始 ipcRenderer。 */
 const api: PickupAPI = {
+  enableSync: (input) => ipcRenderer.invoke("pickup:enableSync", input),
+  disableSync: () => ipcRenderer.invoke("pickup:disableSync"),
+  getSyncStatus: () => ipcRenderer.invoke("pickup:getSyncStatus"),
+  syncNow: () => ipcRenderer.invoke("pickup:syncNow"),
+  getPairingPayload: () => ipcRenderer.invoke("pickup:getPairingPayload"),
   host: "desktop",
   getWorkspaceSnapshot: () => ipcRenderer.invoke("pickup:getWorkspaceSnapshot"),
   listTasks: (input) => ipcRenderer.invoke("pickup:listTasks", input),

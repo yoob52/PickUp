@@ -62,35 +62,38 @@ beforeAll(() => {
     value: { type: "window" as const, action },
     revision: 0,
   });
-  registerIpcHandlers({ send } as unknown as StoreClient, {
-    start: async () => undefined,
-    isQuitting: () => false,
-    showMain: () => windowOk("showMain"),
-    controlMainWindow: (action) => windowOk(action),
-    showCapture: () => windowOk("showCapture"),
-    hideCapture: () => windowOk("hideCapture"),
-    hideWidget: () => windowOk("hideWidget"),
-    moveWidget: async () => ({ ok: true, value: true, revision: 0 }),
-    setWidgetExpanded: async (expanded) => ({
-      ok: true,
-      value: expanded,
-      revision: 0,
-    }),
-    quit: () => windowOk("quit"),
-    getDesktopState: async () => ({
-      ok: true,
-      revision: 0,
-      value: {
-        accelerator: "Control+Alt+N",
-        acceleratorRegistered: true,
-        launchAtLogin: false,
-        launchAtLoginApplied: true,
-        widgetVisible: false,
-      },
-    }),
-    applyPreferencePatch: async (input) =>
-      send({ kind: "updatePreference", input }),
-  });
+  registerIpcHandlers(
+    { send, onStateChanged: vi.fn() } as unknown as StoreClient,
+    {
+      start: async () => undefined,
+      isQuitting: () => false,
+      showMain: () => windowOk("showMain"),
+      controlMainWindow: (action) => windowOk(action),
+      showCapture: () => windowOk("showCapture"),
+      hideCapture: () => windowOk("hideCapture"),
+      hideWidget: () => windowOk("hideWidget"),
+      moveWidget: async () => ({ ok: true, value: true, revision: 0 }),
+      setWidgetExpanded: async (expanded) => ({
+        ok: true,
+        value: expanded,
+        revision: 0,
+      }),
+      quit: () => windowOk("quit"),
+      getDesktopState: async () => ({
+        ok: true,
+        revision: 0,
+        value: {
+          accelerator: "Control+Alt+N",
+          acceleratorRegistered: true,
+          launchAtLogin: false,
+          launchAtLoginApplied: true,
+          widgetVisible: false,
+        },
+      }),
+      applyPreferencePatch: async (input) =>
+        send({ kind: "updatePreference", input }),
+    },
+  );
 });
 
 describe("IPC 契约一致性", () => {
