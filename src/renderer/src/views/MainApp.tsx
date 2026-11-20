@@ -4,7 +4,7 @@ import type { Page, TaskSummary } from "../../../shared/contracts";
 import { createPending, invokeCommand } from "../lib/command";
 import { useWorkspace } from "../state/workspace";
 import { Button, NoticeBar } from "../ui/primitives";
-import { useToast } from "../ui/Toast";
+import { useToast, type ToastAction } from "../ui/Toast";
 import { AppShell } from "../features/AppShell";
 import { CurrentCard } from "../features/CurrentCard";
 import { DailyReviewDialog } from "../features/DailyReview";
@@ -16,6 +16,7 @@ import {
   type ListFilter as BoardFilter,
 } from "../features/TaskBoard";
 import { TaskDetailDialog } from "../features/TaskDetail";
+import { useReopenAction } from "../features/useReopenAction";
 import { WaitDialog } from "../features/WaitDialog";
 
 type Overlay =
@@ -39,6 +40,9 @@ export function MainApp() {
   const [endedLoading, setEndedLoading] = useState(false);
   const [resumeHighlight, setResumeHighlight] = useState(false);
   const [savedUnsynced, setSavedUnsynced] = useState(false);
+  const reopenAction = useReopenAction((refreshed) =>
+    setSavedUnsynced(!refreshed),
+  );
   const boardRef = useRef<HTMLElement | null>(null);
   const endedGen = useRef(0);
   const completePending =
@@ -92,14 +96,18 @@ export function MainApp() {
     return () => window.removeEventListener("keydown", onKey);
   }, [overlay]);
 
-  async function afterWrite(okRefresh: boolean, success: string) {
+  function afterWrite(
+    okRefresh: boolean,
+    success: string,
+    action?: ToastAction,
+  ) {
     if (okRefresh) {
       setSavedUnsynced(false);
-      notify(success);
+      notify(success, "ok", action);
       return;
     }
     setSavedUnsynced(true);
-    notify("已保存，但界面未刷新。", "error");
+    notify("已保存，但界面未刷新。", "error", action);
   }
 
   async function startTask(task: TaskSummary) {
@@ -127,7 +135,7 @@ export function MainApp() {
       startPending.current.clear();
       const refreshed = await refresh();
       setResumeHighlight(false);
-      await afterWrite(refreshed, `已开始：${task.title}`);
+      afterWrite(refreshed, `已开始：${task.title}`);
       return;
     }
     if (result.code === "NEED_SWITCH") {
@@ -173,11 +181,12 @@ export function MainApp() {
     const refreshed = await refresh();
     if (result.value.wasCurrent) setResumeHighlight(true);
     setOverlay(null);
-    await afterWrite(
+    afterWrite(
       refreshed,
       result.value.wasCurrent
         ? "已完成。恢复区域已经为你留出下一步。"
         : "已标记完成。当前工作没有被打断。",
+      reopenAction(input),
     );
   }
 

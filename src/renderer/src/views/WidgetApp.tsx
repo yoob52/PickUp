@@ -9,6 +9,7 @@ import {
   Repeat,
   X,
 } from "lucide-react";
+import { useReopenAction } from "../features/useReopenAction";
 import { invokeCommand, newCommandId, taskRef } from "../lib/command";
 import { nextStepText } from "../lib/format";
 import { useWorkspace } from "../state/workspace";
@@ -18,6 +19,7 @@ import { useToast } from "../ui/Toast";
 export function WidgetApp() {
   const { snapshot, phase, error, notice, refresh } = useWorkspace();
   const notify = useToast();
+  const reopenAction = useReopenAction();
   const current = snapshot.currentTask;
   const [expanded, setExpanded] = useState(false);
   const surface = useRef<HTMLElement>(null);
@@ -44,18 +46,23 @@ export function WidgetApp() {
   async function complete() {
     if (!current) return;
     const commandId = newCommandId();
+    const task = taskRef(current);
     const result = await invokeCommand(commandId, () =>
       window.pickup.completeTask({
         commandId,
-        task: taskRef(current),
+        task,
       }),
     );
     if (!result.ok) {
       notify(result.message, "error");
       return;
     }
-    await refresh();
-    notify("已完成。请到主窗口查看恢复建议。");
+    const refreshed = await refresh();
+    notify(
+      refreshed ? "已完成。" : "已保存，但界面未刷新。",
+      refreshed ? "ok" : "error",
+      reopenAction(task),
+    );
   }
 
   async function patchPreference(
