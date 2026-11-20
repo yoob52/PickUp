@@ -95,7 +95,7 @@ export function AppShell({
       <div className="layout">
         <aside className="sidebar">
           <div>
-            <div className="side-label">Workspace</div>
+            <div className="side-label">工作区</div>
             <nav className="side-nav" aria-label="主导航">
               <NavItem
                 icon={<LayoutDashboard size={16} />}
@@ -147,8 +147,8 @@ export function AppShell({
           <div className="sidebar-bottom">
             <div className="local-state">
               <div className="local-state-top">
-                <span>Storage</span>
-                <span>Offline first</span>
+                <span>本地存储</span>
+                <span>离线优先</span>
               </div>
               <strong>状态已在本机保存</strong>
             </div>

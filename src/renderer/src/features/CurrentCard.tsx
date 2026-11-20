@@ -22,9 +22,9 @@ export function CurrentCard({
 }: Props) {
   if (!current) {
     return (
-      <article className="current-card">
+      <article className="current-card is-empty">
         <div className="card-topline">
-          <div className="card-kicker">NOW / OPEN SLOT</div>
+          <div className="card-kicker">当前任务</div>
           <div className="card-id">当前</div>
         </div>
         <div className="current-content">
@@ -54,7 +54,7 @@ export function CurrentCard({
   return (
     <article className="current-card">
       <div className="card-topline">
-        <div className="card-kicker">CURRENT / IN PROGRESS</div>
+        <div className="card-kicker">当前任务</div>
         <div className="card-id">进行中</div>
       </div>
       <div className="current-content">
