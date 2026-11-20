@@ -355,10 +355,16 @@ it.each([false, true])(
     const signup = await phone.account({ action: "register", ...input });
     expect(signup.recoveryCode).toMatch(/^pickup-recovery:1:/);
     await phone.syncNow();
+    await expect(
+      desktop.account({ action: "getHandoffPayload" }),
+    ).rejects.toThrow("有效的电脑登录码");
     const qr = await desktop.account({
       action: "beginHandoff",
       serverUrl: server.url,
     });
+    expect(
+      (await desktop.account({ action: "getHandoffPayload" })).qrPayload,
+    ).toBe(qr.qrPayload);
     expect((await desktop.account({ action: "pollHandoff" })).pending).toBe(
       true,
     );

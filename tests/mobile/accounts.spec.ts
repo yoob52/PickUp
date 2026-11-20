@@ -39,18 +39,24 @@ test("phone registers, confirms the desktop QR request, and both encrypted store
     const settings = main.getByRole("dialog", { name: "让入口安静。" });
     await settings.getByText("高级", { exact: true }).click();
     await settings.getByLabel("账户服务器").fill(serverUrl);
-    // Read the same protocol request the desktop displays; decoding a physical QR is covered by native scanner verification.
-    const request = await main.evaluate(
-      (serverUrl) =>
-        window.pickup.account({ action: "beginHandoff", serverUrl }),
-      serverUrl,
+    await settings
+      .getByRole("button", { name: "扫码登录", exact: true })
+      .click();
+    const qr = main.getByRole("dialog", { name: "扫码登录", exact: true });
+    await expect(qr.getByAltText("电脑登录二维码")).toBeVisible();
+    await qr.getByRole("button", { name: "复制登录码" }).click();
+    await expect(
+      qr.getByText("登录码已复制，请仅发送到你信任的手机。"),
+    ).toBeVisible();
+    const request = await desktop.evaluate(({ clipboard }) =>
+      clipboard.readText(),
     );
-    if (!request.ok || !request.value.qrPayload)
-      throw new Error("desktop QR request failed");
+    expect(request).toMatch(/^pickup-login:1:/);
+    await main.screenshot({
+      path: test.info().outputPath("pr9b-login-copy.png"),
+    });
     await sheet.getByText("粘贴电脑登录码", { exact: true }).tap();
-    await sheet
-      .getByLabel("电脑登录码", { exact: true })
-      .fill(request.value.qrPayload);
+    await sheet.getByLabel("电脑登录码", { exact: true }).fill(request);
     await sheet.getByRole("button", { name: "检查登录请求" }).tap();
     await expect(
       sheet.getByRole("region", { name: "确认电脑登录" }),
@@ -62,12 +68,9 @@ test("phone registers, confirms the desktop QR request, and both encrypted store
     await expect(
       sheet.getByRole("status").filter({ hasText: "已授权电脑登录" }),
     ).toBeVisible();
-    const accepted = await main.evaluate(() =>
-      window.pickup.account({ action: "pollHandoff" }),
-    );
-    expect(accepted.ok).toBe(true);
-    if (accepted.ok)
-      expect(accepted.value.status.accountEmail).toBe("phone@example.com");
+    await expect(
+      settings.getByText("phone@example.com", { exact: true }),
+    ).toBeVisible();
     expect(
       (
         await page.evaluate(() =>

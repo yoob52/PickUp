@@ -102,6 +102,7 @@ export class SyncClient {
   private active = true;
   private accountBusy = false;
   private handoff: {
+    payload: string;
     requestId: string;
     pollToken: string;
     expiresAt: number;
@@ -354,6 +355,11 @@ export class SyncClient {
     const input = accountInputSchema.parse(raw);
     if (this.closed || !this.active || this.configuring)
       throw DomainError.stateConflict("请在前台等待当前操作完成。");
+    if (input.action === "getHandoffPayload") {
+      if (!this.handoff || this.handoff.expiresAt <= Date.now())
+        throw DomainError.validation("请先生成有效的电脑登录码。");
+      return { status: this.status(), qrPayload: this.handoff.payload };
+    }
     if (input.action === "pendingRecovery") {
       const c = this.config();
       const pending = c?.account_email
@@ -471,7 +477,14 @@ export class SyncClient {
         })
         .parse(await this.request(input.serverUrl + "/v1/handoff", "", {}));
       const pair = await ecdhKeyPair();
+      const payload = handoffPayload({
+        server: input.serverUrl,
+        requestId: slot.requestId,
+        pubkey: await exportPublic(pair.publicKey),
+        expiresAt: slot.expiresAt,
+      });
       this.handoff = {
+        payload,
         ...slot,
         serverUrl: input.serverUrl,
         privateKey: pair.privateKey,
@@ -479,12 +492,7 @@ export class SyncClient {
       return {
         status: this.status(),
         expiresAt: slot.expiresAt,
-        qrPayload: handoffPayload({
-          server: input.serverUrl,
-          requestId: slot.requestId,
-          pubkey: await exportPublic(pair.publicKey),
-          expiresAt: slot.expiresAt,
-        }),
+        qrPayload: payload,
       };
     }
     if (input.action === "pollHandoff") {

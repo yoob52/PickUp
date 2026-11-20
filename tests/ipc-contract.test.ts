@@ -101,6 +101,66 @@ beforeAll(() => {
 });
 
 describe("IPC 契约一致性", () => {
+  it("copies only the worker's active login request and reports missing requests and clipboard failures", async () => {
+    const handler = mocks.handle.mock.calls.find(
+      ([channel]) => channel === "pickup:copyLoginPayload",
+    )![1];
+    const frame = { url: "pickup://app/index.html" },
+      event = { sender: { mainFrame: frame }, senderFrame: frame };
+    mocks.fromWebContents.mockReturnValue({});
+    mocks.writeText.mockClear();
+    try {
+      expect(await handler(event, "arbitrary content")).toMatchObject({
+        ok: false,
+        code: "VALIDATION_ERROR",
+      });
+      mocks.send.mockResolvedValueOnce({
+        ok: false,
+        code: "VALIDATION_ERROR",
+        message: "登录码已过期",
+        retryable: false,
+      });
+      expect(await handler(event)).toMatchObject({
+        ok: false,
+        code: "VALIDATION_ERROR",
+      });
+      mocks.send.mockResolvedValueOnce({
+        ok: true,
+        value: { status: {} },
+        revision: 2,
+      });
+      expect(await handler(event)).toMatchObject({
+        ok: false,
+        code: "VALIDATION_ERROR",
+      });
+      expect(mocks.writeText).not.toHaveBeenCalled();
+      mocks.send.mockResolvedValue({
+        ok: true,
+        value: { qrPayload: "pickup-login:1:test" },
+        revision: 2,
+      });
+      expect(await handler(event)).toEqual({
+        ok: true,
+        value: null,
+        revision: 2,
+      });
+      expect(mocks.send).toHaveBeenLastCalledWith({
+        kind: "account",
+        input: { action: "getHandoffPayload" },
+      });
+      expect(mocks.writeText).toHaveBeenLastCalledWith("pickup-login:1:test");
+      mocks.writeText.mockImplementationOnce(() => {
+        throw new Error("clipboard unavailable");
+      });
+      expect(await handler(event)).toMatchObject({
+        ok: false,
+        code: "SYSTEM_SETTING_ERROR",
+      });
+    } finally {
+      mocks.fromWebContents.mockReturnValue(null);
+      mocks.writeText.mockClear();
+    }
+  });
   it("copies only the worker's pairing code through a trusted fixed API and reports clipboard failures", async () => {
     const handler = mocks.handle.mock.calls.find(
       ([channel]) => channel === "pickup:copyPairingPayload",

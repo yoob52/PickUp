@@ -18,6 +18,7 @@ const api: PickupAPI = {
   syncNow: () => ipcRenderer.invoke("pickup:syncNow"),
   getPairingPayload: () => ipcRenderer.invoke("pickup:getPairingPayload"),
   copyPairingPayload: () => ipcRenderer.invoke("pickup:copyPairingPayload"),
+  copyLoginPayload: () => ipcRenderer.invoke("pickup:copyLoginPayload"),
   host: "desktop",
   getWorkspaceSnapshot: () => ipcRenderer.invoke("pickup:getWorkspaceSnapshot"),
   listTasks: (input) => ipcRenderer.invoke("pickup:listTasks", input),

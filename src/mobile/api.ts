@@ -76,6 +76,7 @@ export function createMobileAPI(
     syncNow: () => invoke("syncNow"),
     getPairingPayload: unsupported,
     copyPairingPayload: unsupported,
+    copyLoginPayload: unsupported,
     host: "mobile",
     getWorkspaceSnapshot: () => invoke("getWorkspaceSnapshot"),
     listTasks: (input) => invoke("listTasks", input),

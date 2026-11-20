@@ -20,6 +20,7 @@ export const accountInputSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("pendingRecovery") }),
   z.strictObject({ action: z.literal("beginHandoff"), serverUrl }),
   z.strictObject({ action: z.literal("pollHandoff") }),
+  z.strictObject({ action: z.literal("getHandoffPayload") }),
   z.strictObject({ action: z.literal("cancelHandoff") }),
   z.strictObject({
     action: z.literal("inspectHandoff"),

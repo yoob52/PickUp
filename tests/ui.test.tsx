@@ -13,6 +13,7 @@ import { App } from "../src/renderer/src/App";
 import { WaitDialog } from "../src/renderer/src/features/WaitDialog";
 import { SettingsDialog } from "../src/renderer/src/features/SettingsDialog";
 import { SyncSettings } from "../src/renderer/src/features/SyncSettings";
+import { AccountPanel } from "../src/renderer/src/features/AccountPanel";
 import { MobileSyncSheet } from "../src/renderer/src/features/MobileSyncSheet";
 import { CaptureApp } from "../src/renderer/src/views/CaptureApp";
 import { WorkspaceProvider } from "../src/renderer/src/state/workspace";
@@ -85,6 +86,7 @@ function createApi(overrides: Partial<PickupAPI> = {}): PickupAPI {
     syncNow: unused,
     getPairingPayload: unused,
     copyPairingPayload: unused,
+    copyLoginPayload: unused,
     host: "desktop",
     getWorkspaceSnapshot: unused,
     listTasks: unused,
@@ -220,6 +222,51 @@ it("sync settings retains failed inputs, clears the registration token on succes
   expect(screen.queryByAltText("同步配对二维码")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "停止同步" }));
   expect(await screen.findByLabelText("注册令牌")).toHaveValue("");
+});
+
+it("copies the active desktop login code and displays clipboard errors", async () => {
+  const status = {
+    enabled: false,
+    serverUrl: null,
+    running: false,
+    stopped: false,
+    lastSuccess: null,
+    error: null,
+    retryAt: null,
+  };
+  const copy = vi
+    .fn()
+    .mockResolvedValueOnce(ok(null))
+    .mockResolvedValueOnce({
+      ok: false,
+      code: "SYSTEM_SETTING_ERROR",
+      message: "无法写入剪贴板",
+      retryable: true,
+    })
+    .mockRejectedValueOnce(new Error("unavailable"));
+  window.pickup = createApi({
+    copyLoginPayload: copy,
+    account: vi.fn().mockResolvedValue(
+      ok({
+        status,
+        qrPayload: "pickup-login:1:test",
+        expiresAt: Date.now() + 120000,
+      }),
+    ),
+  });
+  render(<AccountPanel status={status} onStatus={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "扫码登录" }));
+  await screen.findByAltText("电脑登录二维码");
+  const button = screen.getByRole("button", { name: "复制登录码" });
+  fireEvent.click(button);
+  expect(
+    await screen.findByText("登录码已复制，请仅发送到你信任的手机。"),
+  ).toBeVisible();
+  expect(copy).toHaveBeenCalledWith();
+  fireEvent.click(button);
+  expect(await screen.findByText("无法写入剪贴板")).toBeVisible();
+  fireEvent.click(button);
+  expect(await screen.findByText("复制失败，请稍后重试。")).toBeVisible();
 });
 
 it("does not render pairing or sync controls for mobile settings", async () => {

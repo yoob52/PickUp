@@ -6,7 +6,14 @@ import {
   CapacitorBarcodeScanner,
   CapacitorBarcodeScannerTypeHint,
 } from "@capacitor/barcode-scanner";
-import { KeyRound, LogIn, LogOut, QrCode, ShieldCheck } from "lucide-react";
+import {
+  Copy,
+  KeyRound,
+  LogIn,
+  LogOut,
+  QrCode,
+  ShieldCheck,
+} from "lucide-react";
 import {
   DEFAULT_SYNC_SERVER,
   type AccountInput,
@@ -33,6 +40,17 @@ export function AccountPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
+  async function copyLogin() {
+    try {
+      const result = await window.pickup.copyLoginPayload();
+      setCopyMessage(
+        result.ok ? "登录码已复制，请仅发送到你信任的手机。" : result.message,
+      );
+    } catch {
+      setCopyMessage("复制失败，请稍后重试。");
+    }
+  }
   const [qr, setQr] = useState<{ image: string; expiresAt: number } | null>(
     null,
   );
@@ -72,7 +90,8 @@ export function AccountPanel({
         setRecovery("");
         setNotice("已登录；未完的事会在设备间同步。");
       }
-      if (result.value.qrPayload)
+      if (result.value.qrPayload) {
+        setCopyMessage("");
         setQr({
           image: await QRCode.toDataURL(result.value.qrPayload, {
             width: 320,
@@ -80,6 +99,7 @@ export function AccountPanel({
           }),
           expiresAt: result.value.expiresAt!,
         });
+      }
       if (result.value.confirmation) setConfirmation(result.value.confirmation);
       return result.value;
     } catch {
@@ -436,6 +456,18 @@ export function AccountPanel({
                 等待手机确认… 到期时间{" "}
                 {new Date(qr.expiresAt).toLocaleTimeString()}
               </p>
+              <Button
+                kind="ghost"
+                icon={<Copy size={16} />}
+                onClick={() => void copyLogin()}
+              >
+                复制登录码
+              </Button>
+              {copyMessage ? (
+                <p role="status" className="helper">
+                  {copyMessage}
+                </p>
+              ) : null}
               <Button
                 kind="ghost"
                 onClick={() => {

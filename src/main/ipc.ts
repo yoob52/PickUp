@@ -15,6 +15,7 @@ import {
 import { storeRegistry, type Registered } from "../shared/api-registry";
 import type { DesktopHost } from "./desktop";
 import type { StoreClient } from "./worker-client";
+import type { AccountReply } from "../shared/account-contracts";
 
 const noInput = z.undefined();
 const registry: Registered[] = [...storeRegistry];
@@ -60,6 +61,31 @@ export function registerIpcHandlers(
   desktop: DesktopHost,
 ): void {
   client.onStateChanged(notifyStateChanged);
+  register("pickup:copyLoginPayload", noInput, false, async (client) => {
+    const result = await client.send<AccountReply>({
+      kind: "account",
+      input: { action: "getHandoffPayload" },
+    });
+    if (!result.ok) return result;
+    if (!result.value.qrPayload)
+      return {
+        ok: false,
+        code: "VALIDATION_ERROR",
+        message: "请先生成有效的电脑登录码。",
+        retryable: false,
+      };
+    try {
+      clipboard.writeText(result.value.qrPayload);
+      return { ok: true, value: null, revision: result.revision };
+    } catch {
+      return {
+        ok: false,
+        code: "SYSTEM_SETTING_ERROR",
+        message: "无法写入剪贴板，请稍后重试。",
+        retryable: true,
+      };
+    }
+  });
   register("pickup:copyPairingPayload", noInput, false, async (client) => {
     const result = await client.send<string>({ kind: "getPairingPayload" });
     if (!result.ok) return result;

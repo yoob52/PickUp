@@ -527,6 +527,7 @@ export type PickupAPI = {
   syncNow(): Promise<Result<SyncStatus>>;
   getPairingPayload(): Promise<Result<string>>;
   copyPairingPayload(): Promise<Result<null>>;
+  copyLoginPayload(): Promise<Result<null>>;
   readonly host: "desktop" | "mobile";
   getWorkspaceSnapshot(): Promise<Result<WorkspaceSnapshot>>;
   listTasks(input: ListTasksInput): Promise<Result<Page<TaskSummary>>>;
