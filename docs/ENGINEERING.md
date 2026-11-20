@@ -57,7 +57,8 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
   - `sqlite.ts`、`sqlite-wasm-driver.ts`：最小同步驱动契约与 oo1 适配器；整数读取与 better-sqlite3 默认模式一致（number，大整数可能损失精度）。
   - `migrate.ts`：无 Node 依赖的版本守卫与事务迁移；桌面升级前备份仍由 `database.ts` 负责。
   - `errors.ts`：领域错误、schema/迁移/一致性/连接错误与启动诊断文案。
-  - `migrations/`：`001.sql` 初始结构、`002.sql` 等待回看字段 + `index.ts` 顺序迁移清单（当前 schema 版本 2）。
+  - `hlc.ts`、`sync.ts`：可移植 HLC、事务 outbox、离线变更导出与合并；没有网络调用或 renderer API。
+  - `migrations/`：`001.sql` 初始结构、`002.sql` 等待回看字段、`003.sql` 同步元数据 + `index.ts` 顺序迁移清单（当前 schema 版本 3）。
 - `src/main/`
   - `index.ts`：单实例、生命周期、资源协议、桌面宿主与 worker 装配。
   - `desktop.ts`：主窗口/唯一 capture/widget、托盘、全局快捷键、登录项、关闭隐藏、完全退出与草稿 flush。
@@ -70,7 +71,7 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
 - `tests/`：契约/状态规则/日期计算的单元测试、IPC 契约一致性、组件行为、Playwright 端到端。
 - `scripts/`：官方运行时下载入口及 Electron 集成测试启动器。
 
-当前 schema 仍为初始五表设计（tasks / breakpoints / task_transitions / app_state / command_receipts）：全部 P0 业务能力所需字段已经足够，本轮没有新增迁移文件。写入路径包括创建/编辑、开始、切换、暂停、等待与恢复、完成、取消、重新打开、断点、下次开工引用、草稿、偏好，全部在同步事务内完成并写回执或版本。
+业务五表（tasks / breakpoints / task_transitions / app_state / command_receipts）保留；schema 3 新增 sync_device / sync_changes / sync_dirty。业务命令、HLC 和 outbox 在同一事务中提交或回滚；草稿、偏好和回执不参与同步。
 
 ## 3. 命令及产物
 
@@ -95,6 +96,16 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
 移动 Web 可运行 `npx vite preview --config vite.mobile.config.ts` 后访问 `http://127.0.0.1:4174`。需要安全上下文（localhost 或 HTTPS）及支持 OPFS 同步访问句柄的浏览器；不需要 COOP/COEP。首次运行浏览器测试需 `npx playwright install chromium`。存储位置固定为当前 origin 的 `/pickup-sahpool`，池内主文件 `/pickup.sqlite`；不同端口、协议或域名的数据相互隔离。不得清空该目录作为启动恢复手段。
 
 移动 API / 存储宿主不调用原生插件，Android 壳见下节。主窗口的“记一件事”仍调用桌面 `showCapture`（移动宿主明确拒绝）；可通过 `/?window=capture` 使用共享记录表单，浏览器测试从这里创建并开始任务，再回主窗口验证。桌面窗口操作、桌面入口与全部桌面偏好写入返回 `VALIDATION_ERROR`，不伪造系统设置成功。一次仅一个页面持有存储池；并发打开会明确报错，关闭占用页后重新加载。页面隐藏不停止已接收事务；离开页面时释放 worker，BFCache 恢复时重新加载连接。
+
+### 离线同步基础（PR6）
+
+`src/worker/sync.ts` 导出 `listChangesSince(db, cursor = 0, limit = 200)` → `{changes, cursor}` 与 `applyRemoteChanges(db, changes)` → `{applied, revision}`。上传游标是本库单调追加序号，不是 HLC；晚到的旧时钟变更也会被导出。接收的原始变更保留原 ID 并可再次导出，以变更 ID 去重；本轮没有确认、清理、网络传输、服务端、账号或 UI/IPC 同步入口。
+
+迁移在原升级保护事务内生成一次设备 UUID，回填断点/历史 UUID，为旧业务数据生成初始 outbox。空库不生成业务事件。HLC 采用 `16位 wallMs:10位 counter:设备UUID`，固定宽度、按字符串排序，tick/receive 持久化于设备行，可处理时钟回拨与计数溢出。任务内容（标题/备注）与状态（状态/等待原因/回看时间/结束时间等）独立 LWW；断点和历史按 UUID 追加合并。历史/最新断点按 HLC、UUID 排序，原 seq 仅保留本地 DTO/回执兼容，不用于跨设备比较。任务 version、工作区 revision、next-up version 是各库的乐观并发标记，不参与跨库收敛比较。
+
+未先收到父任务的事件保留在 outbox，等内容与状态寄存器齐备后再建立任务和外键子记录；每批只物化受影响任务。输入、不可变 ID 重用或事务失败会整批回滚。多个 doing 保留 `status_changed_at` 最新者，同毫秒按状态 HLC、任务 ID 确定胜者；其余暂停并生成正常 outbox 和历史事件。无效 next-up（已结束或等待）也生成清空事件，沿用既有业务限制。冲突修复事件必须继续参与双向交换直至无新变更，不能仅交换一次初始快照。单 doing 唯一索引仅在合并事务内重建，提交前恢复；任何中间错误连同索引变化一起回滚。
+
+`tests/sync.test.ts` 在 better-sqlite3 / SQLite WASM 两驱动运行同组迁移、LWW、乱序/重复、冲突、原子失败和 12 个种子的双设备随机交错收敛测试。运行 `npm run check` 或 `npm test -- tests/sync.test.ts`；现有桌面 worker 场景另由 `DISPLAY=:0 npm run test:integration` 验证。
 
 ### Android 壳（Capacitor 7）
 

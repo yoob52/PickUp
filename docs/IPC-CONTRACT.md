@@ -295,7 +295,7 @@ const result = await window.pickup.switchTask({
 
 ### 5.3 getTaskDetail
 
-- 返回任务摘要 + 最新断点 + 断点历史（`seq DESC`，最新在前）+ 状态历史（`seq DESC`，最新在前），两者独立分页并各自带 `total`/`hasMore`。
+- 返回任务摘要 + 最新断点 + 断点历史 + 状态历史，两者从 schema 3 起按 `hlc DESC, id DESC`（最新在前）独立分页并各自带 `total`/`hasMore`。seq 仍是本地 DTO 定位符，不用于比较远端记录的时间顺序。
 - 任务不存在返回 `NOT_FOUND`。
 
 ### 5.4 排序规则

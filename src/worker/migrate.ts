@@ -1,6 +1,7 @@
 import { IntegrityError, SchemaTooNewError } from "./errors";
 import { MIGRATIONS, SCHEMA_VERSION } from "./migrations";
 import type { SqliteDatabase } from "./sqlite";
+import { initializeSync } from "./sync";
 
 export function schemaVersion(db: SqliteDatabase): number {
   return (db.prepare("PRAGMA user_version").get() as { user_version: number })
@@ -32,7 +33,10 @@ export function migrateSchema(db: SqliteDatabase): void {
   if (from === SCHEMA_VERSION) return;
   db.transaction(() => {
     for (const migration of MIGRATIONS) {
-      if (migration.version > from) db.exec(migration.sql);
+      if (migration.version > from) {
+        db.exec(migration.sql);
+        if (migration.version === 3) initializeSync(db);
+      }
     }
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
   })();

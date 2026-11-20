@@ -72,7 +72,7 @@ function breakpointPage(
   const rows = db
     .prepare(
       `SELECT seq, task_id, progress, next_step, reference_text, saved_at
-       FROM breakpoints WHERE task_id = ? ORDER BY seq DESC LIMIT ? OFFSET ?`,
+       FROM breakpoints WHERE task_id = ? ORDER BY hlc DESC, id DESC LIMIT ? OFFSET ?`,
     )
     .all(taskId, limit, offset) as {
     seq: number;
@@ -114,7 +114,7 @@ function transitionPage(
   const rows = db
     .prepare(
       `SELECT seq, from_status, to_status, changed_at, revision
-       FROM task_transitions WHERE task_id = ? ORDER BY seq DESC LIMIT ? OFFSET ?`,
+       FROM task_transitions WHERE task_id = ? ORDER BY hlc DESC, id DESC LIMIT ? OFFSET ?`,
     )
     .all(taskId, limit, offset) as {
     seq: number;

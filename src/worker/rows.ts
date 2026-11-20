@@ -35,7 +35,7 @@ export const TASK_COLUMNS = `
   t.ended_at AS ended_at,
   t.version AS version,
   (SELECT count(*) FROM breakpoints b WHERE b.task_id = t.id) AS breakpoint_count,
-  (SELECT b.seq FROM breakpoints b WHERE b.task_id = t.id ORDER BY b.seq DESC LIMIT 1)
+  (SELECT b.seq FROM breakpoints b WHERE b.task_id = t.id ORDER BY b.hlc DESC, b.id DESC LIMIT 1)
     AS latest_breakpoint_seq`;
 
 /**
