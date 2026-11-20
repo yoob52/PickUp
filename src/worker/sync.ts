@@ -124,6 +124,7 @@ function insertChange(
   db: SqliteDatabase,
   change: SyncChange,
   now: number,
+  local = false,
 ): void {
   db.prepare(
     "INSERT INTO sync_changes(id, hlc, entity, entity_id, payload, created_at) VALUES(?, ?, ?, ?, ?, ?)",
@@ -135,6 +136,10 @@ function insertChange(
     JSON.stringify(change.payload),
     now,
   );
+  if (local)
+    db.prepare(
+      "INSERT INTO sync_outbox(origin,change_json) VALUES('local',?)",
+    ).run(JSON.stringify(change));
 }
 
 export function initializeSync(db: SqliteDatabase): void {
@@ -155,18 +160,26 @@ export function initializeSync(db: SqliteDatabase): void {
     INSERT OR IGNORE INTO sync_dirty SELECT 'breakpoint', CAST(seq AS TEXT) FROM breakpoints;
     INSERT OR IGNORE INTO sync_dirty SELECT 'transition', CAST(seq AS TEXT) FROM task_transitions;
     INSERT OR IGNORE INTO sync_dirty SELECT 'next-up', 'singleton' FROM app_state WHERE next_up_task_id IS NOT NULL;`);
-  recordLocalChanges(db, Date.now());
+  recordLocalChanges(db, Date.now(), false);
 }
 
 /** Called inside the business transaction, before its receipt is committed. */
-export function recordLocalChanges(db: SqliteDatabase, now: number): void {
-  flushLocalChanges(db, now);
+export function recordLocalChanges(
+  db: SqliteDatabase,
+  now: number,
+  queue = true,
+): void {
+  flushLocalChanges(db, now, queue);
   materializeState(db);
   materializeNextUp(db);
   db.exec("DELETE FROM sync_dirty");
 }
 
-function flushLocalChanges(db: SqliteDatabase, now: number): void {
+function flushLocalChanges(
+  db: SqliteDatabase,
+  now: number,
+  queue: boolean,
+): void {
   const dirty = db
     .prepare(
       `SELECT entity, entity_id FROM sync_dirty ORDER BY entity,
@@ -257,6 +270,7 @@ function flushLocalChanges(db: SqliteDatabase, now: number): void {
         payload,
       } as SyncChange,
       now,
+      queue,
     );
   }
   db.prepare("UPDATE sync_device SET last_hlc = ? WHERE singleton = 1").run(
@@ -282,7 +296,6 @@ export function listChangeEntriesSince(
   db: SqliteDatabase,
   cursor = 0,
   limit = 200,
-  localOnly = false,
 ): { entries: { seq: number; change: SyncChange }[]; cursor: number } {
   if (
     !Number.isSafeInteger(cursor) ||
@@ -294,15 +307,31 @@ export function listChangeEntriesSince(
     throw DomainError.validation("同步游标或分页大小无效。");
   const rows = db
     .prepare(
-      `SELECT seq, id, hlc, entity, entity_id, payload FROM sync_changes WHERE seq > ?
-       ${localOnly ? "AND substr(hlc,29) = (SELECT id FROM sync_device WHERE singleton=1)" : ""}
-       ORDER BY seq LIMIT ?`,
+      "SELECT seq, id, hlc, entity, entity_id, payload FROM sync_changes WHERE seq > ? ORDER BY seq LIMIT ?",
     )
     .all(cursor, limit) as ChangeRow[];
   return {
     entries: rows.map((row) => ({ seq: row.seq, change: decodeRow(row) })),
     cursor: rows.at(-1)?.seq ?? cursor,
   };
+}
+
+export function snapshotSyncState(db: SqliteDatabase): void {
+  const rows = db
+    .prepare(
+      `WITH ranked AS (
+    SELECT *,row_number() OVER (PARTITION BY entity,entity_id ORDER BY hlc DESC,id DESC) AS current_rank,
+    row_number() OVER (PARTITION BY entity,entity_id ORDER BY CAST(json_extract(payload,'$.updated_at') AS INTEGER) DESC,hlc DESC,id DESC) AS time_rank
+    FROM sync_changes
+  ) SELECT id,hlc,entity,entity_id,payload FROM ranked
+  WHERE entity IN ('task-status','breakpoint','transition') OR current_rank=1 OR (entity='task-content' AND time_rank=1)
+  ORDER BY seq`,
+    )
+    .all() as ChangeRow[];
+  const insert = db.prepare(
+    "INSERT INTO sync_outbox(origin,change_json) VALUES('snapshot',?)",
+  );
+  for (const row of rows) insert.run(JSON.stringify(decodeRow(row)));
 }
 
 function latest(

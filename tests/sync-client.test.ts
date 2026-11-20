@@ -15,7 +15,7 @@ import {
   parsePairingPayload,
   SyncDecryptionError,
 } from "../src/worker/sync-crypto";
-import { listChangesSince } from "../src/worker/sync";
+import { applyRemoteChanges, listChangesSince } from "../src/worker/sync";
 import type { SqliteDatabase } from "../src/worker/sqlite";
 import { SqliteWasmDriver } from "../src/worker/sqlite-wasm-driver";
 import { startSyncRelay } from "./sync-relay";
@@ -73,6 +73,12 @@ const cursor = (db: SqliteDatabase) =>
     pushed_cursor: number;
     pulled_cursor: number;
   };
+const uploadCursor = (db: SqliteDatabase) =>
+  (
+    db.prepare("SELECT coalesce(max(seq),0) AS seq FROM sync_outbox").get() as {
+      seq: number;
+    }
+  ).seq;
 const state = (db: SqliteDatabase) => ({
   tasks: db
     .prepare(
@@ -277,6 +283,186 @@ it("calls fetch without a class receiver, as required by the browser WorkerGloba
 });
 
 it.each([false, true])(
+  "migrates explicit local outbox provenance and retains only its ciphertext (WASM=%s)",
+  (wasm) => {
+    const db = open(wasm),
+      other = open(!wasm);
+    create(db, "本机");
+    create(other, "远端");
+    const own = listChangesSince(db, 0, 1000).changes;
+    applyRemoteChanges(db, listChangesSince(other, 0, 1000).changes);
+    db.exec(`DROP TABLE sync_uploads;DROP TABLE sync_outbox;DROP TABLE sync_destination;
+      CREATE TABLE sync_uploads(seq INTEGER PRIMARY KEY REFERENCES sync_changes(seq),blob TEXT NOT NULL);
+      INSERT INTO sync_uploads SELECT seq,'retained-ciphertext' FROM sync_changes;
+      PRAGMA user_version=7;`);
+    migrateSchema(db);
+    const entries = db
+      .prepare("SELECT origin,change_json FROM sync_outbox ORDER BY seq")
+      .all() as { origin: string; change_json: string }[];
+    expect(entries.map((row) => JSON.parse(row.change_json))).toEqual(own);
+    expect(entries.every((row) => row.origin === "local")).toBe(true);
+    expect(
+      db
+        .prepare(
+          "SELECT count(*) AS n FROM sync_uploads WHERE blob='retained-ciphertext'",
+        )
+        .get(),
+    ).toEqual({ n: own.length });
+    create(db, "升级后的本机记录");
+    expect(uploadCursor(db)).toBeGreaterThan(
+      listChangesSince(db, 0, 1000).changes.length - 2,
+    );
+  },
+);
+
+it("rolls back the complete configuration and outbox when snapshot creation fails", async () => {
+  const server = await relay(),
+    db = open();
+  create(db);
+  const before = db.prepare("SELECT * FROM sync_outbox").all();
+  const prepare = db.prepare.bind(db);
+  const fault = vi.spyOn(db, "prepare").mockImplementation((sql) => {
+    if (sql.includes("VALUES('snapshot',?)"))
+      throw new Error("snapshot-failure");
+    return prepare(sql);
+  });
+  const sync = client(db);
+  await expect(
+    sync.enable({ serverUrl: server.url, registrationToken: server.token }),
+  ).rejects.toThrow("snapshot-failure");
+  fault.mockRestore();
+  expect(db.prepare("SELECT * FROM sync_config").all()).toEqual([]);
+  expect(db.prepare("SELECT * FROM sync_destination").all()).toEqual([]);
+  expect(db.prepare("SELECT * FROM sync_outbox").all()).toEqual(before);
+});
+
+it.each([false, true])(
+  "snapshots remote tasks and causal status history when switching accounts, but never echoes on same-space login (WASM=%s)",
+  async (wasm) => {
+    const server = await relay(),
+      sourceDb = open(!wasm),
+      switchDb = open(wasm),
+      freshDb = open(!wasm);
+    server.setQuota(128 * 1024);
+    const source = client(sourceDb),
+      fetcher = vi.fn(fetch),
+      switching = client(switchDb, fetcher),
+      fresh = client(freshDb);
+    const accountA = {
+      serverUrl: server.url,
+      email: "account-a@example.com",
+      password: "a strong password",
+    };
+    const accountB = { ...accountA, email: "account-b@example.com" };
+    const first = create(sourceDb, "被压制的开工"),
+      second = create(sourceDb, "后来完成的胜者");
+    for (let i = 0; i < 8; i++) create(sourceDb, `他人记录 ${i}`);
+    await source.account({ action: "register", ...accountA });
+    await source.syncNow();
+    for (let i = 0; i < 20; i++)
+      createCommands(sourceDb).updateTask({
+        commandId: crypto.randomUUID(),
+        ...ref(sourceDb, first),
+        title: `当前内容 ${i}`,
+        note: "线索".repeat(100),
+      });
+    await source.syncNow();
+    await switching.account({ action: "login", ...accountA });
+    await switching.syncNow();
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now");
+    try {
+      clock.mockReturnValue(now + 100);
+      createCommands(sourceDb).startTask({
+        commandId: crypto.randomUUID(),
+        task: ref(sourceDb, first),
+      });
+      clock.mockReturnValue(now + 200);
+      createCommands(switchDb).startTask({
+        commandId: crypto.randomUUID(),
+        task: ref(switchDb, second),
+      });
+    } finally {
+      clock.mockRestore();
+    }
+    await source.syncNow();
+    await switching.syncNow();
+    await source.syncNow();
+    createCommands(switchDb).completeTask({
+      commandId: crypto.randomUUID(),
+      task: ref(switchDb, second),
+    });
+    await switching.syncNow();
+    await source.syncNow();
+    expect(
+      switchDb.prepare("SELECT status FROM tasks WHERE id=?").get(first),
+    ).toEqual({ status: "paused" });
+    const original = listChangesSince(switchDb, 0, 1000).changes;
+    await switching.account({ action: "logout" });
+    await switching.account({ action: "register", ...accountB });
+    const snapshot = switchDb
+      .prepare("SELECT origin,change_json FROM sync_outbox ORDER BY seq")
+      .all() as { origin: string; change_json: string }[];
+    expect(snapshot.every((row) => row.origin === "snapshot")).toBe(true);
+    expect(snapshot.length).toBeLessThan(original.length);
+    const events = snapshot.map(
+      (row) => JSON.parse(row.change_json) as (typeof original)[number],
+    );
+    for (const event of events) expect(original).toContainEqual(event);
+    for (const event of original.filter((row) =>
+      ["task-status", "breakpoint", "transition"].includes(row.entity),
+    ))
+      expect(events).toContainEqual(event);
+    await switching.syncNow();
+    await fresh.account({ action: "login", ...accountB });
+    await fresh.syncNow();
+    await switching.syncNow();
+    expect(state(freshDb)).toEqual(state(switchDb));
+    expect(state(freshDb)).toEqual(state(sourceDb));
+    expect(
+      freshDb.prepare("SELECT status FROM tasks WHERE id=?").get(first),
+    ).toEqual({ status: "paused" });
+    expect(
+      freshDb
+        .prepare("SELECT count(*) AS n FROM tasks WHERE status='doing'")
+        .get(),
+    ).toEqual({ n: 0 });
+    expect(switching.status().error).toBeNull();
+    const identity = switchDb
+      .prepare("SELECT upload_device_id FROM sync_config")
+      .get();
+    await switching.account({ action: "logout" });
+    fetcher.mockClear();
+    await switching.account({ action: "login", ...accountB });
+    await switching.syncNow();
+    expect(
+      switchDb.prepare("SELECT upload_device_id FROM sync_config").get(),
+    ).toEqual(identity);
+    expect(
+      switchDb
+        .prepare("SELECT origin,change_json FROM sync_outbox ORDER BY seq")
+        .all(),
+    ).toEqual(snapshot);
+    expect(
+      fetcher.mock.calls.filter(
+        ([url, options]) =>
+          String(url).endsWith("/changes") && options?.method === "POST",
+      ),
+    ).toHaveLength(0);
+    await expect(
+      switching.account({
+        action: "login",
+        ...accountB,
+        password: "incorrect password",
+      }),
+    ).rejects.toThrow();
+    expect(
+      switchDb.prepare("SELECT upload_device_id FROM sync_config").get(),
+    ).toEqual(identity);
+  },
+);
+
+it.each([false, true])(
   "downloads every page of a full account without echoing remote history (pending local changes: %s)",
   async (pending) => {
     const server = await relay(),
@@ -456,7 +642,7 @@ it("reuses persisted ciphertext after a lost upload response, including a client
   const next = client(db, fetcher);
   await next.syncNow();
   expect(bodies[1]).toBe(bodies[0]);
-  expect(cursor(db).pushed_cursor).toBe(outbox.cursor);
+  expect(cursor(db).pushed_cursor).toBe(uploadCursor(db));
   expect(db.prepare("SELECT count(*) AS n FROM sync_uploads").get()).toEqual({
     n: outbox.changes.length,
   });
@@ -736,7 +922,7 @@ it("splits uploads at the one MiB wire limit rather than skipping large valid ba
   await sync.syncNow();
   expect(sizes.length).toBeGreaterThan(1);
   expect(Math.max(...sizes)).toBeLessThanOrEqual(1024 * 1024);
-  expect(cursor(db).pushed_cursor).toBe(listChangesSince(db, 0, 1000).cursor);
+  expect(cursor(db).pushed_cursor).toBe(uploadCursor(db));
 });
 
 it.each(["headers", "body"])(
@@ -826,13 +1012,13 @@ it.each([false, true])(
     ).toHaveLength(outbox.changes.length);
     expect(String(fetcher.mock.calls[1][0])).toContain("after=0&limit=50");
     expect(cursor(db)).toEqual({
-      pushed_cursor: outbox.cursor,
+      pushed_cursor: uploadCursor(db),
       pulled_cursor: 0,
     });
     await vi.advanceTimersByTimeAsync(20_000);
     await pending;
     expect(cursor(db)).toEqual({
-      pushed_cursor: outbox.cursor,
+      pushed_cursor: uploadCursor(db),
       pulled_cursor: 0,
     });
     expect(sync.status().error).toContain("超时");
@@ -941,6 +1127,6 @@ it("drains a local commit made while an otherwise empty pull is in flight", asyn
   sync.localCommitted();
   release(Response.json({ changes: [], lastServerSeq: 0, more: false }));
   await cycle;
-  expect(cursor(db).pushed_cursor).toBe(listChangesSince(db, 0, 1000).cursor);
+  expect(cursor(db).pushed_cursor).toBe(uploadCursor(db));
   expect(cursor(db).pushed_cursor).toBeGreaterThan(0);
 });

@@ -5,7 +5,7 @@ import {
   type SyncStatus,
 } from "../shared/sync-contracts";
 import { DomainError } from "./errors";
-import { applyRemoteChanges, listChangeEntriesSince } from "./sync";
+import { applyRemoteChanges, snapshotSyncState, type SyncChange } from "./sync";
 import {
   decryptChange,
   deriveSyncKeys,
@@ -132,9 +132,7 @@ export class SyncClient {
   private latestSeq(): number {
     return (
       this.db
-        .prepare(
-          "SELECT coalesce(max(seq),0) AS seq FROM sync_changes WHERE substr(hlc,29) = (SELECT id FROM sync_device WHERE singleton=1)",
-        )
+        .prepare("SELECT coalesce(max(seq),0) AS seq FROM sync_outbox")
         .get() as { seq: number }
     ).seq;
   }
@@ -310,7 +308,7 @@ export class SyncClient {
         throw new DomainError("SYNC_ERROR", "同步服务器注册回执无效。", false);
       if (this.closed)
         throw new DomainError("SYNC_ERROR", "同步已关闭。", false);
-      this.saveConfig(parsed.data.serverUrl, rootKey);
+      await this.saveConfig(parsed.data.serverUrl, rootKey);
       this.schedule(2000);
       this.notify();
       return this.status();
@@ -323,14 +321,46 @@ export class SyncClient {
     if (!c) throw DomainError.validation("请先启用同步。");
     return pairingPayload(c.server_url, c.root_key);
   }
-  private saveConfig(serverUrl: string, rootKey: string): void {
+  private rememberConfig(spaceId: string): void {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO sync_destination
+      SELECT 1,?,coalesce(upload_device_id,(SELECT id FROM sync_device WHERE singleton=1)),pushed_cursor,pulled_cursor,pulled_device_id,pulled_client_seq FROM sync_config`,
+      )
+      .run(spaceId);
+  }
+  private async saveConfig(
+    serverUrl: string,
+    rootKey: string,
+    session: string | null = null,
+    email: string | null = null,
+  ): Promise<void> {
+    const spaceId = (await deriveSyncKeys(rootKey)).spaceId;
+    const current = this.config();
+    const previousSpace = current
+      ? (await deriveSyncKeys(current.root_key)).spaceId
+      : undefined;
     this.db.transaction(() => {
-      this.db.prepare("DELETE FROM sync_uploads").run();
+      if (previousSpace) this.rememberConfig(previousSpace);
+      const previous = this.db
+        .prepare("SELECT space_id FROM sync_destination WHERE singleton=1")
+        .get() as { space_id: string | null } | undefined;
+      if (previous?.space_id !== spaceId) {
+        this.db.exec("DELETE FROM sync_uploads; DELETE FROM sync_outbox;");
+        this.db
+          .prepare(
+            "INSERT OR REPLACE INTO sync_destination(singleton,space_id,upload_device_id) VALUES(1,?,?)",
+          )
+          .run(spaceId, crypto.randomUUID());
+        snapshotSyncState(this.db);
+      }
+      this.db.prepare("DELETE FROM sync_config").run();
       this.db
         .prepare(
-          "INSERT INTO sync_config(singleton,server_url,root_key,upload_device_id) VALUES(1,?,?,?)",
+          `INSERT INTO sync_config(singleton,server_url,root_key,upload_device_id,pushed_cursor,pulled_cursor,pulled_device_id,pulled_client_seq,session_token,account_email)
+           SELECT 1,?,?,upload_device_id,pushed_cursor,pulled_cursor,pulled_device_id,pulled_client_seq,?,? FROM sync_destination WHERE singleton=1`,
         )
-        .run(serverUrl, rootKey, crypto.randomUUID());
+        .run(serverUrl, rootKey, session, email);
     })();
   }
   async account(raw: AccountInput): Promise<AccountReply> {
@@ -664,15 +694,7 @@ export class SyncClient {
     this.controller.abort();
     await this.inFlight?.catch(() => this.status());
     this.controller = new AbortController();
-    this.db.transaction(() => {
-      this.db.prepare("DELETE FROM sync_config").run();
-      this.saveConfig(server, root);
-      this.db
-        .prepare(
-          "UPDATE sync_config SET session_token=?,account_email=? WHERE singleton=1",
-        )
-        .run(session, email);
-    })();
+    await this.saveConfig(server, root, session, email);
     this.schedule(0);
     this.notify();
   }
@@ -684,7 +706,7 @@ export class SyncClient {
     if (config && !config.stopped)
       throw DomainError.stateConflict("请先停止现有同步，再配对其他设备。");
     if (config) await this.disable();
-    this.saveConfig(parsed.serverUrl, parsed.rootKey);
+    await this.saveConfig(parsed.serverUrl, parsed.rootKey);
     this.notify();
     return this.syncNow();
   }
@@ -696,8 +718,12 @@ export class SyncClient {
     this.controller.abort();
     try {
       await this.inFlight?.catch(() => this.status());
+      const config = this.config();
+      const spaceId = config
+        ? (await deriveSyncKeys(config.root_key)).spaceId
+        : undefined;
       this.db.transaction(() => {
-        this.db.prepare("DELETE FROM sync_uploads").run();
+        if (spaceId) this.rememberConfig(spaceId);
         this.db.prepare("DELETE FROM sync_config").run();
       })();
       this.controller = new AbortController();
@@ -881,23 +907,27 @@ export class SyncClient {
     deviceId: string,
     url: string,
   ): Promise<number> {
-    const page = listChangeEntriesSince(
-      this.db,
-      config.pushed_cursor,
-      500,
-      true,
-    );
+    const entries = this.db
+      .prepare(
+        "SELECT seq,change_json FROM sync_outbox WHERE seq>? ORDER BY seq LIMIT 500",
+      )
+      .all(config.pushed_cursor) as { seq: number; change_json: string }[];
     const changes: { clientSeq: number; blob: string }[] = [];
     let size = new TextEncoder().encode(
       JSON.stringify({ deviceId, changes: [] }),
     ).length;
-    for (const entry of page.entries) {
+    for (const entry of entries) {
       const prior = this.db
         .prepare("SELECT blob FROM sync_uploads WHERE seq=?")
         .get(entry.seq) as { blob: string } | undefined;
       const blob =
         prior?.blob ??
-        (await encryptChange(keys, deviceId, entry.seq, entry.change));
+        (await encryptChange(
+          keys,
+          deviceId,
+          entry.seq,
+          JSON.parse(entry.change_json) as SyncChange,
+        ));
       if (fromBase64url(blob).length > 65536)
         throw new DomainError(
           "SYNC_ERROR",
