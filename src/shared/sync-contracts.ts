@@ -34,6 +34,7 @@ export const enableSyncSchema = z.strictObject({
 });
 export type EnableSyncInput = z.infer<typeof enableSyncSchema>;
 export type SyncStatus = {
+  accountEmail?: string | null;
   enabled: boolean;
   serverUrl: string | null;
   running: boolean;

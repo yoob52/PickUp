@@ -67,6 +67,7 @@ function task(
 
 function createApi(overrides: Partial<PickupAPI> = {}): PickupAPI {
   return {
+    account: unused,
     enableSync: unused,
     pairWithPayload: unused,
     disableSync: unused,

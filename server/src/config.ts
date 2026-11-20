@@ -1,7 +1,10 @@
 import { z } from "zod";
+import { isIP } from "node:net";
 
 export type Config = {
-  registrationToken: string;
+  registrationToken?: string;
+  accountQuotaBytes?: number;
+  trustedProxies?: string[];
   dataDir: string;
   allowedOrigins: string[];
   port: number;
@@ -10,12 +13,11 @@ export type Config = {
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const registrationToken = env.PICKUP_REGISTRATION_TOKEN;
   if (
-    !registrationToken ||
-    registrationToken.length < 32 ||
-    /\s/.test(registrationToken)
+    registrationToken &&
+    (registrationToken.length < 32 || /\s/.test(registrationToken))
   )
     throw new Error(
-      "PICKUP_REGISTRATION_TOKEN is required and must contain at least 32 non-whitespace characters.",
+      "PICKUP_REGISTRATION_TOKEN must contain at least 32 non-whitespace characters when set.",
     );
   const port = z.coerce
     .number()
@@ -42,6 +44,20 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
   return {
     registrationToken,
+    accountQuotaBytes: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(Number.MAX_SAFE_INTEGER)
+      .parse(env.PICKUP_ACCOUNT_QUOTA_BYTES ?? 20 * 1024 * 1024),
+    trustedProxies: z
+      .array(z.string().refine((value) => isIP(value) !== 0))
+      .parse(
+        (env.PICKUP_TRUSTED_PROXIES ?? "")
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean),
+      ),
     port: port.data,
     dataDir: env.PICKUP_DATA_DIR ?? "/data",
     allowedOrigins,

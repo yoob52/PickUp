@@ -33,9 +33,11 @@ import type {
   WorkspaceSnapshot,
 } from "./contracts";
 import type { EnableSyncInput, SyncStatus } from "./sync-contracts";
+import type { AccountInput, AccountReply } from "./account-contracts";
 
 /** main → worker 的固定命令集合；worker 串行处理。 */
 export type WorkerRequest =
+  | { kind: "account"; input: AccountInput }
   | { kind: "pairWithPayload"; payload: string }
   | { kind: "setSyncForeground"; visible: boolean }
   | { kind: "enableSync"; input: EnableSyncInput }
@@ -69,6 +71,7 @@ export type WorkerRequest =
   | { kind: "close" };
 
 export type WorkerReplyValue =
+  | AccountReply
   | SyncStatus
   | string
   | WorkspaceSnapshot

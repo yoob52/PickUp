@@ -9,6 +9,7 @@ function subscribe(channel: string, listener: (...args: unknown[]) => void) {
 
 /** 只暴露固定业务方法；不透传任意 channel，也不暴露原始 ipcRenderer。 */
 const api: PickupAPI = {
+  account: (input) => ipcRenderer.invoke("pickup:account", input),
   pairWithPayload: (payload) =>
     ipcRenderer.invoke("pickup:pairWithPayload", payload),
   enableSync: (input) => ipcRenderer.invoke("pickup:enableSync", input),

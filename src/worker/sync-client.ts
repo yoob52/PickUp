@@ -11,14 +11,36 @@ import {
   deriveSyncKeys,
   encryptChange,
   fromBase64url,
+  toBase64url,
   generateRootKey,
   pairingPayload,
   parsePairingPayload,
   type SyncKeys,
 } from "./sync-crypto";
 import type { SqliteDatabase } from "./sqlite";
+import {
+  accountInputSchema,
+  type AccountInput,
+  type AccountReply,
+} from "../shared/account-contracts";
+import {
+  passwordKeys,
+  recoveryKeys,
+  recoveryCode,
+  seal,
+  unseal,
+  rootKeySchema,
+  randomKey,
+  ecdhKeyPair,
+  exportPublic,
+  handoffKey,
+  handoffPayload,
+  parseHandoff,
+} from "./account-crypto";
 
 type Config = {
+  session_token: string | null;
+  account_email: string | null;
   server_url: string;
   root_key: string;
   upload_device_id: string | null;
@@ -69,6 +91,14 @@ export class SyncClient {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private knownSeq: number;
   private active = true;
+  private accountBusy = false;
+  private handoff: {
+    requestId: string;
+    pollToken: string;
+    expiresAt: number;
+    serverUrl: string;
+    privateKey: CryptoKey;
+  } | null = null;
 
   constructor(
     private readonly db: SqliteDatabase,
@@ -106,6 +136,7 @@ export class SyncClient {
   status(): SyncStatus {
     const c = this.config();
     return {
+      accountEmail: c?.account_email ?? null,
       enabled: !!c,
       serverUrl: c?.server_url ?? null,
       running: !!this.inFlight,
@@ -165,6 +196,8 @@ export class SyncClient {
     authKey: string,
     body?: unknown,
   ): Promise<unknown> {
+    if (this.closed || !this.active)
+      throw DomainError.stateConflict("请回到前台后重试。");
     const controller = new AbortController();
     const signal = AbortSignal.any([
       this.controller.signal,
@@ -178,7 +211,7 @@ export class SyncClient {
         redirect: "error",
         signal,
         headers: {
-          Authorization: `Bearer ${authKey}`,
+          ...(authKey ? { Authorization: `Bearer ${authKey}` } : {}),
           ...(body === undefined ? {} : { "Content-Type": "application/json" }),
         },
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -273,6 +306,342 @@ export class SyncClient {
         )
         .run(serverUrl, rootKey, crypto.randomUUID());
     })();
+  }
+  async account(raw: AccountInput): Promise<AccountReply> {
+    if (this.accountBusy)
+      throw DomainError.stateConflict("账户操作正在进行，请稍后重试。");
+    this.accountBusy = true;
+    try {
+      return await this.runAccount(raw);
+    } catch (error) {
+      if (error instanceof AuthenticationError)
+        throw new DomainError(
+          "SYNC_ERROR",
+          "邮箱、密码或恢复码不正确，或登录已经失效。",
+          false,
+        );
+      throw error;
+    } finally {
+      this.accountBusy = false;
+    }
+  }
+  private async runAccount(raw: AccountInput): Promise<AccountReply> {
+    const input = accountInputSchema.parse(raw);
+    if (this.closed || !this.active || this.configuring)
+      throw DomainError.stateConflict("请在前台等待当前操作完成。");
+    if (input.action === "pendingRecovery") {
+      const c = this.config();
+      const pending = c?.account_email
+        ? (this.db
+            .prepare(
+              "SELECT recovery_code FROM account_signup WHERE server_url=? AND email=? AND root_key=?",
+            )
+            .get(c.server_url, c.account_email, c.root_key) as
+            { recovery_code: string } | undefined)
+        : undefined;
+      return {
+        status: this.status(),
+        ...(pending ? { recoveryCode: pending.recovery_code } : {}),
+      };
+    }
+    if (input.action === "cancelHandoff") {
+      this.handoff = null;
+      return { status: this.status() };
+    }
+    if (input.action === "ackRecovery") {
+      const c = this.config();
+      if (c)
+        this.db
+          .prepare(
+            "DELETE FROM account_signup WHERE server_url=? AND email=? AND root_key=?",
+          )
+          .run(c.server_url, c.account_email, c.root_key);
+      return { status: this.status() };
+    }
+    if (input.action === "logout") {
+      const c = this.config();
+      let failure: unknown;
+      try {
+        if (c?.session_token)
+          await this.request(
+            c.server_url + "/v1/accounts/logout",
+            c.session_token,
+            {},
+          );
+      } catch (error) {
+        failure = error;
+      }
+      await this.disable();
+      this.handoff = null;
+      if (failure)
+        throw new DomainError(
+          "SYNC_ERROR",
+          "已退出本机；服务器会话撤销未确认，将在到期后失效。",
+          true,
+        );
+      return { status: this.status() };
+    }
+    if (
+      input.action === "inspectHandoff" ||
+      input.action === "approveHandoff"
+    ) {
+      const qr = parseHandoff(input.payload),
+        c = this.config();
+      if (!c?.session_token || !c.account_email || c.stopped)
+        throw DomainError.validation("请先在手机登录账户。");
+      if (qr.server !== c.server_url)
+        throw DomainError.validation(
+          "此二维码来自其他服务器，未发送账户密钥。",
+        );
+      if (input.action === "inspectHandoff")
+        return {
+          status: this.status(),
+          confirmation: {
+            serverUrl: c.server_url,
+            email: c.account_email,
+            expiresAt: qr.expiresAt,
+          },
+        };
+      const issued = z
+        .object({ sessionToken: rootKeySchema })
+        .parse(
+          await this.request(
+            c.server_url + "/v1/accounts/session",
+            c.session_token,
+            {},
+          ),
+        );
+      const pair = await ecdhKeyPair();
+      const key = await handoffKey(pair.privateKey, qr.pubkey, qr.requestId);
+      const blob = await seal(
+        key,
+        {
+          rootKey: c.root_key,
+          sessionToken: issued.sessionToken,
+          email: c.account_email,
+        },
+        "pickup-handoff:1:" + qr.server + ":" + qr.requestId,
+      );
+      const ciphertext = toBase64url(
+        new TextEncoder().encode(
+          JSON.stringify({ pubkey: await exportPublic(pair.publicKey), blob }),
+        ),
+      );
+      parseHandoff(input.payload);
+      await this.request(
+        c.server_url + "/v1/handoff/" + qr.requestId,
+        c.session_token,
+        { ciphertext },
+      );
+      return { status: this.status() };
+    }
+    if (this.config() && !this.config()!.stopped)
+      throw DomainError.stateConflict("请先退出当前账户或停止配对同步。");
+    if (input.action === "beginHandoff") {
+      const slot = z
+        .object({
+          requestId: rootKeySchema,
+          pollToken: rootKeySchema,
+          expiresAt: z.number().int(),
+        })
+        .parse(await this.request(input.serverUrl + "/v1/handoff", "", {}));
+      const pair = await ecdhKeyPair();
+      this.handoff = {
+        ...slot,
+        serverUrl: input.serverUrl,
+        privateKey: pair.privateKey,
+      };
+      return {
+        status: this.status(),
+        expiresAt: slot.expiresAt,
+        qrPayload: handoffPayload({
+          server: input.serverUrl,
+          requestId: slot.requestId,
+          pubkey: await exportPublic(pair.publicKey),
+          expiresAt: slot.expiresAt,
+        }),
+      };
+    }
+    if (input.action === "pollHandoff") {
+      const h = this.handoff;
+      if (!h || h.expiresAt <= Date.now()) {
+        this.handoff = null;
+        throw DomainError.validation("扫码请求已过期，请重新生成。");
+      }
+      const reply = z
+        .union([
+          z.strictObject({ pending: z.literal(true) }),
+          z.strictObject({ ciphertext: z.string().max(16384) }),
+        ])
+        .parse(
+          await this.request(
+            h.serverUrl + "/v1/handoff/" + h.requestId,
+            h.pollToken,
+          ),
+        );
+      if ("pending" in reply) return { status: this.status(), pending: true };
+      this.handoff = null;
+      const payload = z
+        .strictObject({
+          pubkey: z.string().max(128),
+          blob: z.string().max(8192),
+        })
+        .parse(
+          JSON.parse(
+            new TextDecoder("utf-8", { fatal: true }).decode(
+              fromBase64url(reply.ciphertext),
+            ),
+          ),
+        );
+      const key = await handoffKey(h.privateKey, payload.pubkey, h.requestId);
+      const approved = z
+        .strictObject({
+          rootKey: rootKeySchema,
+          sessionToken: rootKeySchema,
+          email: z.string().email(),
+        })
+        .parse(
+          await unseal(
+            key,
+            payload.blob,
+            "pickup-handoff:1:" + h.serverUrl + ":" + h.requestId,
+          ),
+        );
+      await this.connectAccount(
+        h.serverUrl,
+        approved.rootKey,
+        approved.sessionToken,
+        approved.email,
+      );
+      return { status: this.status() };
+    }
+    this.configuring = true;
+    try {
+      const server = input.serverUrl,
+        email = input.email;
+      let rootKey: string, session: unknown, code: string | undefined;
+      const context = "pickup-account:1:" + email;
+      if (input.action === "recover") {
+        const recovery = await recoveryKeys(input.recoveryCode);
+        const response = z
+          .object({ wrappedRootKey: z.string().max(1024) })
+          .parse(
+            await this.request(server + "/v1/accounts/recover", "", {
+              action: "read",
+              email,
+              recoveryAuthKey: recovery.authKey,
+            }),
+          );
+        rootKey = rootKeySchema.parse(
+          await unseal(
+            recovery.kek,
+            response.wrappedRootKey,
+            context + ":recovery",
+          ),
+        );
+        const salt = randomKey(),
+          keys = await passwordKeys(input.password, salt);
+        session = await this.request(server + "/v1/accounts/recover", "", {
+          action: "reset",
+          email,
+          recoveryAuthKey: recovery.authKey,
+          salt,
+          authKey: keys.authKey,
+          wrappedRootKey: await seal(keys.kek, rootKey, context),
+        });
+      } else {
+        const { salt } = z
+          .object({ salt: rootKeySchema })
+          .parse(
+            await this.request(server + "/v1/accounts/prelogin", "", { email }),
+          );
+        const keys = await passwordKeys(input.password, salt);
+        if (input.action === "register") {
+          const pending = this.db
+            .prepare(
+              "SELECT root_key,recovery_code FROM account_signup WHERE server_url=? AND email=?",
+            )
+            .get(server, email) as
+            { root_key: string; recovery_code: string } | undefined;
+          rootKey = pending?.root_key ?? generateRootKey();
+          code = pending?.recovery_code ?? recoveryCode();
+          const recovery = await recoveryKeys(code),
+            sync = await deriveSyncKeys(rootKey);
+          this.db
+            .prepare("INSERT OR REPLACE INTO account_signup VALUES(?,?,?,?)")
+            .run(server, email, rootKey, code);
+          session = await this.request(server + "/v1/accounts", "", {
+            email,
+            salt,
+            authKey: keys.authKey,
+            spaceId: sync.spaceId,
+            spaceAuthKey: sync.authKey,
+            wrappedRootKey: await seal(keys.kek, rootKey, context),
+            recoveryAuthKey: recovery.authKey,
+            recoveryWrappedRootKey: await seal(
+              recovery.kek,
+              rootKey,
+              context + ":recovery",
+            ),
+          });
+        } else {
+          session = await this.request(server + "/v1/accounts/login", "", {
+            email,
+            authKey: keys.authKey,
+          });
+          const response = z
+            .object({ wrappedRootKey: z.string().max(1024) })
+            .parse(session);
+          rootKey = rootKeySchema.parse(
+            await unseal(keys.kek, response.wrappedRootKey, context),
+          );
+          const pending = this.db
+            .prepare(
+              "SELECT recovery_code FROM account_signup WHERE server_url=? AND email=? AND root_key=?",
+            )
+            .get(server, email, rootKey) as
+            { recovery_code: string } | undefined;
+          code = pending?.recovery_code;
+        }
+      }
+      const response = z
+        .object({
+          sessionToken: rootKeySchema,
+          email: z.literal(email),
+          spaceId: rootKeySchema,
+        })
+        .parse(session);
+      if ((await deriveSyncKeys(rootKey)).spaceId !== response.spaceId)
+        throw DomainError.validation("账户空间与密钥不一致，未启用同步。");
+      // Configuration is replaced only after credentials and the wrapped key have been verified.
+      await this.connectAccount(server, rootKey, response.sessionToken, email);
+      return { status: this.status(), ...(code ? { recoveryCode: code } : {}) };
+    } finally {
+      this.configuring = false;
+    }
+  }
+  private async connectAccount(
+    server: string,
+    root: string,
+    session: string,
+    email: string,
+  ) {
+    if (this.closed || !this.active)
+      throw DomainError.stateConflict("请回到前台后重新登录。");
+    this.controller.abort();
+    await this.inFlight?.catch(() => this.status());
+    this.controller = new AbortController();
+    this.db.transaction(() => {
+      this.db.prepare("DELETE FROM sync_config").run();
+      this.saveConfig(server, root);
+      this.db
+        .prepare(
+          "UPDATE sync_config SET session_token=?,account_email=? WHERE singleton=1",
+        )
+        .run(session, email);
+    })();
+    this.schedule(0);
+    this.notify();
   }
   async pair(payload: string): Promise<SyncStatus> {
     if (this.closed || this.configuring || !this.active)
@@ -375,7 +744,7 @@ export class SyncClient {
       const parsed = downloadSchema.safeParse(
         await this.request(
           url + `?after=${Math.max(0, config.pulled_cursor - 1)}&limit=50`,
-          keys.authKey,
+          config.session_token ?? keys.authKey,
         ),
       );
       if (!parsed.success)
@@ -498,7 +867,10 @@ export class SyncClient {
     }
     if (!changes.length) return 0;
     const parsed = uploadSchema.safeParse(
-      await this.request(url, keys.authKey, { deviceId, changes }),
+      await this.request(url, config.session_token ?? keys.authKey, {
+        deviceId,
+        changes,
+      }),
     );
     if (!parsed.success || parsed.data.accepted > changes.length)
       throw new DomainError("SYNC_ERROR", "同步服务器上传回执无效。", false);

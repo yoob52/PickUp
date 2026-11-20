@@ -64,8 +64,9 @@ afterEach(async () => {
 });
 
 describe("configuration", () => {
-  it("refuses missing/short credentials and invalid ports/origins", () => {
-    for (const value of [undefined, "short", " ".repeat(32)])
+  it("allows open accounts but refuses malformed optional credentials and invalid ports/origins", () => {
+    expect(() => readConfig({})).not.toThrow();
+    for (const value of ["short", " ".repeat(32)])
       expect(() => readConfig({ PICKUP_REGISTRATION_TOKEN: value })).toThrow(
         "PICKUP_REGISTRATION_TOKEN",
       );

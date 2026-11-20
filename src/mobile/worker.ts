@@ -62,6 +62,9 @@ async function start(): Promise<void> {
       const revision = store.revision();
       let value: WorkerReplyValue;
       switch (request?.kind) {
+        case "account":
+          value = await sync.account(request.input);
+          break;
         case "setSyncForeground":
           if (typeof request.visible !== "boolean")
             throw DomainError.validation("前台状态无效。");

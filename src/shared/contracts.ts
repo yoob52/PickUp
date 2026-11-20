@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { EnableSyncInput, SyncStatus } from "./sync-contracts";
+import type { AccountInput, AccountReply } from "./account-contracts";
 import { TASK_STATUSES, type StatusCounts, type TaskStatus } from "./task";
 
 /* ------------------------------------------------------------------ 通用 */
@@ -518,6 +519,7 @@ export type CommandOutcome =
 /* --------------------------------------------------------------- 渲染进程 API */
 
 export type PickupAPI = {
+  account(input: AccountInput): Promise<Result<AccountReply>>;
   enableSync(input: EnableSyncInput): Promise<Result<SyncStatus>>;
   pairWithPayload(payload: string): Promise<Result<SyncStatus>>;
   disableSync(): Promise<Result<SyncStatus>>;

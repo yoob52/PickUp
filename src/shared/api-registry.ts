@@ -32,6 +32,7 @@ import {
 import { localDayRangeUtc } from "./local-date";
 import { enableSyncSchema, pairingInputSchema } from "./sync-contracts";
 import type { WorkerRequest } from "./worker-protocol";
+import { accountInputSchema } from "./account-contracts";
 
 export type StoreSender = {
   onStateChanged?(listener: (revision: number) => void): () => void;
@@ -70,6 +71,9 @@ function register<S extends ZodType, V>(
   });
 }
 
+register("pickup:account", accountInputSchema, false, (client, input) =>
+  client.send({ kind: "account", input }, { timeoutMs: 120000 }),
+);
 register("pickup:enableSync", enableSyncSchema, false, (client, input) =>
   client.send({ kind: "enableSync", input }, { timeoutMs: 25000 }),
 );

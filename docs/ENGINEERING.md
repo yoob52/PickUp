@@ -121,7 +121,9 @@ next-up 按选择 HLC 合并，并检查目标任务的全部结束/等待事件
 
 ### 桌面加密同步（PR8）
 
-`sync-client.ts` 使用 fetch/WebCrypto，不依赖 Electron 或 Node 模块；桌面 Node worker 与移动 Web Worker 共用。`sync-crypto.ts` 实现随机 32 字节 rootKey、HKDF-SHA256、AES-256-GCM 和版本化配对载荷。注册 token 只用于桌面的一次注册请求，不进入数据库、状态 DTO 或日志；手机仅通过配对加入。同步配置里的 rootKey 与数据库一样需要保护，升级保护副本也可能包含它；这里未引入系统钥匙串。
+`sync-client.ts` 使用 fetch/WebCrypto，不依赖 Electron 或 Node 模块；桌面 Node worker 与移动 Web Worker 共用。`sync-crypto.ts` 实现随机 32 字节 rootKey、HKDF-SHA256、AES-256-GCM 和版本化配对载荷。注册 token 只用于旧版桌面的一次空间注册请求，不进入数据库、状态 DTO 或日志；手机可登录账户或通过配对加入。同步配置里的 rootKey 与数据库一样需要保护，升级保护副本也可能包含它；这里未引入系统钥匙串。
+
+PR9b 增加固定 `account(input)` API，动作通过 Zod 判别联合 allowlist（注册/登录/退出、恢复、临时扫码请求/确认）进入同一 worker。`account-crypto.ts` 仅使用 WebCrypto：600k PBKDF2-SHA256、域分离 HKDF、AES-GCM 包装，ECDH P-256 加密手机到桌面的单次授权。默认服务是 `shared/account-contracts.ts` 的构建常量，定制服务只在“高级”。schema 7 在本机配置增加 session/email，暂存未确认保存的恢复码，均不参与同步；确认后删除暂存。账户登录验证包装根密钥后复用 `saveConfig` 路径，空间加密协议不变。服务只持有 scrypt 认证摘要和包装密钥。桌面私钥/轮询凭据仅在 worker 内存，UI 只持有公开二维码；2 分钟过期，隐藏时停止轮询。服务器配置、限流、恢复与部署约束见 [SYNC-SERVER.md](SYNC-SERVER.md)。
 
 schema 4 的 `sync_config` 保存本机服务器、根密钥、推/拉游标、上次成功/错误和退避状态，`sync_uploads` 保留所有已加密的上传条目，直到停止同步。后者保证请求成功但回包丢失、进程重启或服务器回退后仍复用完全相同的随机 nonce/密文，符合服务端 `(deviceId,clientSeq)` 幂等规则。两表都不导出。确认上传后事务推进本机序号但保留密文；拉取整页先全部验证解密，再在一个事务中合并并推进 serverSeq，失败不应用部分页面。schema 5 增加最后一条拉取事件的 deviceId/clientSeq 锚点，与游标在同一事务保存。N>0 从 after=N−1 请求，首条必须为相同身份的 seq N，验证后丢弃重叠行；缺失或不匹配则事务清零推拉游标与锚点，重新下载、重传完整 outbox，并记录连续性重建。N=0 从 after=0 请求，不验证锚点；旧配置没有锚点时也安全重建，即使其他设备已重新填满中继也不依赖高水位下降。
 

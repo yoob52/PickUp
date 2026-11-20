@@ -274,6 +274,86 @@ it("calls fetch without a class receiver, as required by the browser WorkerGloba
   expect(fetcher).toHaveBeenCalledOnce();
 });
 
+it.each([false, true])(
+  "registers on the phone, hands a separate session to desktop, recovers the same space (WASM=%s)",
+  async (wasm) => {
+    const server = await relay(),
+      phoneDb = open(wasm),
+      desktopDb = open(!wasm);
+    const phone = client(phoneDb),
+      desktop = client(desktopDb);
+    const input = {
+      serverUrl: server.url,
+      email: "person@example.com",
+      password: "a strong password",
+    };
+    create(phoneDb, "手机注册前的线索");
+    const signup = await phone.account({ action: "register", ...input });
+    expect(signup.recoveryCode).toMatch(/^pickup-recovery:1:/);
+    await phone.syncNow();
+    const qr = await desktop.account({
+      action: "beginHandoff",
+      serverUrl: server.url,
+    });
+    expect((await desktop.account({ action: "pollHandoff" })).pending).toBe(
+      true,
+    );
+    expect(
+      (
+        await phone.account({
+          action: "inspectHandoff",
+          payload: qr.qrPayload!,
+        })
+      ).confirmation?.email,
+    ).toBe(input.email);
+    expect(desktop.status().enabled).toBe(false);
+    await phone.account({ action: "approveHandoff", payload: qr.qrPayload! });
+    await desktop.account({ action: "pollHandoff" });
+    await desktop.syncNow();
+    expect(state(desktopDb)).toEqual(state(phoneDb));
+    create(desktopDb, "电脑登录后补充的线索");
+    await desktop.syncNow();
+    await phone.syncNow();
+    expect(state(phoneDb)).toEqual(state(desktopDb));
+    await desktop.account({ action: "logout" });
+    await phone.syncNow();
+    await expect(
+      desktop.account({
+        action: "login",
+        ...input,
+        password: "wrong password",
+      }),
+    ).rejects.toThrow();
+    await desktop.account({
+      action: "recover",
+      ...input,
+      password: "new strong password",
+      recoveryCode: signup.recoveryCode!,
+    });
+    await desktop.syncNow();
+    expect(state(phoneDb)).toEqual(state(desktopDb));
+    await expect(phone.syncNow()).rejects.toThrow("需要重新配对");
+    const login = await phone.account({
+      action: "login",
+      ...input,
+      password: "new strong password",
+    });
+    expect(phone.status().accountEmail).toBe(input.email);
+    expect(login.recoveryCode).toBe(signup.recoveryCode);
+    await phone.account({ action: "ackRecovery" });
+    await phone.account({ action: "logout" });
+    expect(
+      (
+        await phone.account({
+          action: "login",
+          ...input,
+          password: "new strong password",
+        })
+      ).recoveryCode,
+    ).toBeUndefined();
+  },
+);
+
 it("reuses persisted ciphertext after a lost upload response, including a client restart", async () => {
   const server = await relay(),
     db = open();

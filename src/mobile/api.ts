@@ -68,6 +68,7 @@ export function createMobileAPI(
   }
 
   const api: PickupAPI = {
+    account: (input) => invoke("account", input),
     enableSync: unsupported,
     pairWithPayload: (payload) => invoke("pairWithPayload", payload),
     disableSync: () => invoke("disableSync"),
