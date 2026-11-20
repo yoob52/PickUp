@@ -34,6 +34,11 @@ test("desktop settings enables encrypted sync and displays a private pairing QR"
     const pairing = main.getByRole("dialog", { name: "配对设备", exact: true });
     await expect(pairing.getByAltText("同步配对二维码")).toBeVisible();
     await expect(pairing.getByText(/完整访问权限/)).toBeVisible();
+    await pairing.getByRole("button", { name: "复制配对码" }).click();
+    await expect(pairing.getByRole("status")).toContainText("配对码已复制");
+    expect(
+      await application.evaluate(({ clipboard }) => clipboard.readText()),
+    ).toMatch(/^pickup-sync:1:/);
     const viewport = await main.evaluate(() => ({
       width: innerWidth,
       height: innerHeight,

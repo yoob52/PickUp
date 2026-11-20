@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Cloud, QrCode, RefreshCw, ShieldCheck, Unplug } from "lucide-react";
+import {
+  Cloud,
+  Copy,
+  QrCode,
+  RefreshCw,
+  ShieldCheck,
+  Unplug,
+} from "lucide-react";
 import QRCode from "qrcode";
 import type { SyncStatus } from "../../../shared/sync-contracts";
 import type { Result } from "../../../shared/contracts";
@@ -14,6 +21,19 @@ export function SyncSettings() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
+  const [copyMessage, setCopyMessage] = useState("");
+  async function copyPairing() {
+    try {
+      const result = await window.pickup.copyPairingPayload();
+      if (!result.ok) {
+        setCopyMessage(result.message);
+        return;
+      }
+      setCopyMessage("配对码已复制，请仅发送到你信任的设备。");
+    } catch {
+      setCopyMessage("复制失败，请稍后重试。");
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -53,6 +73,7 @@ export function SyncSettings() {
     }
   }
   async function showPairing() {
+    setCopyMessage("");
     setBusy(true);
     setError("");
     try {
@@ -220,9 +241,22 @@ export function SyncSettings() {
                 <img src={qr} width={320} height={320} alt="同步配对二维码" />
               </div>
               <p className="helper">
-                扫码配对将在 Android 后续版本开放。关闭后二维码不会继续显示。
+                在 Android
+                应用中打开同步并扫码，或复制配对码后在手机粘贴。关闭后二维码不会继续显示。
               </p>
+              {copyMessage ? (
+                <p role="status" className="helper">
+                  {copyMessage}
+                </p>
+              ) : null}
               <div className="modal-actions">
+                <Button
+                  kind="secondary"
+                  icon={<Copy size={15} />}
+                  onClick={() => void copyPairing()}
+                >
+                  复制配对码
+                </Button>
                 <Button onClick={() => setQr(null)}>关闭二维码</Button>
               </div>
             </Modal>,

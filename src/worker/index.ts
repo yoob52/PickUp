@@ -7,7 +7,7 @@ import type {
   WorkerStartOptions,
 } from "../shared/worker-protocol";
 import { openStore, type Store } from "./database";
-import { describeBootFailure, toAppError } from "./errors";
+import { describeBootFailure, DomainError, toAppError } from "./errors";
 import { dispatch } from "./dispatch";
 
 if (!parentPort) throw new Error("worker requires a parent port");
@@ -70,6 +70,8 @@ function start(): void {
       }
       const revision = store.revision();
       switch (request.kind) {
+        case "pairWithPayload":
+          throw DomainError.validation("请在手机上扫描桌面配对码。");
         case "enableSync":
           result = {
             ok: true,

@@ -11,6 +11,7 @@ import { CurrentCard } from "../features/CurrentCard";
 import { DailyReviewDialog } from "../features/DailyReview";
 import { ResumePanel } from "../features/ResumePanel";
 import { SettingsDialog } from "../features/SettingsDialog";
+import { MobileSyncSheet } from "../features/MobileSyncSheet";
 import { SwitchFlow } from "../features/SwitchFlow";
 import {
   TaskBoard,
@@ -30,6 +31,7 @@ type Overlay =
   | { type: "detail"; taskId: string }
   | { type: "wait"; task: TaskSummary }
   | { type: "settings" }
+  | { type: "sync" }
   | { type: "capture" };
 
 export function MainApp() {
@@ -241,6 +243,7 @@ export function MainApp() {
       onCapture={openCapture}
       onReview={() => setReviewOpen(true)}
       onSettings={() => setOverlay({ type: "settings" })}
+      onSync={() => setOverlay({ type: "sync" })}
     >
       {notice ? (
         <NoticeBar
@@ -415,6 +418,9 @@ export function MainApp() {
       ) : null}
       {overlay?.type === "settings" && window.pickup.host === "desktop" ? (
         <SettingsDialog onClose={() => setOverlay(null)} onNotice={notify} />
+      ) : null}
+      {overlay?.type === "sync" && window.pickup.host === "mobile" ? (
+        <MobileSyncSheet onClose={() => setOverlay(null)} />
       ) : null}
     </AppShell>
   );

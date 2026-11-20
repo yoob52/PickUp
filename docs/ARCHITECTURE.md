@@ -84,7 +84,7 @@ MVP 不引入云服务、账号、同步协议、AI、通知调度、团队协�
 
 除下述 Electron 链路外，同一 React renderer 可通过 `src/mobile/main.ts` 在浏览器运行：先安装类型化 `window.pickup`，再渲染 UI。`src/shared/api-registry.ts` 共享输入 schema、当天范围计算与广播集合；桌面和浏览器 worker 共享 `src/worker/dispatch.ts` 及全部 store 业务规则。
 
-浏览器链路为 renderer → 移动 API 边界 → 单一 Web Worker → 官方 SQLite WASM `opfs-sahpool` VFS。数据库持久化在同源 OPFS，不需要 COOP/COEP；迁移前用同池 `VACUUM INTO` 生成并校验保护副本，保留最近两份。OPFS 缺失、文件损坏或存储池被其他标签页占用时明确失败，不切换内存库、不重置数据。桌面窗口与系统设置 API 返回明确不支持错误。Android 使用 Capacitor 7 壳从 `https://localhost` 加载打包的 `out/mobile`，复用同一移动 API，不增加原生插件或联网行为。
+浏览器链路为 renderer → 移动 API 边界 → 单一 Web Worker → 官方 SQLite WASM `opfs-sahpool` VFS。数据库持久化在同源 OPFS，不需要 COOP/COEP；迁移前用同池 `VACUUM INTO` 生成并校验保护副本，保留最近两份。OPFS 缺失、文件损坏或存储池被其他标签页占用时明确失败，不切换内存库、不重置数据。桌面窗口与系统设置 API 返回明确不支持错误。Android 使用 Capacitor 7 壳从 `https://localhost` 加载打包的 `out/mobile`，复用同一移动 API；唯一新增原生插件为官方条码扫描器，网络仅由 worker 在前台同步时访问用户配对的中继（21.16）。
 
 ### Electron 宿主
 
@@ -694,8 +694,14 @@ schema 3 为设备创建持久 UUID，为任务内容/状态分别保存 HLC，�
 
 ### 21.15 桌面加密同步与配对（PR8）
 
-在离线合并之上增加独立 `SyncClient`，由桌面 worker 持有生命周期、网络与计时器；SQLite 仍只有同步短事务。等待 fetch/WebCrypto 时，worker 可继续处理本地命令。主进程只转发 API 与变更广播，renderer 只持有设置表单/状态 DTO，密钥不进入普通状态通知。移动宿主暂不创建客户端，也不开放设置入口。
+在离线合并之上增加独立 `SyncClient`，由 worker 持有生命周期、网络与计时器；SQLite 仍只有同步短事务。等待 fetch/WebCrypto 时，worker 可继续处理本地命令。桌面主进程只转发 API 与变更广播，renderer 只持有设置表单/状态 DTO，密钥不进入普通状态通知。移动宿主的复用与前台限制见 21.16。
 
 schema 4 的本机 `sync_config` 与上传密文 `sync_uploads` 不参与原始事件流。上传以本地 outbox seq 作为 clientSeq，随机加密后先持久化密文，保证不确定结果重试不改变字节；确认后事务推进游标并继续保留密文。下载使用独立 serverSeq 游标，整页鉴权解密后调用既有 `applyRemoteChanges`，并在外层同一事务推进下载游标；任何校验/事务错误保留旧游标。自己的设备事件跳过应用。schema 5 将最后拉取事件的 deviceId/clientSeq 身份与游标 N 一同保存；N>0 时从 N−1 拉取，校验首条身份和序号后丢弃重叠行。锚点缺失或变化时事务清零推拉游标与锚点、记录连续性重建，并用原密文重传完整 outbox；N=0 无需锚点。循环直到推拉均无新条目。
 
-rootKey 仅存在本机数据库和明确请求的桌面配对载荷中；服务器只收到派生 spaceId/authKey 与密文。HKDF salt/info、AES-GCM 版本与 AAD 属于客户端协议，见 [部署与配对说明](SYNC-SERVER.md)。rootKey 泄露等于完整空间访问；本轮无密钥轮换、单设备吊销、系统钥匙串或移动端扫码。备份 SQLite 也必须按密钥材料保护。
+rootKey 仅存在本机数据库和明确请求的桌面配对载荷中；服务器只收到派生 spaceId/authKey 与密文。HKDF salt/info、AES-GCM 版本与 AAD 属于客户端协议，见 [部署与配对说明](SYNC-SERVER.md)。rootKey 泄露等于完整空间访问；无密钥轮换、单设备吊销或系统钥匙串。备份 SQLite 也必须按密钥材料保护。
+
+### 21.16 移动前台同步与扫码配对（PR9）
+
+移动 Web Worker 在持有 OPFS 的同一连接上创建共享 `SyncClient`，不把数据库移至 UI、不建立原生任务副本。renderer 仅在用户操作时扫描或粘贴；`pairWithPayload` 由 worker 解析 PR8 载荷并经统一配置写入路径保存 server URL/rootKey 到本机 `sync_config` 后首次同步。不接收注册令牌，不创建空间。`enableSync` 和 `getPairingPayload` 仍只支持桌面；桌面二维码可复制，密钥不进入常规 DTO/广播。加密格式不变；schema 6 在本机配置中增加每次启用/配对的上传身份，避免停止清密文后重入相同空间时以不同 nonce 重占旧幂等键。旧配置保留原 store deviceId，领域事件身份/HLC 不变。
+
+页面 visibility 转发给 worker：启动默认暂停，可见时每 60 秒、本地提交后 2 秒防抖及恢复可见时同步；隐藏清计时器并中止请求，关闭先释放客户端。没有后台同步/原生保活。远端应用和同步状态经 worker changed 通知刷新共享 React；本地命令仍先确认事务，不等待网络。401/403 保留停止状态，sheet 允许重新扫码/粘贴；停止不删本地任务。原生条码插件仅承担相机扫描/运行时权限；返回与安全区复用原有壳和 Modal，不增加第二个生命周期插件。

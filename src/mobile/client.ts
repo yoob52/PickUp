@@ -21,6 +21,13 @@ const unknownOutcome: AppError = {
 };
 
 export class MobileWorkerClient implements StoreSender {
+  private readonly listeners = new Set<(revision: number) => void>();
+  onStateChanged(listener: (revision: number) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
   private sequence = 0;
   private failure: AppError | null = null;
   private readonly pending = new Map<
@@ -43,9 +50,21 @@ export class MobileWorkerClient implements StoreSender {
       60_000,
     );
     worker.onmessage = (
-      event: MessageEvent<WorkerBootMessage | WorkerResponse>,
+      event: MessageEvent<
+        WorkerBootMessage | WorkerResponse | { changed: number }
+      >,
     ) => {
       const message = event.data;
+      if ("changed" in message) {
+        for (const listener of this.listeners) {
+          try {
+            listener(message.changed);
+          } catch {
+            console.error("mobile-notification-failed");
+          }
+        }
+        return;
+      }
       if ("fatal" in message) {
         this.fail(message.message);
         return;
@@ -80,7 +99,10 @@ export class MobileWorkerClient implements StoreSender {
     this.worker.terminate();
   }
 
-  async send<T = unknown>(request: WorkerRequest): Promise<Result<T>> {
+  async send<T = unknown>(
+    request: WorkerRequest,
+    options?: { timeoutMs?: number },
+  ): Promise<Result<T>> {
     await this.ready;
     if (this.failure) return this.failure;
     return new Promise<Result<T>>((resolve) => {
@@ -88,7 +110,7 @@ export class MobileWorkerClient implements StoreSender {
       const timer = setTimeout(() => {
         this.pending.delete(requestId);
         resolve(unknownOutcome);
-      }, 10_000);
+      }, options?.timeoutMs ?? 10_000);
       this.pending.set(requestId, {
         resolve: (result) => resolve(result as Result<T>),
         timer,
@@ -106,6 +128,7 @@ export class MobileWorkerClient implements StoreSender {
   }
 
   dispose(): void {
+    this.listeners.clear();
     this.fail("数据库连接已关闭，请重新加载。");
   }
 }

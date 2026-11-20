@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const pairingInputSchema = z.string().trim().min(1).max(16384);
+
 export const serverUrlSchema = z
   .string()
   .url()

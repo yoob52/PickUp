@@ -13,6 +13,7 @@ import { App } from "../src/renderer/src/App";
 import { WaitDialog } from "../src/renderer/src/features/WaitDialog";
 import { SettingsDialog } from "../src/renderer/src/features/SettingsDialog";
 import { SyncSettings } from "../src/renderer/src/features/SyncSettings";
+import { MobileSyncSheet } from "../src/renderer/src/features/MobileSyncSheet";
 import { CaptureApp } from "../src/renderer/src/views/CaptureApp";
 import { WorkspaceProvider } from "../src/renderer/src/state/workspace";
 import { ToastProvider } from "../src/renderer/src/ui/Toast";
@@ -67,6 +68,7 @@ function task(
 function createApi(overrides: Partial<PickupAPI> = {}): PickupAPI {
   return {
     enableSync: unused,
+    pairWithPayload: unused,
     disableSync: unused,
     getSyncStatus: vi.fn().mockResolvedValue(
       ok({
@@ -81,6 +83,7 @@ function createApi(overrides: Partial<PickupAPI> = {}): PickupAPI {
     ),
     syncNow: unused,
     getPairingPayload: unused,
+    copyPairingPayload: unused,
     host: "desktop",
     getWorkspaceSnapshot: unused,
     listTasks: unused,
@@ -233,6 +236,57 @@ it("does not render pairing or sync controls for mobile settings", async () => {
     screen.queryByRole("heading", { name: "同步" }),
   ).not.toBeInTheDocument();
   await screen.findByText("未载入");
+});
+
+it("mobile pairing keeps failed paste input, provides scanner fallback and shows stopped authentication", async () => {
+  const disabled = {
+    enabled: false,
+    serverUrl: null,
+    running: false,
+    stopped: false,
+    lastSuccess: null,
+    error: null,
+    retryAt: null,
+  };
+  const stopped = {
+    ...disabled,
+    enabled: true,
+    serverUrl: "https://relay.example.com",
+    stopped: true,
+    error: "需要重新配对",
+  };
+  const pair = vi
+    .fn()
+    .mockResolvedValueOnce({
+      ok: false,
+      code: "VALIDATION_ERROR",
+      message: "配对信息无效",
+      retryable: false,
+    })
+    .mockResolvedValueOnce(ok(stopped));
+  window.pickup = createApi({
+    host: "mobile",
+    pairWithPayload: pair,
+    getSyncStatus: vi.fn().mockResolvedValue(ok(disabled)),
+    disableSync: vi.fn().mockResolvedValue(ok(disabled)),
+  });
+  render(<MobileSyncSheet onClose={() => {}} />);
+  fireEvent.click(await screen.findByRole("button", { name: "扫码配对" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("浏览器可使用粘贴配对码");
+  const input = screen.getByLabelText("粘贴配对码");
+  fireEvent.change(input, { target: { value: "pickup-sync:1:test" } });
+  fireEvent.submit(input.closest("form")!);
+  await waitFor(() =>
+    expect(screen.getByRole("alert")).toHaveTextContent("配对信息无效"),
+  );
+  expect(input).toHaveValue("pickup-sync:1:test");
+  fireEvent.submit(input.closest("form")!);
+  expect(
+    await screen.findByRole("button", { name: "重新扫码配对" }),
+  ).toBeVisible();
+  expect(screen.getByRole("button", { name: "立即同步" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "停止同步" }));
+  expect(await screen.findByRole("button", { name: "扫码配对" })).toBeVisible();
 });
 
 async function openCapture() {

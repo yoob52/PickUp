@@ -6,9 +6,22 @@ const client = new MobileWorkerClient(
 );
 const { api, dispose } = createMobileAPI(client);
 window.pickup = api;
+function syncVisibility(): void {
+  void client
+    .send({
+      kind: "setSyncForeground",
+      visible: document.visibilityState === "visible",
+    })
+    .then((result) => {
+      if (!result.ok) console.error("mobile-sync-visibility-failed");
+    });
+}
+document.addEventListener("visibilitychange", syncVisibility);
+syncVisibility();
 window.addEventListener(
   "pagehide",
   () => {
+    document.removeEventListener("visibilitychange", syncVisibility);
     dispose();
     client.dispose();
   },

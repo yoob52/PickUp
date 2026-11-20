@@ -163,6 +163,117 @@ it("converges a native store and a WASM store through the real encrypted relay, 
   expect(() => first.pairing()).toThrow();
 });
 
+it.each([false, true])(
+  "pairs a phone (WASM=%s) without registration and can stop/re-pair without conflicting ciphertext",
+  async (wasm) => {
+    const server = await relay(),
+      desktopDb = open(),
+      phoneDb = open(wasm);
+    const desktop = client(desktopDb),
+      requests: { url: string; method?: string }[] = [];
+    let denied = false;
+    const phone = client(phoneDb, async (url, options) => {
+      requests.push({ url: String(url), method: options?.method });
+      if (denied) return new Response(null, { status: 401 });
+      return fetch(url, options);
+    });
+    create(desktopDb, "桌面的任务");
+    create(phoneDb, "配对前手机记录");
+    await expect(phone.pair("pickup-sync:1:bad")).rejects.toThrow(
+      "配对信息无效",
+    );
+    expect(phone.status().enabled).toBe(false);
+    expect(createQueries(phoneDb).workspaceSnapshot().counts.todo).toBe(1);
+    await desktop.enable({
+      serverUrl: server.url,
+      registrationToken: server.token,
+    });
+    await desktop.syncNow();
+    await phone.pair(desktop.pairing());
+    expect(phone.status()).toMatchObject({ enabled: true, error: null });
+    expect(requests.some(({ url }) => url.endsWith("/v1/spaces"))).toBe(false);
+    expect(
+      JSON.stringify(phoneDb.prepare("SELECT * FROM sync_config").get()),
+    ).not.toContain(server.token);
+    await desktop.syncNow();
+    await phone.syncNow();
+    expect(state(phoneDb)).toEqual(state(desktopDb));
+    await expect(phone.pair(desktop.pairing())).rejects.toThrow("先停止");
+    await phone.disable();
+    await phone.pair(desktop.pairing());
+    denied = true;
+    await expect(phone.syncNow()).rejects.toThrow("需要重新配对");
+    expect(phone.status().stopped).toBe(true);
+    denied = false;
+    await phone.pair(desktop.pairing());
+    await desktop.syncNow();
+    await phone.syncNow();
+    expect(state(phoneDb)).toEqual(state(desktopDb));
+  },
+);
+
+it("suspends timers and requests when hidden, then syncs on visible without background retries", async () => {
+  vi.useFakeTimers();
+  const db = open(true);
+  seed(db, "https://relay.example.com");
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockImplementation(async (_url, options) =>
+      options?.method === "POST"
+        ? Response.json({
+            accepted: (
+              JSON.parse(String(options.body)) as { changes: unknown[] }
+            ).changes.length,
+            lastServerSeq: 0,
+          })
+        : Response.json({ changes: [], lastServerSeq: 0, more: false }),
+    );
+  const sync = client(db, fetcher);
+  await sync.setActive(false);
+  create(db);
+  sync.localCommitted();
+  await vi.advanceTimersByTimeAsync(180_000);
+  expect(fetcher).not.toHaveBeenCalled();
+  await expect(sync.syncNow()).rejects.toThrow();
+  await sync.setActive(true);
+  await vi.advanceTimersByTimeAsync(0);
+  await sync.syncNow();
+  expect(fetcher).toHaveBeenCalled();
+  fetcher.mockClear();
+  let signal!: AbortSignal;
+  fetcher.mockImplementation(
+    async (_url, options) =>
+      new Promise((_resolve, reject) => {
+        signal = options!.signal!;
+        signal.addEventListener("abort", () => reject(new Error("hidden")), {
+          once: true,
+        });
+      }),
+  );
+  const running = expect(sync.syncNow()).rejects.toThrow();
+  await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+  await sync.setActive(false);
+  await running;
+  expect(signal.aborted).toBe(true);
+  expect(sync.status().error).toBe(null);
+  await vi.advanceTimersByTimeAsync(180_000);
+  expect(fetcher).toHaveBeenCalledOnce();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("calls fetch without a class receiver, as required by the browser WorkerGlobalScope transport", async () => {
+  const db = open(true);
+  seed(db, "https://relay.example.com");
+  const fetcher = vi.fn(function (this: unknown) {
+    expect(this).toBeUndefined();
+    return Promise.resolve(
+      Response.json({ changes: [], lastServerSeq: 0, more: false }),
+    );
+  });
+  await client(db, fetcher).syncNow();
+  expect(fetcher).toHaveBeenCalledOnce();
+});
+
 it("reuses persisted ciphertext after a lost upload response, including a client restart", async () => {
   const server = await relay(),
     db = open();

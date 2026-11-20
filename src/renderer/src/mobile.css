@@ -15,9 +15,38 @@ html[data-host="mobile"] body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: calc(12px + env(safe-area-inset-top)) 20px 12px;
+  padding: calc(2px + env(safe-area-inset-top)) 16px 2px 20px;
   font-size: 15px;
   font-weight: 650;
+}
+
+[data-host="mobile"] .mobile-header .icon-button {
+  margin-left: auto;
+}
+[data-host="mobile"] .mobile-sync-intro {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 8px 0;
+}
+[data-host="mobile"] .mobile-sync-intro p {
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.5px;
+}
+[data-host="mobile"] .mobile-sync-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 16px 0;
+}
+[data-host="mobile"] .mobile-scan {
+  width: 100%;
+  margin: 20px 0 0;
+}
+[data-host="mobile"] #mobile-pairing {
+  font-family: monospace;
+  overflow-wrap: anywhere;
 }
 
 [data-host="mobile"] .mobile-header img {
