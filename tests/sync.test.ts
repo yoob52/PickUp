@@ -560,6 +560,54 @@ describe.each(["better-sqlite3", "sqlite-wasm"] as const)(
       },
     );
 
+    it.each([false, true])(
+      "restores the user's next-up choice when it arrives before reopen: %s",
+      (choiceFirst) => {
+        const time = vi.spyOn(Date, "now").mockReturnValue(1000);
+        const a = open(),
+          b = open();
+        const id = create(a);
+        createCommands(a).completeTask({ commandId: uuid(), task: ref(a, id) });
+        settled(a, b);
+        const cursor = listChangesSince(a, 0, 1000).cursor;
+        time.mockReturnValue(2000);
+        createCommands(a).reopenTask({ commandId: uuid(), task: ref(a, id) });
+        const reopened = listChangesSince(a, cursor, 1000);
+        time.mockReturnValue(3000);
+        createCommands(a).setNextUp({
+          commandId: uuid(),
+          taskId: id,
+          expectedNextUpVersion: readAppState(a).next_up_version,
+        });
+        const chosen = listChangesSince(a, reopened.cursor, 1000).changes;
+        time.mockReturnValue(100000);
+        const batches = choiceFirst
+          ? [chosen, reopened.changes]
+          : [reopened.changes, chosen];
+        applyRemoteChanges(b, batches[0]);
+        if (choiceFirst) {
+          expect(readAppState(b).next_up_task_id).toBeNull();
+          expect(changes(b).filter((c) => c.entity === "next-up")).toEqual(
+            changes(a).filter((c) => c.entity === "next-up"),
+          );
+        }
+        applyRemoteChanges(b, batches[1]);
+        settled(a, b);
+        expect(readAppState(a).next_up_task_id).toBe(id);
+        expect(readAppState(b).next_up_task_id).toBe(id);
+        expect(state(a)).toEqual(state(b));
+        createCommands(b).setNextUp({
+          commandId: uuid(),
+          taskId: null,
+          expectedNextUpVersion: readAppState(b).next_up_version,
+        });
+        settled(a, b);
+        applyRemoteChanges(a, [...chosen, ...reopened.changes]);
+        expect(readAppState(a).next_up_task_id).toBeNull();
+        expect(state(a)).toEqual(state(b));
+      },
+    );
+
     it("repairs next-up pointing at an ended or waiting task, resolves next-up LWW and never skips late old-HLC changes with the upload cursor", () => {
       const a = open(),
         b = open();

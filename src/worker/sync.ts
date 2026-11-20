@@ -164,6 +164,8 @@ export function initializeSync(db: SqliteDatabase): void {
 export function recordLocalChanges(db: SqliteDatabase, now: number): void {
   flushLocalChanges(db, now);
   materializeDoing(db, now);
+  materializeNextUp(db);
+  db.exec("DELETE FROM sync_dirty");
 }
 
 function flushLocalChanges(db: SqliteDatabase, now: number): void {
@@ -404,10 +406,10 @@ function materializeAppendOnly(db: SqliteDatabase, ids: Set<string>): void {
   }
 }
 
-function materializeNextUp(db: SqliteDatabase): boolean {
+function materializeNextUp(db: SqliteDatabase): void {
   const change = latest(db, "next-up", "singleton") as
     Extract<SyncChange, { entity: "next-up" }> | undefined;
-  if (!change) return false;
+  if (!change) return;
   const task =
     change.payload.taskId === null
       ? undefined
@@ -422,7 +424,6 @@ function materializeNextUp(db: SqliteDatabase): boolean {
     `UPDATE app_state SET next_up_task_id = ?, next_up_hlc = ?, next_up_version = next_up_version + 1
     WHERE singleton = 1 AND (next_up_task_id IS NOT ? OR next_up_hlc != ?)`,
   ).run(id, change.hlc, id, change.hlc);
-  return invalid;
 }
 
 function materializeDoing(db: SqliteDatabase, now: number): void {
@@ -551,13 +552,8 @@ export function applyRemoteChanges(
     nextClock(db, now, newest);
     const revision = bumpRevision(db);
     materializeDoing(db, now);
-    const invalidNextUp = materializeNextUp(db);
+    materializeNextUp(db);
     db.exec("DELETE FROM sync_dirty");
-    if (invalidNextUp)
-      db.exec(
-        "INSERT OR IGNORE INTO sync_dirty VALUES('next-up', 'singleton')",
-      );
-    flushLocalChanges(db, now);
     return { applied, revision };
   })();
 }

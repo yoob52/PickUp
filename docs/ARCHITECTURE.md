@@ -690,4 +690,4 @@ worker 在 ready 之前退出（连接报错、正常关闭、无 `fatal`/`error
 
 schema 3 为设备创建持久 UUID，为任务内容/状态分别保存 HLC，为断点/历史回填全局 UUID，并增加本地追加式 sync_changes。普通命令的变更与回执在同一业务事务提交，draft/preferences/receipts 不导出。HLC、验证和合并均为 worker 下的可移植 TypeScript，可运行于两个 SQLite 驱动，不增加网络或服务器。
 
-`applyRemoteChanges` 原子接收变更 ID 去重、独立内容/状态 LWW、断点/历史并集与 next-up LWW；缺失父记录的事件保留待物化。并发 doing 依据开始时间、状态 HLC、任务 ID 保留一件，其他暂停并写回可同步历史；指向已结束或等待事项的 next-up 清空。冲突修复继续通过 outbox 传播，最终交换全部原始及修复事件后收敛。上传使用本地追加序号游标，不用 HLC 水位，避免漏掉晚到事件。没有硬删除或 tombstone，也不迁移本地 version/revision 的并发控制语义。API 与具体边界见 [工程说明](ENGINEERING.md#离线同步基础pr6)。
+`applyRemoteChanges` 原子接收变更 ID 去重、独立内容/状态 LWW、断点/历史并集与 next-up LWW；缺失父记录的事件保留待物化。每次合并及本地命令提交后，从原始寄存器派生单 doing 与有效 next-up，不产生会压过迟到用户操作的修复 LWW 事件。并发 doing 依据开始时间、状态 HLC、任务 ID 保留一件，其他暂停并写回确定性、可同步的追加历史；指向已结束或等待事项的 next-up 在物化结果中清空，但保留原选择，迟到的 reopen 可恢复有效选择。暂停不覆盖原始 doing 寄存器，因此胜者结束后仍以原始寄存器重算；用户明确暂停/结束产生的状态写入正常参与 LWW。最终交换全部原始事件和追加历史后收敛。上传使用本地追加序号游标，不用 HLC 水位，避免漏掉晚到事件。没有硬删除或 tombstone，也不迁移本地 version/revision 的并发控制语义。API 与具体边界见 [工程说明](ENGINEERING.md#离线同步基础pr6)。
