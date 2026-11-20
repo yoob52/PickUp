@@ -1243,6 +1243,35 @@ html[data-window="main"] #root {
   background: var(--coral);
 }
 
+.toast.has-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.toast-action {
+  flex: none;
+  padding: 4px 8px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid #ffffff80;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.toast-action:hover {
+  background: #ffffff24;
+}
+
+.toast-action:focus-visible {
+  outline-color: #ffffff;
+}
+
 /* The widget is small: keep feedback over the brand label, clear of the actions. */
 html[data-window="widget"] .toast {
   top: 12px;
@@ -1259,6 +1288,10 @@ html[data-window="widget"] .toast {
 
 html[data-window="widget"] .toast.show {
   transform: translateY(0);
+}
+
+html[data-window="widget"]:has(.widget-window.is-orb) .toast.has-action {
+  display: none;
 }
 
 .notice-bar {
