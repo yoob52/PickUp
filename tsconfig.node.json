@@ -18,6 +18,7 @@
     "src/shared/**/*.ts",
     "src/mobile/assets.d.ts",
     "electron.vite.config.ts",
+    "capacitor.config.ts",
     "vite.mobile.config.ts",
     "playwright.mobile.config.ts",
     "tests/**/*.ts",

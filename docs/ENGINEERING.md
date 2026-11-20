@@ -94,7 +94,31 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
 
 移动 Web 可运行 `npx vite preview --config vite.mobile.config.ts` 后访问 `http://127.0.0.1:4174`。需要安全上下文（localhost 或 HTTPS）及支持 OPFS 同步访问句柄的浏览器；不需要 COOP/COEP。首次运行浏览器测试需 `npx playwright install chromium`。存储位置固定为当前 origin 的 `/pickup-sahpool`，池内主文件 `/pickup.sqlite`；不同端口、协议或域名的数据相互隔离。不得清空该目录作为启动恢复手段。
 
-当前为浏览器 API / 存储宿主，不包含 Capacitor。主窗口的“记一件事”仍调用桌面 `showCapture`（移动宿主明确拒绝）；可通过 `/?window=capture` 使用共享记录表单，浏览器测试从这里创建并开始任务，再回主窗口验证。桌面窗口操作、桌面入口与全部桌面偏好写入返回 `VALIDATION_ERROR`，不伪造系统设置成功。一次仅一个页面持有存储池；并发打开会明确报错，关闭占用页后重新加载。页面隐藏不停止已接收事务；离开页面时释放 worker，BFCache 恢复时重新加载连接。
+移动 API / 存储宿主不调用原生插件，Android 壳见下节。主窗口的“记一件事”仍调用桌面 `showCapture`（移动宿主明确拒绝）；可通过 `/?window=capture` 使用共享记录表单，浏览器测试从这里创建并开始任务，再回主窗口验证。桌面窗口操作、桌面入口与全部桌面偏好写入返回 `VALIDATION_ERROR`，不伪造系统设置成功。一次仅一个页面持有存储池；并发打开会明确报错，关闭占用页后重新加载。页面隐藏不停止已接收事务；离开页面时释放 worker，BFCache 恢复时重新加载连接。
+
+### Android 壳（Capacitor 7）
+
+`capacitor.config.ts` 固定应用 ID `com.yoob52.pickup`、名称 `PickUp`、资源目录 `out/mobile`。提交的 `android/` 是 Capacitor 生成的原生工程；同步产生的 Web 资源、机器本地配置、Gradle 缓存和 APK 按生成工程的 `.gitignore` 排除。未增加插件，沿用移动 `PickupAPI` 与默认返回键/生命周期行为。
+
+需要 Node/npm（同本工程）、JDK 21、Android SDK platform 35 和 build-tools 35.0.0。Linux VM 示例：
+
+```bash
+source "$HOME/.nvm/nvm.sh"
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+export ANDROID_HOME="$HOME/Android/Sdk"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH"
+npm ci
+npm run android:sync
+npm run android:apk
+adb -s emulator-5554 install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb -s emulator-5554 shell am start -n com.yoob52.pickup/.MainActivity
+```
+
+`android:sync` 每次先构建共享 Web 产物再同步；修改 Web 代码后需重新同步和构建 APK。`android:apk` 使用工程 Gradle wrapper 生成 debug APK（Windows 可在 `android` 下运行 `gradlew.bat assembleDebug`）。Gradle/SDK 首次构建需要下载依赖，应用运行不需要网络：Manifest 不申请 INTERNET 权限，所有脚本、图片、WASM 均随 APK 打包，无远程 server URL。
+
+WebView 固定加载 `https://localhost`，这是 OPFS 所需安全上下文；不要更改 scheme/hostname，否则相当于更换数据 origin。Capacitor 本地资源处理器将 `.wasm` 返回为 `application/wasm`，不需要 COOP/COEP。需要支持 OPFS 同步句柄的 WebView；不支持时沿用 `DB_UNAVAILABLE` 明确失败。OPFS 数据位于应用的 WebView 私有存储；force-stop 不清除它，卸载/清除应用数据会清除。当前桌面记录按钮仍不支持，debug 验证可通过 WebView 调试导航到 `https://localhost/?window=capture`，用共享表单“现在处理”，再回到 `/`；移动端导航适配不在本壳工程范围。
+
+持久性验收：记录并开始任务后执行 `adb shell am force-stop com.yoob52.pickup`，再用上述 `am start` 重启，确认标题及进行中状态保留。用 `adb exec-out screencap -p > before.png` / `after.png` 保存屏幕，`adb logcat -d` 检查 Capacitor/Chromium/JS 错误；仅 debug APK 开启 WebView 远程调试。不要用 `pm clear` 或卸载重装模拟重启。
 
 禁止同时执行安装/重建和构建/打包，它们共享依赖目录。不要用开发 Node.js 直接加载已经按 Electron ABI 准备的原生库；数据库集成测试刻意在 Electron 中执行。`scripts/run-integration.mjs` 的进程级超时为 120 秒，覆盖当前 16 组场景（含多次 worker 重启）。单元/组件测试数量以最近一次 `npm test` 为准，不要沿用旧轮次的 44/46。
 

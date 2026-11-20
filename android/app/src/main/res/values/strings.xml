@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PickUp</string>
+    <string name="title_activity_main">PickUp</string>
+    <string name="package_name">com.yoob52.pickup</string>
+    <string name="custom_url_scheme">com.yoob52.pickup</string>
+</resources>
