@@ -89,6 +89,8 @@ Electron 42.11.3 携带 Node.js 24.19.0、Chromium 148.0.7778.280，原生模块
 | `npm run build` | 输出 main/preload/worker/renderer 到 out |
 | `npm run build:mobile` | 独立 Vite 构建，共享 React UI + 移动 API + Web Worker + SQLite WASM 到 out/mobile；不修改桌面构建 |
 | `npm run test:mobile` | 构建桌面与移动产物，Chromium 验证 OPFS、移动交互和真实 relay + Electron 桌面库配对收敛；Linux 需 DISPLAY |
+| `npm run ios:sync` | 构建移动产物并同步到 `ios/`（Capacitor SPM 工程，无需 CocoaPods） |
+| `npm run ios:ipa` | macOS + Xcode 构建未签名 Release IPA 到 `out/ios/PickUp-<version>-unsigned.ipa`，供免费 Apple ID 侧载 |
 | `npm run test:integration` | 构建后通过 Electron 运行真实 worker/SQLite 的 16 组集成场景 |
 | `npm run test:e2e` | 构建后运行 Playwright Electron 自动化（桥接、独立 capture、界面闭环、视觉、规模） |
 | `npm run rebuild:native` | 为锁定 Electron/架构准备 better-sqlite3 原生模块 |
@@ -164,6 +166,14 @@ adb -s emulator-5554 shell am start -n com.yoob52.pickup/.MainActivity
 ```
 
 `android:sync` 每次先构建共享 Web 产物再同步；修改 Web 代码后需重新同步和构建 APK。`android:apk` 使用工程 Gradle wrapper 生成 debug APK（Windows 可在 `android` 下运行 `gradlew.bat assembleDebug`）。Gradle/SDK 首次构建需要下载依赖；所有脚本、图片、WASM 随 APK 打包，本地操作无需联网。Manifest 的 INTERNET 只为用户主动配置的同步，未配对时不访问中继。
+
+### iOS 壳（Capacitor 7，免费 Apple ID 侧载）
+
+`ios/` 是 `cap add ios --packagemanager SPM` 生成的 Xcode 工程，与 Android 共用 `capacitor.config.ts`、移动 `PickupAPI` 和 SQLite WASM/OPFS 存储；没有 App Store 分发和付费开发者签名。最低 iOS 16.4（OPFS 同步访问句柄）。Info.plist 声明扫码用的相机说明。WebView 来源是 `capacitor://localhost`（WKWebView 不能使用 https 自定义协议），同步服务器 `PICKUP_ALLOWED_ORIGINS` 需要包含它，默认值已包含。
+
+本地需要 macOS、Xcode 16 以上和本工程 Node 版本：`npm ci && npm run ios:sync && npm run ios:ipa`。模拟器调试可 `xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator build` 后 `xcrun simctl install`。
+
+[ios.yml](../.github/workflows/ios.yml) 在 main 推送、相关 PR、`v*` 标签和手动触发时于 `macos-15` 运行 `npm ci`、`ios:sync`、`ios:ipa`，上传 `pickup-ios-ipa` artifact（14 天）；标签构建先校验标签等于 package.json 版本，再等待 Windows 工作流创建 Release 后上传 IPA。IPA 未签名，`CFBundleShortVersionString` 取 package.json 版本，`CFBundleVersion` 与 Android versionCode 同规则。安装与 7 天续签步骤见 [IOS-INSTALL.md](IOS-INSTALL.md)。
 
 #### Android CI 与发布签名
 

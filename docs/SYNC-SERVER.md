@@ -28,7 +28,7 @@ openssl rand -base64 48
 | `PICKUP_REGISTRATION_TOKEN` | 可选，仅用于旧版无账户空间创建；不限制新的账户注册 |
 | `PICKUP_ACCOUNT_QUOTA_BYTES` | 每账户密文 blob 配额，默认 `20971520`（20 MiB）；按解码后字节累计，幂等重传不重复计费；整批超额回滚并返回 413 `QUOTA_EXCEEDED` |
 | `PICKUP_TRUSTED_PROXIES` | 可选，逗号分隔的反代 socket 对端精确 IP（注意 IPv4-mapped IPv6）；仅信任这些对端传入的单一 `X-Real-IP`。默认忽略所有客户端转发头 |
-| `PICKUP_ALLOWED_ORIGINS`    | 精确匹配、逗号分隔的浏览器来源；默认 `https://localhost`，保留 Android Capacitor 来源；浏览器另加实际站点来源，不支持通配符，空值禁用浏览器来源 |
+| `PICKUP_ALLOWED_ORIGINS`    | 精确匹配、逗号分隔的浏览器来源；默认 `https://localhost,capacitor://localhost`，保留 Android 与 iOS Capacitor 来源；浏览器另加实际站点来源，不支持通配符，空值禁用浏览器来源 |
 | `PICKUP_PORT`               | Compose 宿主机回环监听端口，默认 8787                                                                                                           |
 | `PICKUP_DOMAIN`             | 仅 Caddy profile 需要，例如 `sync.example.com`，不带协议或路径                                                                                  |
 | `PICKUP_DATA_DIR`           | 直接运行 Node 时的目录，默认 `/data`；Compose 固定容器内 `/data`，使用命名卷                                                                    |
@@ -110,7 +110,7 @@ server {
 3. “已同步”、上次同步时间及错误可在此查看。可“立即同步”或“停止同步”；401/403 显示“需要重新配对”，可重新扫码或重新粘贴。Android 返回键关闭 sheet，键盘显示时先收起键盘。
 4. 手机只在页面前台可见时工作：本地变更后防抖 2 秒、每 60 秒及回到前台时同步；隐藏时停计时器并中止网络请求。**没有后台同步或后台保活**；离线/后台记录在下次前台重试。停止同步不删除本地任务，也不撤销其他设备。
 
-Android 请求来源固定 `https://localhost`，服务器 `PICKUP_ALLOWED_ORIGINS` 必须保留它；移动浏览器另加真实站点来源。移动 CSP 仅允许同源、HTTPS 和开发用 `http://localhost:*`；Android 明文网络策略也只放行 `localhost`，不允许局域网 IP 的 HTTP。模拟器调试先在宿主运行中继，执行 `adb reverse tcp:8787 tcp:8787`，桌面启用地址用 `http://localhost:8787` 再复制给手机，不能用 `127.0.0.1` 替代该明文例外。
+Android 请求来源固定 `https://localhost`，iOS 为 `capacitor://localhost`，服务器 `PICKUP_ALLOWED_ORIGINS` 必须保留两者（`capacitor://localhost` 是唯一接受的非 HTTP(S) 来源）；移动浏览器另加真实站点来源。移动 CSP 仅允许同源、HTTPS 和开发用 `http://localhost:*`；Android 明文网络策略也只放行 `localhost`，不允许局域网 IP 的 HTTP。模拟器调试先在宿主运行中继，执行 `adb reverse tcp:8787 tcp:8787`，桌面启用地址用 `http://localhost:8787` 再复制给手机，不能用 `127.0.0.1` 替代该明文例外。
 
 客户端协议：WebCrypto HKDF-SHA256，salt 为 UTF-8 `pickup-sync:1`，分别用 info `pickup-sync:1:spaceId`、`pickup-sync:1:authKey`、`pickup-sync:1:encKey` 派生 256 位。前两项为 32 字节 base64url，后一项作为 AES-256-GCM 密钥。blob 的原始字节为 ASCII `v1`（2 字节）+ 随机 nonce（12 字节）+ AES-GCM 密文（含 16 字节 tag）；AAD 为 UTF-8 `spaceId:deviceId:clientSeq`。传输时整体 base64url 编码，不含 `=`。JSON 内容为单条共享 sync change；错误密钥、身份/序号错配、篡改或未知版本均拒绝整页，不推进拉取游标。
 

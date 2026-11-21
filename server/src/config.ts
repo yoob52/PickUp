@@ -10,6 +10,9 @@ export type Config = {
   port: number;
 };
 
+// Capacitor iOS serves the app from this custom scheme; WKWebView cannot use https.
+const IOS_APP_ORIGIN = "capacitor://localhost";
+
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const registrationToken = env.PICKUP_REGISTRATION_TOKEN;
   if (
@@ -27,11 +30,14 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     .safeParse(env.PORT ?? 8787);
   if (!port.success)
     throw new Error("PORT must be an integer between 1 and 65535.");
-  const allowedOrigins = (env.PICKUP_ALLOWED_ORIGINS ?? "https://localhost")
+  const allowedOrigins = (
+    env.PICKUP_ALLOWED_ORIGINS ?? `https://localhost,${IOS_APP_ORIGIN}`
+  )
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
   for (const origin of allowedOrigins) {
+    if (origin === IOS_APP_ORIGIN) continue;
     const parsed = URL.canParse(origin) ? new URL(origin) : undefined;
     if (
       !parsed ||
@@ -39,7 +45,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
       parsed.origin !== origin
     )
       throw new Error(
-        "PICKUP_ALLOWED_ORIGINS must be a comma-separated list of exact HTTP(S) origins.",
+        `PICKUP_ALLOWED_ORIGINS must be a comma-separated list of exact HTTP(S) origins or ${IOS_APP_ORIGIN}.`,
       );
   }
   return {

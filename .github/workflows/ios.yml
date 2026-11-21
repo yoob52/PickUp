@@ -1,0 +1,88 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "src/**"
+      - "ios/**"
+      - "package.json"
+      - "package-lock.json"
+      - "capacitor.config.ts"
+      - "vite.mobile.config.ts"
+      - "tsconfig*.json"
+      - ".node-version"
+      - ".npmrc"
+      - "scripts/build-ios-ipa.mjs"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Check release tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p 'require("./package.json").version')"
+          if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version."
+            exit 1
+          fi
+      - name: Build and sync mobile assets
+        run: npm run ios:sync
+      - name: Build unsigned IPA for sideloading
+        run: npm run ios:ipa
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: pickup-ios-ipa
+          path: out/ios/*.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: pickup-ios-ipa
+          path: ipa
+      - name: Attach IPA to the shared GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The Windows workflow owns release creation; avoid a race with gh release create.
+          for attempt in {1..60}; do
+            if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+              gh release upload "$GITHUB_REF_NAME" ipa/*.ipa
+              exit 0
+            fi
+            if [[ "$attempt" -lt 60 ]]; then sleep 30; fi
+          done
+          echo '::error::Release not available after 30 minutes. Check the Windows release workflow, then rerun this publish job.'
+          exit 1
