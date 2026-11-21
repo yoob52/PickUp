@@ -1,5 +1,12 @@
 # PickUp 验证记录
 
+## 2026-11-21 · iOS 壳（免费 Apple ID 侧载）
+
+- 新增 Capacitor 7.6.10 iOS 工程（SPM）、`ios:sync` / `ios:ipa` 与 `ios.yml`；Info.plist 加相机说明，最低 iOS 17.4（同步使用 `AbortSignal.any`）。
+- macOS 26.6 + Xcode 26.6 本地：`npm run ios:sync`、模拟器（iPhone 17）构建安装启动，主界面正常渲染、本地 OPFS 库可用；`npm run ios:ipa` 生成 `PickUp-1.0.0-unsigned.ipa`（bundle id `com.yoob52.pickup`，版本 1.0.0 / 10000）。
+- 线上 relay 对 `capacitor://localhost` 预检返回 403；relay 默认来源加入该值并加测试，`npm run server:test`、`npm run check` 通过。新镜像部署并更新 `PICKUP_ALLOWED_ORIGINS` 前 iOS 无法同步。
+- 未验证：真机 Sideloadly 签名安装、7 天续签、真机扫码与同步；`ios.yml` 首次远端运行以 PR CI 为准。
+
 ## 2026-11-20 · 1.0.0 发版准备（未打标签）
 
 根 package.json / package-lock.json 版本统一为 `1.0.0`；Android 默认从 package.json 读取版本，标签构建仅覆盖 versionName，所有构建统一按 `major*10000 + minor*100 + patch` 计算 versionCode（`1.0.0 → 10000`，`1.0.1 → 10001`）。minor / patch 限定为 0..99，拒绝非法版本或 Android 整数范围溢出，避免版本码碰撞或降级。`v1.0.0` 标签将触发 Windows NSIS 构建并创建包含安装器和 SHA-256 校验文件的 Release；Android 有完整签名 secrets 才正式签名，等待 Windows 创建同名 Release 后追加 APK。修正 Android 工作流，不再使用 GITHUB_RUN_NUMBER；未推送标签或创建 Release。

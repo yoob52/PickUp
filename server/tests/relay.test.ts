@@ -82,8 +82,11 @@ describe("configuration", () => {
     expect(readConfig({ PICKUP_REGISTRATION_TOKEN: token })).toMatchObject({
       port: 8787,
       dataDir: "/data",
-      allowedOrigins: ["https://localhost"],
+      allowedOrigins: ["https://localhost", "capacitor://localhost"],
     });
+    expect(() =>
+      readConfig({ PICKUP_ALLOWED_ORIGINS: "capacitor://example.com" }),
+    ).toThrow("PICKUP_ALLOWED_ORIGINS");
   });
 });
 
@@ -425,6 +428,14 @@ it("permits only configured CORS origins/preflights and logs route templates wit
   expect(preflight.headers.get("access-control-allow-headers")).toContain(
     "Authorization",
   );
+  expect(
+    (
+      await s.call(a.path, undefined, undefined, {
+        ...options,
+        headers: { ...options.headers, Origin: "capacitor://localhost" },
+      })
+    ).headers.get("access-control-allow-origin"),
+  ).toBe("capacitor://localhost");
   expect(
     (
       await s.call(a.path, undefined, undefined, {

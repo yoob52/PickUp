@@ -12,6 +12,7 @@ PickUp is a free, open-source local desktop assistant for Windows that helps you
 
 - 下载：[GitHub Releases](https://github.com/yoob52/PickUp/releases/latest) 中的 `PickUp.Setup.<version>.exe`（Windows 10/11 x64），同页 `SHA256SUMS.txt` 可校验安装包。
 - 安装包由 [release.yml](.github/workflows/release.yml) 在 GitHub Actions 上从本仓库源码构建并发布。
+- iPhone：同页 `PickUp-<version>-unsigned.ipa` 由 [ios.yml](.github/workflows/ios.yml) 构建，用免费 Apple ID 自行签名安装（每 7 天续签），步骤见 [iOS 安装说明](docs/IOS-INSTALL.md)。
 - 卸载：在 Windows **设置 → 应用 → 已安装的应用** 中卸载 PickUp，或运行安装目录中的 `Uninstall PickUp.exe`。卸载保留 `%APPDATA%/PickUp` 中的数据；如需彻底删除，卸载后手动删除该目录。
 
 ## Code signing policy
