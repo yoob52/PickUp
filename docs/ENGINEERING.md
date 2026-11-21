@@ -169,7 +169,7 @@ adb -s emulator-5554 shell am start -n com.yoob52.pickup/.MainActivity
 
 ### iOS 壳（Capacitor 7，免费 Apple ID 侧载）
 
-`ios/` 是 `cap add ios --packagemanager SPM` 生成的 Xcode 工程，与 Android 共用 `capacitor.config.ts`、移动 `PickupAPI` 和 SQLite WASM/OPFS 存储；没有 App Store 分发和付费开发者签名。最低 iOS 16.4（OPFS 同步访问句柄）。Info.plist 声明扫码用的相机说明。WebView 来源是 `capacitor://localhost`（WKWebView 不能使用 https 自定义协议），同步服务器 `PICKUP_ALLOWED_ORIGINS` 需要包含它，默认值已包含。
+`ios/` 是 `cap add ios --packagemanager SPM` 生成的 Xcode 工程，与 Android 共用 `capacitor.config.ts`、移动 `PickupAPI` 和 SQLite WASM/OPFS 存储；没有 App Store 分发和付费开发者签名。最低 iOS 17.4（OPFS 同步访问句柄需要 16.4，同步请求使用的 `AbortSignal.any` 需要 17.4）。Info.plist 声明扫码用的相机说明。WebView 来源是 `capacitor://localhost`（WKWebView 不能使用 https 自定义协议），同步服务器 `PICKUP_ALLOWED_ORIGINS` 需要包含它，默认值已包含。
 
 本地需要 macOS、Xcode 16 以上和本工程 Node 版本：`npm ci && npm run ios:sync && npm run ios:ipa`。模拟器调试可 `xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator build` 后 `xcrun simctl install`。
 

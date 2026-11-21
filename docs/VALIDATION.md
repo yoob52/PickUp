@@ -2,7 +2,7 @@
 
 ## 2026-11-21 · iOS 壳（免费 Apple ID 侧载）
 
-- 新增 Capacitor 7.6.10 iOS 工程（SPM）、`ios:sync` / `ios:ipa` 与 `ios.yml`；Info.plist 加相机说明，最低 iOS 16.4。
+- 新增 Capacitor 7.6.10 iOS 工程（SPM）、`ios:sync` / `ios:ipa` 与 `ios.yml`；Info.plist 加相机说明，最低 iOS 17.4（同步使用 `AbortSignal.any`）。
 - macOS 26.6 + Xcode 26.6 本地：`npm run ios:sync`、模拟器（iPhone 17）构建安装启动，主界面正常渲染、本地 OPFS 库可用；`npm run ios:ipa` 生成 `PickUp-1.0.0-unsigned.ipa`（bundle id `com.yoob52.pickup`，版本 1.0.0 / 10000）。
 - 线上 relay 对 `capacitor://localhost` 预检返回 403；relay 默认来源加入该值并加测试，`npm run server:test`、`npm run check` 通过。新镜像部署并更新 `PICKUP_ALLOWED_ORIGINS` 前 iOS 无法同步。
 - 未验证：真机 Sideloadly 签名安装、7 天续签、真机扫码与同步；`ios.yml` 首次远端运行以 PR CI 为准。
