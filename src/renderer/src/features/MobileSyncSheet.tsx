@@ -78,7 +78,13 @@ export function MobileSyncSheet({ onClose }: { onClose: () => void }) {
         </p>
       ) : null}
       {!status ? <p role="status">正在读取同步状态…</p> : null}
-      <AccountPanel status={status} onStatus={setStatus} />
+      <AccountPanel
+        status={status}
+        onStatus={(next) => {
+          setStatus(next);
+          setError("");
+        }}
+      />
       {status?.enabled ? (
         <>
           <div className="sync-status" role="status">
