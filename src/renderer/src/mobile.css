@@ -293,9 +293,19 @@ html[data-host="mobile"] body {
   min-height: 112px;
 }
 
+/* The sticky footer pins to the sticky edge inset by the modal padding, so it
+   owns the bottom spacing; otherwise content scrolls visibly beneath it. */
+[data-host="mobile"] .modal:has(.modal-actions) {
+  padding-bottom: 0;
+}
+
 [data-host="mobile"] .modal .modal-actions {
   margin-inline: -20px;
   padding: 16px 20px calc(16px + env(safe-area-inset-bottom));
+}
+
+[data-host="mobile"][data-keyboard] .modal .modal-actions {
+  padding-bottom: 12px;
 }
 
 [data-host="mobile"] .modal-actions > .btn {

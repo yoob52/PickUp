@@ -30,6 +30,19 @@ async function noOverflow(page: Page) {
         ),
     );
   expect(smallTargets).toEqual([]);
+  const footerGaps = await page
+    .locator(".modal:has(.modal-actions)")
+    .evaluateAll((modals) =>
+      modals
+        .filter((modal) => modal.scrollHeight > modal.clientHeight)
+        .map(
+          (modal) =>
+            modal.getBoundingClientRect().bottom -
+            modal.querySelector(".modal-actions")!.getBoundingClientRect()
+              .bottom,
+        ),
+    );
+  expect(footerGaps.every((gap) => Math.abs(gap) <= 1)).toBe(true);
 }
 
 test("phone capture, detail/back, pause and complete stay in-app without desktop APIs", async ({
@@ -61,6 +74,13 @@ test("phone capture, detail/back, pause and complete stay in-app without desktop
       .evaluate((node) => node.getBoundingClientRect().height),
   ).toBeLessThan(60);
   await noOverflow(page);
+  await page.getByRole("button", { name: "打开同步" }).tap();
+  await expect(
+    page.getByRole("dialog", { name: "同步", exact: true }),
+  ).toBeVisible();
+  await noOverflow(page);
+  await page.getByRole("button", { name: "完成", exact: true }).tap();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await navigation.getByRole("button", { name: "记一件事", exact: true }).tap();
   await page.getByRole("button", { name: "现在处理", exact: true }).tap();
   await expect(page.getByText("请填写任务标题", { exact: true })).toBeVisible();
