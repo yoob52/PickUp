@@ -23,6 +23,10 @@ export function App() {
         "--mobile-top",
         `${viewport?.offsetTop ?? 0}px`,
       );
+      document.documentElement.toggleAttribute(
+        "data-keyboard",
+        window.innerHeight - (viewport?.height ?? window.innerHeight) > 100,
+      );
       const active = document.activeElement;
       if (
         active instanceof HTMLInputElement ||
@@ -38,6 +42,7 @@ export function App() {
       viewport?.removeEventListener("scroll", resize);
       document.documentElement.style.removeProperty("--mobile-height");
       document.documentElement.style.removeProperty("--mobile-top");
+      document.documentElement.removeAttribute("data-keyboard");
     };
   }, [mobile]);
   return (
