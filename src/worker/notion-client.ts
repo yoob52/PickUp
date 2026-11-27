@@ -475,6 +475,7 @@ export class NotionApiClient {
       unfinishedCount: number;
       currentTaskTitle: string | null;
       includeBreakpoints: boolean;
+      onPageCreated?: (pageId: string, pageUrl: string) => void;
     },
   ): Promise<{ pageId: string; pageUrl: string; updated: boolean }> {
     const blocks = buildDailyBlocks(params);
@@ -547,6 +548,8 @@ export class NotionApiClient {
         true,
       );
     }
+    const createdUrl = typeof created.url === "string" ? created.url : "";
+    params.onPageCreated?.(created.id, createdUrl);
     for (const chunk of restChunks) {
       await this.request(
         token,
@@ -557,7 +560,7 @@ export class NotionApiClient {
     }
     return {
       pageId: created.id,
-      pageUrl: typeof created.url === "string" ? created.url : "",
+      pageUrl: createdUrl,
       updated: false,
     };
   }

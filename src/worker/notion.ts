@@ -412,6 +412,27 @@ export function createNotionService(db: SqliteDatabase, deps: NotionStoreDeps) {
             hasMore = nextPage.completedToday.hasMore;
           }
 
+          const upsertExportRow = (record: NotionDailyExportRecord) => {
+            db.prepare(
+              `INSERT INTO notion_daily_exports(
+                 day_key, parent_page_id, page_id, page_url, exported_at, task_count
+               ) VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(day_key) DO UPDATE SET
+                 parent_page_id = excluded.parent_page_id,
+                 page_id = excluded.page_id,
+                 page_url = excluded.page_url,
+                 exported_at = excluded.exported_at,
+                 task_count = excluded.task_count`,
+            ).run(
+              record.dayKey,
+              record.parentPageId,
+              record.pageId,
+              record.pageUrl,
+              record.exportedAt,
+              record.taskCount,
+            );
+          };
+
           const existing = readDailyExport(db, dayRange.dayKey);
           const result = await api.upsertDailyPage(token, {
             parentPageId: config.daily_parent_id,
@@ -424,6 +445,16 @@ export function createNotionService(db: SqliteDatabase, deps: NotionStoreDeps) {
             unfinishedCount: firstReview.counts.unfinished,
             currentTaskTitle: firstReview.currentTask?.title ?? null,
             includeBreakpoints: input.includeBreakpoints,
+            onPageCreated: (pageId, pageUrl) => {
+              upsertExportRow({
+                dayKey: dayRange.dayKey,
+                parentPageId: config.daily_parent_id,
+                pageId,
+                pageUrl,
+                exportedAt: Date.now(),
+                taskCount: 0,
+              });
+            },
           });
 
           const exportedAt = Date.now();
@@ -436,24 +467,7 @@ export function createNotionService(db: SqliteDatabase, deps: NotionStoreDeps) {
             taskCount: completedTasks.length,
           };
 
-          db.prepare(
-            `INSERT INTO notion_daily_exports(
-               day_key, parent_page_id, page_id, page_url, exported_at, task_count
-             ) VALUES (?, ?, ?, ?, ?, ?)
-             ON CONFLICT(day_key) DO UPDATE SET
-               parent_page_id = excluded.parent_page_id,
-               page_id = excluded.page_id,
-               page_url = excluded.page_url,
-               exported_at = excluded.exported_at,
-               task_count = excluded.task_count`,
-          ).run(
-            record.dayKey,
-            record.parentPageId,
-            record.pageId,
-            record.pageUrl,
-            record.exportedAt,
-            record.taskCount,
-          );
+          upsertExportRow(record);
 
           return {
             action: "exportDailyReview",
