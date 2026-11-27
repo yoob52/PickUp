@@ -129,6 +129,7 @@ export type NotionStoreDeps = {
 
 export function createNotionService(db: SqliteDatabase, deps: NotionStoreDeps) {
   const api = deps.api ?? new NotionApiClient();
+  const inFlightExports = new Map<string, Promise<NotionReply>>();
 
   const importTransaction = db.transaction((items: NotionImportItemInput[]) => {
     const existing = listImportedNotionIds(db);
@@ -371,70 +372,106 @@ export function createNotionService(db: SqliteDatabase, deps: NotionStoreDeps) {
         if (!req.dayRange) {
           throw DomainError.validation("缺少本地日期范围。");
         }
-        const config = readConfigRow(db);
-        const token = req.plainToken ?? "";
-        if (!token) {
-          throw DomainError.validation("请先在设置中配置 Notion Token。");
-        }
-        if (!config.daily_parent_id) {
-          throw DomainError.validation("请先在设置中选择日报写入的父页面。");
+        const dayRange = req.dayRange;
+        const existingJob = inFlightExports.get(dayRange.dayKey);
+        if (existingJob) {
+          return await existingJob;
         }
 
-        const review = deps.dailyReview({
-          dayKey: req.dayRange.dayKey,
-          startUtc: req.dayRange.startUtc,
-          endUtc: req.dayRange.endUtc,
-          completedOffset: 0,
-          completedLimit: 200,
-        });
-        const existing = readDailyExport(db, req.dayRange.dayKey);
-        const result = await api.upsertDailyPage(token, {
-          parentPageId: config.daily_parent_id,
-          existingPageId:
-            existing && existing.parentPageId === config.daily_parent_id
-              ? existing.pageId
-              : null,
-          dayKey: req.dayRange.dayKey,
-          completedTasks: review.completedToday.items,
-          unfinishedCount: review.counts.unfinished,
-          currentTaskTitle: review.currentTask?.title ?? null,
-          includeBreakpoints: input.includeBreakpoints,
-        });
+        const run = (async (): Promise<NotionReply> => {
+          const config = readConfigRow(db);
+          const token = req.plainToken ?? "";
+          if (!token) {
+            throw DomainError.validation("请先在设置中配置 Notion Token。");
+          }
+          if (!config.daily_parent_id) {
+            throw DomainError.validation(
+              "请先在设置中选择日报写入的父页面。",
+            );
+          }
 
-        const exportedAt = Date.now();
-        const record: NotionDailyExportRecord = {
-          dayKey: req.dayRange.dayKey,
-          parentPageId: config.daily_parent_id,
-          pageId: result.pageId,
-          pageUrl: result.pageUrl,
-          exportedAt,
-          taskCount: review.completedToday.total,
-        };
+          const firstReview = deps.dailyReview({
+            dayKey: dayRange.dayKey,
+            startUtc: dayRange.startUtc,
+            endUtc: dayRange.endUtc,
+            completedOffset: 0,
+            completedLimit: 200,
+          });
+          const completedTasks = [...firstReview.completedToday.items];
+          let offset = firstReview.completedToday.items.length;
+          let hasMore = firstReview.completedToday.hasMore;
+          while (hasMore && offset < 2000) {
+            const nextPage = deps.dailyReview({
+              dayKey: dayRange.dayKey,
+              startUtc: dayRange.startUtc,
+              endUtc: dayRange.endUtc,
+              completedOffset: offset,
+              completedLimit: 200,
+            });
+            if (nextPage.completedToday.items.length === 0) break;
+            completedTasks.push(...nextPage.completedToday.items);
+            offset += nextPage.completedToday.items.length;
+            hasMore = nextPage.completedToday.hasMore;
+          }
 
-        db.prepare(
-          `INSERT INTO notion_daily_exports(
-             day_key, parent_page_id, page_id, page_url, exported_at, task_count
-           ) VALUES (?, ?, ?, ?, ?, ?)
-           ON CONFLICT(day_key) DO UPDATE SET
-             parent_page_id = excluded.parent_page_id,
-             page_id = excluded.page_id,
-             page_url = excluded.page_url,
-             exported_at = excluded.exported_at,
-             task_count = excluded.task_count`,
-        ).run(
-          record.dayKey,
-          record.parentPageId,
-          record.pageId,
-          record.pageUrl,
-          record.exportedAt,
-          record.taskCount,
-        );
+          const existing = readDailyExport(db, dayRange.dayKey);
+          const result = await api.upsertDailyPage(token, {
+            parentPageId: config.daily_parent_id,
+            existingPageId:
+              existing && existing.parentPageId === config.daily_parent_id
+                ? existing.pageId
+                : null,
+            dayKey: dayRange.dayKey,
+            completedTasks,
+            unfinishedCount: firstReview.counts.unfinished,
+            currentTaskTitle: firstReview.currentTask?.title ?? null,
+            includeBreakpoints: input.includeBreakpoints,
+          });
 
-        return {
-          action: "exportDailyReview",
-          record,
-          updated: result.updated,
-        };
+          const exportedAt = Date.now();
+          const record: NotionDailyExportRecord = {
+            dayKey: dayRange.dayKey,
+            parentPageId: config.daily_parent_id,
+            pageId: result.pageId,
+            pageUrl: result.pageUrl,
+            exportedAt,
+            taskCount: completedTasks.length,
+          };
+
+          db.prepare(
+            `INSERT INTO notion_daily_exports(
+               day_key, parent_page_id, page_id, page_url, exported_at, task_count
+             ) VALUES (?, ?, ?, ?, ?, ?)
+             ON CONFLICT(day_key) DO UPDATE SET
+               parent_page_id = excluded.parent_page_id,
+               page_id = excluded.page_id,
+               page_url = excluded.page_url,
+               exported_at = excluded.exported_at,
+               task_count = excluded.task_count`,
+          ).run(
+            record.dayKey,
+            record.parentPageId,
+            record.pageId,
+            record.pageUrl,
+            record.exportedAt,
+            record.taskCount,
+          );
+
+          return {
+            action: "exportDailyReview",
+            record,
+            updated: result.updated,
+          };
+        })();
+
+        inFlightExports.set(dayRange.dayKey, run);
+        try {
+          return await run;
+        } finally {
+          if (inFlightExports.get(dayRange.dayKey) === run) {
+            inFlightExports.delete(dayRange.dayKey);
+          }
+        }
       }
 
       case "writeBackTask": {
