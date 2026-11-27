@@ -127,7 +127,7 @@ function buildDailyBlocks(params: {
       },
     });
   } else {
-    for (const task of params.completedTasks.slice(0, 80)) {
+    for (const task of params.completedTasks) {
       const parts = [task.title];
       if (params.includeBreakpoints && task.latestBreakpoint) {
         const summary =
@@ -164,7 +164,55 @@ function buildDailyBlocks(params: {
     },
   });
 
-  return blocks.slice(0, 95);
+  return blocks;
+}
+
+const BLOCK_CHUNK_SIZE = 95;
+
+function chunkBlocks(
+  blocks: Record<string, unknown>[],
+): Record<string, unknown>[][] {
+  const chunks: Record<string, unknown>[][] = [];
+  for (let i = 0; i < blocks.length; i += BLOCK_CHUNK_SIZE) {
+    chunks.push(blocks.slice(i, i + BLOCK_CHUNK_SIZE));
+  }
+  return chunks;
+}
+
+function findManagedDailyBlockIds(
+  blocks: Record<string, unknown>[],
+  dayKey: string,
+): string[] {
+  const managed: string[] = [];
+  let inSection = false;
+  let sectionIds: string[] = [];
+  const footerPrefix = `由 PickUp 于 ${dayKey} 同步`;
+
+  for (const block of blocks) {
+    const id = typeof block.id === "string" ? block.id : "";
+    if (!id) continue;
+    const type = typeof block.type === "string" ? block.type : "";
+    if (type === "heading_2") {
+      const heading = block.heading_2 as { rich_text?: unknown } | undefined;
+      if (plainText(heading?.rich_text).startsWith("今日已完成（")) {
+        inSection = true;
+        sectionIds = [id];
+        continue;
+      }
+    }
+    if (inSection) {
+      sectionIds.push(id);
+      if (type === "paragraph") {
+        const para = block.paragraph as { rich_text?: unknown } | undefined;
+        if (plainText(para?.rich_text).startsWith(footerPrefix)) {
+          managed.push(...sectionIds);
+          inSection = false;
+          sectionIds = [];
+        }
+      }
+    }
+  }
+  return managed;
 }
 
 export class NotionApiClient {
@@ -409,6 +457,7 @@ export class NotionApiClient {
     },
   ): Promise<{ pageId: string; pageUrl: string; updated: boolean }> {
     const blocks = buildDailyBlocks(params);
+    const chunks = chunkBlocks(blocks);
 
     if (params.existingPageId) {
       try {
@@ -419,28 +468,29 @@ export class NotionApiClient {
           in_trash?: boolean;
         }>(token, "GET", `/pages/${encodeURIComponent(params.existingPageId)}`);
         if (existing.id && !existing.archived && !existing.in_trash) {
-          const children = await this.request<{
-            results?: { id?: string }[];
-          }>(
+          const existingBlocks = await this.listAllBlockChildren(
             token,
-            "GET",
-            `/blocks/${encodeURIComponent(existing.id)}/children?page_size=100`,
+            existing.id,
           );
-          for (const child of children.results ?? []) {
-            if (child.id) {
-              await this.request(
-                token,
-                "DELETE",
-                `/blocks/${encodeURIComponent(child.id)}`,
-              );
-            }
+          const oldManagedIds = findManagedDailyBlockIds(
+            existingBlocks,
+            params.dayKey,
+          );
+          for (const chunk of chunks) {
+            await this.request(
+              token,
+              "PATCH",
+              `/blocks/${encodeURIComponent(existing.id)}/children`,
+              { children: chunk },
+            );
           }
-          await this.request(
-            token,
-            "PATCH",
-            `/blocks/${encodeURIComponent(existing.id)}/children`,
-            { children: blocks },
-          );
+          for (const blockId of oldManagedIds) {
+            await this.request(
+              token,
+              "DELETE",
+              `/blocks/${encodeURIComponent(blockId)}`,
+            );
+          }
           return {
             pageId: existing.id,
             pageUrl: typeof existing.url === "string" ? existing.url : "",
@@ -454,6 +504,7 @@ export class NotionApiClient {
       }
     }
 
+    const [firstChunk, ...restChunks] = chunks;
     const created = await this.request<{ id?: string; url?: string }>(
       token,
       "POST",
@@ -465,7 +516,7 @@ export class NotionApiClient {
             title: textBlock(`${params.dayKey} 每日总结`),
           },
         },
-        children: blocks,
+        children: firstChunk ?? [],
       },
     );
     if (!created.id) {
@@ -475,11 +526,41 @@ export class NotionApiClient {
         true,
       );
     }
+    for (const chunk of restChunks) {
+      await this.request(
+        token,
+        "PATCH",
+        `/blocks/${encodeURIComponent(created.id)}/children`,
+        { children: chunk },
+      );
+    }
     return {
       pageId: created.id,
       pageUrl: typeof created.url === "string" ? created.url : "",
       updated: false,
     };
+  }
+
+  private async listAllBlockChildren(
+    token: string,
+    blockId: string,
+  ): Promise<Record<string, unknown>[]> {
+    const all: Record<string, unknown>[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 10; page += 1) {
+      const qs = cursor
+        ? `?page_size=100&start_cursor=${encodeURIComponent(cursor)}`
+        : "?page_size=100";
+      const data = await this.request<{
+        results?: Record<string, unknown>[];
+        has_more?: boolean;
+        next_cursor?: string | null;
+      }>(token, "GET", `/blocks/${encodeURIComponent(blockId)}/children${qs}`);
+      if (Array.isArray(data.results)) all.push(...data.results);
+      if (!data.has_more || !data.next_cursor) break;
+      cursor = data.next_cursor;
+    }
+    return all;
   }
 
   async markExternalDone(

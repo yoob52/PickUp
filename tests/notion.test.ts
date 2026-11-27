@@ -256,9 +256,36 @@ describe("NotionApiClient", () => {
           method === "GET" &&
           path === "/blocks/daily-page-1/children?page_size=100"
         ) {
-          return jsonResponse({ results: [{ id: "old-blk-1" }] });
+          return jsonResponse({
+            results: [
+              {
+                id: "manual-note-1",
+                type: "paragraph",
+                paragraph: { rich_text: [{ plain_text: "手动补充的复盘" }] },
+              },
+              {
+                id: "old-h2",
+                type: "heading_2",
+                heading_2: { rich_text: [{ plain_text: "今日已完成（1 项）" }] },
+              },
+              {
+                id: "old-blk-1",
+                type: "to_do",
+                to_do: { rich_text: [{ plain_text: "实现 Notion 集成" }] },
+              },
+              {
+                id: "old-footer",
+                type: "paragraph",
+                paragraph: {
+                  rich_text: [
+                    { plain_text: "由 PickUp 于 2026-11-27 同步 · 未结束事项：2 项" },
+                  ],
+                },
+              },
+            ],
+          });
         }
-        if (method === "DELETE" && path === "/blocks/old-blk-1") {
+        if (method === "DELETE" && path.startsWith("/blocks/old-")) {
           return jsonResponse({ archived: true });
         }
         if (method === "PATCH" && path === "/blocks/daily-page-1/children") {
@@ -302,9 +329,51 @@ describe("NotionApiClient", () => {
       "POST /pages",
       "GET /pages/daily-page-1",
       "GET /blocks/daily-page-1/children?page_size=100",
-      "DELETE /blocks/old-blk-1",
       "PATCH /blocks/daily-page-1/children",
+      "DELETE /blocks/old-h2",
+      "DELETE /blocks/old-blk-1",
+      "DELETE /blocks/old-footer",
     ]);
+  });
+
+  it("chunks daily exports with more than 80 completed tasks across multiple block appends", async () => {
+    const patchBatches: number[] = [];
+    let postBlocks = 0;
+    const fetcher = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = init?.method ?? "GET";
+        const path = String(url).replace("https://api.notion.com/v1", "");
+        const parsed = init?.body ? JSON.parse(String(init.body)) : {};
+        if (method === "POST" && path === "/pages") {
+          postBlocks = Array.isArray(parsed.children)
+            ? parsed.children.length
+            : 0;
+          return jsonResponse({ id: "daily-big", url: "https://notion.so/big" });
+        }
+        if (method === "PATCH" && path === "/blocks/daily-big/children") {
+          patchBatches.push(
+            Array.isArray(parsed.children) ? parsed.children.length : 0,
+          );
+          return jsonResponse({ results: [] });
+        }
+        return jsonResponse({}, 404);
+      },
+    );
+    const client = new NotionApiClient(fetcher);
+    const tasks = Array.from({ length: 110 }, (_, idx) =>
+      sampleTask(`t-${idx}`, `已完成任务 ${idx + 1}`),
+    );
+    await client.upsertDailyPage("ntn_test_token", {
+      parentPageId: "parent-1",
+      existingPageId: null,
+      dayKey: "2026-11-27",
+      completedTasks: tasks,
+      unfinishedCount: 0,
+      currentTaskTitle: null,
+      includeBreakpoints: false,
+    });
+    expect(postBlocks).toBe(95);
+    expect(patchBatches).toEqual([18]);
   });
 
   it("maps 401 unauthorized responses to a clear non-retryable error", async () => {
