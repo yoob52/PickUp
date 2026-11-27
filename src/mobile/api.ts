@@ -5,6 +5,7 @@ import {
   type Result,
 } from "../shared/contracts";
 import { localDayKey, msUntilNextLocalDay } from "../shared/local-date";
+import { createMobileUpdates } from "./updates";
 
 const unsupported = async (): Promise<Result<never>> => ({
   ok: false,
@@ -68,6 +69,7 @@ export function createMobileAPI(
   }
 
   const api: PickupAPI = {
+    ...createMobileUpdates(),
     account: (input) => invoke("account", input),
     notion: unsupported,
     enableSync: unsupported,

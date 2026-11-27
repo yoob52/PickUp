@@ -9,6 +9,9 @@ function subscribe(channel: string, listener: (...args: unknown[]) => void) {
 
 /** 只暴露固定业务方法；不透传任意 channel，也不暴露原始 ipcRenderer。 */
 const api: PickupAPI = {
+  checkForUpdate: () => ipcRenderer.invoke("pickup:checkForUpdate"),
+  applyUpdate: (intent) => ipcRenderer.invoke("pickup:applyUpdate", intent),
+  openRepository: () => ipcRenderer.invoke("pickup:openRepository"),
   account: (input) => ipcRenderer.invoke("pickup:account", input),
   notion: (input) => ipcRenderer.invoke("pickup:notion", input),
   pairWithPayload: (payload) =>

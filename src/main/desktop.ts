@@ -45,7 +45,9 @@ export type DesktopHost = {
   hideWidget(): Promise<Result<WindowActionValue>>;
   setWidgetExpanded(expanded: boolean): Promise<Result<boolean>>;
   moveWidget(input: MoveWidgetInput): Promise<Result<boolean>>;
-  quit(): Promise<Result<WindowActionValue>>;
+  quit(
+    afterDraftSaved?: () => Promise<void>,
+  ): Promise<Result<WindowActionValue>>;
   getDesktopState(): Promise<Result<DesktopState>>;
   applyPreferencePatch(
     input: UpdatePreferenceInput,
@@ -593,8 +595,17 @@ export function createDesktop(options: Options): DesktopHost {
     };
   }
 
-  async function quit(): Promise<Result<WindowActionValue>> {
-    if (quitting) return windowResult("quit");
+  async function quit(
+    afterDraftSaved?: () => Promise<void>,
+  ): Promise<Result<WindowActionValue>> {
+    if (quitting)
+      return afterDraftSaved
+        ? asError(
+            "SYSTEM_SETTING_ERROR",
+            "应用正在退出，请重新打开后再试。",
+            true,
+          )
+        : windowResult("quit");
     const saved = await flushCaptureDraft();
     if (!saved) {
       await showCapture();
@@ -605,6 +616,14 @@ export function createDesktop(options: Options): DesktopHost {
       );
     }
     quitting = true;
+    if (afterDraftSaved) {
+      try {
+        await afterDraftSaved();
+      } catch (error) {
+        quitting = false;
+        throw error;
+      }
+    }
     clearTimeout(boundsTimer);
     if (widget && !widget.isDestroyed()) await persistWidgetBounds();
     if (registeredAccelerator) globalShortcut.unregisterAll();

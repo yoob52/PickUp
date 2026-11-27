@@ -59,7 +59,11 @@ test("phone capture, detail/back, pause and complete stay in-app without desktop
   await expect(
     page.locator(".topbar, .sidebar, .window-controls, .side-nav"),
   ).toHaveCount(0);
-  await expect(page.locator(".mobile-header button")).toHaveCount(1);
+  await expect(page.locator(".mobile-header button")).toHaveCount(3);
+  await expect(page.getByRole("button", { name: /检查更新/ })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "打开 GitHub 仓库" }),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "打开同步" })).toBeVisible();
   const navigation = page.getByRole("navigation", { name: "手机导航" });
   await expect(navigation).toBeInViewport({ ratio: 1 });

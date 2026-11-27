@@ -16,6 +16,7 @@ import { storeRegistry, type Registered } from "../shared/api-registry";
 import type { DesktopHost } from "./desktop";
 import type { StoreClient } from "./worker-client";
 import type { AccountReply } from "../shared/account-contracts";
+import { createDesktopUpdates } from "./updates";
 import { localDayRangeUtc } from "../shared/local-date";
 import {
   notionInputSchema,
@@ -72,6 +73,15 @@ export function registerIpcHandlers(
   desktop: DesktopHost,
 ): void {
   client.onStateChanged(notifyStateChanged);
+  const updates = createDesktopUpdates(desktop);
+  register("pickup:checkForUpdate", noInput, false, updates.checkForUpdate);
+  register(
+    "pickup:applyUpdate",
+    z.literal("restart").optional(),
+    false,
+    (_client, intent) => updates.applyUpdate(intent),
+  );
+  register("pickup:openRepository", noInput, false, updates.openRepository);
   register("pickup:copyLoginPayload", noInput, false, async (client) => {
     const result = await client.send<AccountReply>({
       kind: "account",
