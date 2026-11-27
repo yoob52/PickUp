@@ -9,6 +9,7 @@ import { AppShell } from "../features/AppShell";
 import { CaptureApp } from "./CaptureApp";
 import { CurrentCard } from "../features/CurrentCard";
 import { DailyReviewDialog } from "../features/DailyReview";
+import { NotionImportModal } from "../features/NotionImportModal";
 import { ResumePanel } from "../features/ResumePanel";
 import { SettingsDialog } from "../features/SettingsDialog";
 import { MobileSyncSheet } from "../features/MobileSyncSheet";
@@ -31,6 +32,7 @@ type Overlay =
   | { type: "detail"; taskId: string }
   | { type: "wait"; task: TaskSummary }
   | { type: "settings" }
+  | { type: "notionImport" }
   | { type: "sync" }
   | { type: "capture" };
 
@@ -48,6 +50,7 @@ export function MainApp() {
   const [endedLoading, setEndedLoading] = useState(false);
   const [resumeHighlight, setResumeHighlight] = useState(false);
   const [savedUnsynced, setSavedUnsynced] = useState(false);
+  const [notionConnected, setNotionConnected] = useState(false);
   const reopenAction = useReopenAction((refreshed) =>
     setSavedUnsynced(!refreshed),
   );
@@ -69,6 +72,15 @@ export function MainApp() {
         expectedVersion: number;
       }>(),
     );
+
+  useEffect(() => {
+    if (window.pickup.host !== "desktop") return;
+    void window.pickup.notion({ action: "getConfig" }).then((res) => {
+      if (res.ok && res.value.action === "getConfig") {
+        setNotionConnected(res.value.config.connected);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (filter !== "ended") return;
@@ -196,6 +208,20 @@ export function MainApp() {
         : "已标记完成。当前工作没有被打断。",
       reopenAction(input),
     );
+    if (
+      window.pickup.host === "desktop" &&
+      task.externalLink?.provider === "notion"
+    ) {
+      void window.pickup
+        .notion({ action: "writeBackTask", taskId: task.id })
+        .then((wb) => {
+          if (!wb.ok) {
+            notify(`Notion 完成回写失败：${wb.message}`, "error");
+          } else if (wb.value.action === "writeBackTask" && wb.value.synced) {
+            notify("已同步勾选 Notion 对应事项。");
+          }
+        });
+    }
   }
 
   async function loadMoreEnded() {
@@ -244,6 +270,12 @@ export function MainApp() {
       onReview={() => setReviewOpen(true)}
       onSettings={() => setOverlay({ type: "settings" })}
       onSync={() => setOverlay({ type: "sync" })}
+      onNotionImport={
+        window.pickup.host === "desktop"
+          ? () => setOverlay({ type: "notionImport" })
+          : undefined
+      }
+      notionConnected={notionConnected}
     >
       {notice ? (
         <NoticeBar
@@ -411,13 +443,32 @@ export function MainApp() {
           onOpenTask={(task) => setOverlay({ type: "detail", taskId: task.id })}
           onRefresh={refresh}
           onNotice={notify}
+          onOpenSettings={
+            window.pickup.host === "desktop"
+              ? () => setOverlay({ type: "settings" })
+              : undefined
+          }
         />
       ) : null}
       {overlay?.type === "capture" ? (
         <CaptureApp onClose={() => setOverlay(null)} />
       ) : null}
+      {overlay?.type === "notionImport" && window.pickup.host === "desktop" ? (
+        <NotionImportModal
+          onClose={() => setOverlay(null)}
+          onOpenSettings={() => setOverlay({ type: "settings" })}
+          onImported={refresh}
+          onNotice={notify}
+        />
+      ) : null}
       {overlay?.type === "settings" && window.pickup.host === "desktop" ? (
-        <SettingsDialog onClose={() => setOverlay(null)} onNotice={notify} />
+        <SettingsDialog
+          onClose={() => setOverlay(null)}
+          onNotice={notify}
+          onNotionConfigChange={(config) =>
+            setNotionConnected(config.connected)
+          }
+        />
       ) : null}
       {overlay?.type === "sync" && window.pickup.host === "mobile" ? (
         <MobileSyncSheet onClose={() => setOverlay(null)} />

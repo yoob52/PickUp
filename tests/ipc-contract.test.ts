@@ -15,6 +15,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock("electron", () => ({
   app: { isPackaged: false },
   clipboard: { writeText: mocks.writeText },
+  safeStorage: {
+    isEncryptionAvailable: () => false,
+    encryptString: (v: string) => Buffer.from(v, "utf8"),
+    decryptString: (b: Buffer) => b.toString("utf8"),
+  },
   BrowserWindow: {
     fromWebContents: mocks.fromWebContents,
     getAllWindows: () => [],

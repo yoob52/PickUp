@@ -146,6 +146,33 @@ function createApi(overrides: Partial<PickupAPI> = {}): PickupAPI {
         0,
       ),
     ),
+    notion: vi.fn().mockImplementation(async (input: { action: string }) => {
+      const config = {
+        connected: false,
+        hasToken: false,
+        tokenHint: "",
+        workspaceName: "",
+        dailyParentId: "",
+        dailyParentTitle: "",
+        importSourceId: "",
+        importSourceTitle: "",
+        importSourceType: "" as const,
+        autoWriteback: false,
+        updatedAt: 0,
+      };
+      if (input.action === "getDailyExportStatus") {
+        return ok(
+          {
+            action: "getDailyExportStatus",
+            dayKey: "2026-11-27",
+            record: null,
+            config,
+          },
+          0,
+        );
+      }
+      return ok({ action: "getConfig", config }, 0);
+    }),
     onStateChanged: () => () => {},
     onDayInvalidated: () => () => {},
     onCaptureShown: () => () => {},

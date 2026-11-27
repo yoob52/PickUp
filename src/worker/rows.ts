@@ -1,5 +1,9 @@
 import type { SqliteDatabase } from "./sqlite";
 import type { BreakpointSummary, TaskSummary } from "../shared/contracts";
+import type {
+  ExternalLinkSummary,
+  NotionExternalType,
+} from "../shared/notion-contracts";
 import type { TaskStatus } from "../shared/task";
 
 export type { SqliteDatabase } from "./sqlite";
@@ -88,30 +92,70 @@ export function loadBreakpointSummaries(
   return summaries;
 }
 
+export function loadExternalLinks(
+  db: SqliteDatabase,
+  taskRows: TaskRow[],
+): Map<string, ExternalLinkSummary> {
+  const links = new Map<string, ExternalLinkSummary>();
+  if (taskRows.length === 0) return links;
+  const ids = taskRows.map((row) => row.id);
+  const placeholders = ids.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT task_id, provider, external_id, external_type, external_url, source_title, due_date
+       FROM external_links WHERE task_id IN (${placeholders})`,
+    )
+    .all(...ids) as {
+    task_id: string;
+    provider: "notion";
+    external_id: string;
+    external_type: NotionExternalType;
+    external_url: string;
+    source_title: string;
+    due_date: string | null;
+  }[];
+  for (const row of rows) {
+    links.set(row.task_id, {
+      provider: row.provider,
+      externalId: row.external_id,
+      externalType: row.external_type,
+      externalUrl: row.external_url,
+      sourceTitle: row.source_title,
+      dueDate: row.due_date,
+    });
+  }
+  return links;
+}
+
 export function mapTaskSummaries(
   db: SqliteDatabase,
   rows: TaskRow[],
 ): TaskSummary[] {
   const summaries = loadBreakpointSummaries(db, rows);
-  return rows.map((row) => ({
-    id: row.id,
-    title: row.title,
-    note: row.note,
-    status: row.status,
-    waitReason: row.wait_reason,
-    checkBackAt: row.check_back_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    statusChangedAt: row.status_changed_at,
-    statusRevision: row.status_revision,
-    endedAt: row.ended_at,
-    version: row.version,
-    breakpointCount: row.breakpoint_count,
-    latestBreakpoint:
-      row.latest_breakpoint_seq === null
-        ? null
-        : (summaries.get(row.latest_breakpoint_seq) ?? null),
-  }));
+  const links = loadExternalLinks(db, rows);
+  return rows.map((row) => {
+    const externalLink = links.get(row.id);
+    return {
+      id: row.id,
+      title: row.title,
+      note: row.note,
+      status: row.status,
+      waitReason: row.wait_reason,
+      checkBackAt: row.check_back_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      statusChangedAt: row.status_changed_at,
+      statusRevision: row.status_revision,
+      endedAt: row.ended_at,
+      version: row.version,
+      breakpointCount: row.breakpoint_count,
+      latestBreakpoint:
+        row.latest_breakpoint_seq === null
+          ? null
+          : (summaries.get(row.latest_breakpoint_seq) ?? null),
+      ...(externalLink ? { externalLink } : {}),
+    };
+  });
 }
 
 export function selectTaskRows(

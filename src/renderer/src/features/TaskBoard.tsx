@@ -135,7 +135,17 @@ function TaskRow({
     >
       <StatusDot status={task.status} />
       <div className="task-main">
-        <div className="task-title">{task.title}</div>
+        <div className="task-title">
+          <span>{task.title}</span>
+          {task.externalLink?.provider === "notion" ? (
+            <span className="notion-badge">Notion</span>
+          ) : null}
+          {task.externalLink?.dueDate ? (
+            <span className="notion-badge date-pill">
+              {task.externalLink.dueDate}
+            </span>
+          ) : null}
+        </div>
         <div className="task-sub">{sub}</div>
       </div>
       <div className="row-actions">
