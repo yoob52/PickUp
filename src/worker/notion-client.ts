@@ -344,36 +344,41 @@ export class NotionApiClient {
   }
 
   async searchTargets(token: string): Promise<NotionTargetOption[]> {
-    const data = await this.request<{ results?: Record<string, unknown>[] }>(
-      token,
-      "POST",
-      "/search",
-      {
-        page_size: 50,
-        sort: { direction: "descending", timestamp: "last_edited_time" },
-      },
-    );
-    const results = Array.isArray(data.results) ? data.results : [];
     const options: NotionTargetOption[] = [];
-    for (const item of results) {
-      const id = typeof item.id === "string" ? item.id : "";
-      if (!id || item.archived === true || item.in_trash === true) continue;
-      const url = typeof item.url === "string" ? item.url : "";
-      if (item.object === "database") {
-        options.push({
-          id,
-          title: extractDatabaseTitle(item),
-          type: "database",
-          url,
-        });
-      } else if (item.object === "page") {
-        options.push({
-          id,
-          title: extractPageTitle(item),
-          type: "page",
-          url,
-        });
+    let cursor: string | undefined;
+    for (let page = 0; page < 10; page += 1) {
+      const data = await this.request<{
+        results?: Record<string, unknown>[];
+        has_more?: boolean;
+        next_cursor?: string | null;
+      }>(token, "POST", "/search", {
+        page_size: 100,
+        sort: { direction: "descending", timestamp: "last_edited_time" },
+        ...(cursor ? { start_cursor: cursor } : {}),
+      });
+      const results = Array.isArray(data.results) ? data.results : [];
+      for (const item of results) {
+        const id = typeof item.id === "string" ? item.id : "";
+        if (!id || item.archived === true || item.in_trash === true) continue;
+        const url = typeof item.url === "string" ? item.url : "";
+        if (item.object === "database") {
+          options.push({
+            id,
+            title: extractDatabaseTitle(item),
+            type: "database",
+            url,
+          });
+        } else if (item.object === "page") {
+          options.push({
+            id,
+            title: extractPageTitle(item),
+            type: "page",
+            url,
+          });
+        }
       }
+      if (!data.has_more || !data.next_cursor) break;
+      cursor = data.next_cursor;
     }
     return options;
   }
@@ -384,35 +389,42 @@ export class NotionApiClient {
     sourceTitle: string,
     importedIds: Set<string>,
   ): Promise<NotionImportCandidate[]> {
-    const data = await this.request<{ results?: Record<string, unknown>[] }>(
-      token,
-      "POST",
-      `/databases/${encodeURIComponent(databaseId)}/query`,
-      { page_size: 50 },
-    );
-    const results = Array.isArray(data.results) ? data.results : [];
     const items: NotionImportCandidate[] = [];
-    for (const page of results) {
-      const id = typeof page.id === "string" ? page.id : "";
-      if (!id || page.archived === true || page.in_trash === true) continue;
-      const props = (page.properties ?? {}) as Record<
-        string,
-        Record<string, unknown>
-      >;
-      const status = extractStatusInfo(props);
-      if (status.isDone) continue;
-      const title = extractPageTitle(page);
-      if (!title) continue;
-      items.push({
-        externalId: id,
-        externalType: "database_item",
-        title: title.slice(0, 300),
-        sourceTitle,
-        externalUrl: typeof page.url === "string" ? page.url : "",
-        dueDate: extractDateProperty(props),
-        statusLabel: status.label,
-        alreadyImported: importedIds.has(id),
+    let cursor: string | undefined;
+    for (let pageIndex = 0; pageIndex < 10; pageIndex += 1) {
+      const data = await this.request<{
+        results?: Record<string, unknown>[];
+        has_more?: boolean;
+        next_cursor?: string | null;
+      }>(token, "POST", `/databases/${encodeURIComponent(databaseId)}/query`, {
+        page_size: 100,
+        ...(cursor ? { start_cursor: cursor } : {}),
       });
+      const results = Array.isArray(data.results) ? data.results : [];
+      for (const page of results) {
+        const id = typeof page.id === "string" ? page.id : "";
+        if (!id || page.archived === true || page.in_trash === true) continue;
+        const props = (page.properties ?? {}) as Record<
+          string,
+          Record<string, unknown>
+        >;
+        const status = extractStatusInfo(props);
+        if (status.isDone) continue;
+        const title = extractPageTitle(page);
+        if (!title) continue;
+        items.push({
+          externalId: id,
+          externalType: "database_item",
+          title: title.slice(0, 300),
+          sourceTitle,
+          externalUrl: typeof page.url === "string" ? page.url : "",
+          dueDate: extractDateProperty(props),
+          statusLabel: status.label,
+          alreadyImported: importedIds.has(id),
+        });
+      }
+      if (!data.has_more || !data.next_cursor) break;
+      cursor = data.next_cursor;
     }
     return items;
   }
@@ -429,18 +441,14 @@ export class NotionApiClient {
       `/pages/${encodeURIComponent(pageId)}`,
     );
     const pageUrl = typeof pageMeta.url === "string" ? pageMeta.url : "";
-    const data = await this.request<{ results?: Record<string, unknown>[] }>(
-      token,
-      "GET",
-      `/blocks/${encodeURIComponent(pageId)}/children?page_size=100`,
-    );
-    const results = Array.isArray(data.results) ? data.results : [];
+    const results = await this.listAllBlockChildren(token, pageId);
     const items: NotionImportCandidate[] = [];
     for (const block of results) {
       if (block.type !== "to_do" || block.archived === true) continue;
       const id = typeof block.id === "string" ? block.id : "";
       const todo = block.to_do as
-        { checked?: boolean; rich_text?: unknown } | undefined;
+        | { checked?: boolean; rich_text?: unknown }
+        | undefined;
       if (!id || !todo || todo.checked) continue;
       const text = plainText(todo.rich_text);
       if (!text) continue;
