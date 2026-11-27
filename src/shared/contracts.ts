@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { EnableSyncInput, SyncStatus } from "./sync-contracts";
 import type { AccountInput, AccountReply } from "./account-contracts";
+import type {
+  ExternalLinkSummary,
+  NotionInput,
+  NotionReply,
+} from "./notion-contracts";
 import { TASK_STATUSES, type StatusCounts, type TaskStatus } from "./task";
 
 /* ------------------------------------------------------------------ 通用 */
@@ -336,6 +341,7 @@ export type TaskSummary = {
   version: number;
   breakpointCount: number;
   latestBreakpoint: BreakpointSummary | null;
+  externalLink?: ExternalLinkSummary | null;
 };
 
 export type TaskDetail = {
@@ -520,6 +526,7 @@ export type CommandOutcome =
 
 export type PickupAPI = {
   account(input: AccountInput): Promise<Result<AccountReply>>;
+  notion(input: NotionInput): Promise<Result<NotionReply>>;
   enableSync(input: EnableSyncInput): Promise<Result<SyncStatus>>;
   pairWithPayload(payload: string): Promise<Result<SyncStatus>>;
   disableSync(): Promise<Result<SyncStatus>>;

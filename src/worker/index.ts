@@ -77,6 +77,24 @@ function start(): void {
             revision: store.revision(),
           };
           break;
+        case "getNotionEncryptedToken":
+          result = {
+            ok: true,
+            value: store.notion.getEncryptedToken(),
+            revision,
+          };
+          break;
+        case "notion": {
+          const reply = await store.notion.handle(request.payload);
+          const nextRevision = store.revision();
+          if (nextRevision > revision) sync.localCommitted();
+          result = {
+            ok: true,
+            value: reply,
+            revision: nextRevision,
+          };
+          break;
+        }
         case "pairWithPayload":
           throw DomainError.validation("请在手机上扫描桌面配对码。");
         case "enableSync":

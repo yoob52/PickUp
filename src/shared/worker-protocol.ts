@@ -34,10 +34,13 @@ import type {
 } from "./contracts";
 import type { EnableSyncInput, SyncStatus } from "./sync-contracts";
 import type { AccountInput, AccountReply } from "./account-contracts";
+import type { NotionReply, WorkerNotionRequest } from "./notion-contracts";
 
 /** main → worker 的固定命令集合；worker 串行处理。 */
 export type WorkerRequest =
   | { kind: "account"; input: AccountInput }
+  | { kind: "notion"; payload: WorkerNotionRequest }
+  | { kind: "getNotionEncryptedToken" }
   | { kind: "pairWithPayload"; payload: string }
   | { kind: "setSyncForeground"; visible: boolean }
   | { kind: "enableSync"; input: EnableSyncInput }
@@ -72,6 +75,7 @@ export type WorkerRequest =
 
 export type WorkerReplyValue =
   | AccountReply
+  | NotionReply
   | SyncStatus
   | string
   | WorkspaceSnapshot
