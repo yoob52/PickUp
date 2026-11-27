@@ -1,5 +1,11 @@
 # PickUp 验证记录
 
+## 2026-11-27 · 1.1.0 发版准备
+
+- 合并 [#26](https://github.com/yoob52/PickUp/pull/26) 的应用内更新和 GitHub 仓库入口，以及 [#27](https://github.com/yoob52/PickUp/pull/27) 的桌面 Notion 集成（任务导入、完成状态回写、每日收尾导出）。Windows 下载并校验更新后，须手动点击「重启并安装」；Android 将已校验的 APK 交给系统安装器，免费签名的 iOS 仅提示并打开发布页。
+- 根包及锁文件版本为 `1.1.0`；Android 与 iOS 发布产物沿用从根包读取版本的配置，版本号为 `1.1.0`，构建号为 `10100`。
+- 合并前验证覆盖更新状态与快速记录草稿保护、Electron 桥接、Notion 导入去重及收尾导出流程（测试数据）；Android 模拟器验证了下载并打开系统安装器，未确认覆盖安装。未实测 Windows 覆盖安装、iOS 真机更新或此版本的发布产物。
+
 ## 2026-11-21 · iOS 壳（免费 Apple ID 侧载）
 
 - 新增 Capacitor 7.6.10 iOS 工程（SPM）、`ios:sync` / `ios:ipa` 与 `ios.yml`；Info.plist 加相机说明，最低 iOS 17.4（同步使用 `AbortSignal.any`）。
