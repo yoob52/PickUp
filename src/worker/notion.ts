@@ -385,9 +385,7 @@ export function createNotionService(db: SqliteDatabase, deps: NotionStoreDeps) {
             throw DomainError.validation("请先在设置中配置 Notion Token。");
           }
           if (!config.daily_parent_id) {
-            throw DomainError.validation(
-              "请先在设置中选择日报写入的父页面。",
-            );
+            throw DomainError.validation("请先在设置中选择日报写入的父页面。");
           }
 
           const firstReview = deps.dailyReview({

@@ -447,8 +447,7 @@ export class NotionApiClient {
       if (block.type !== "to_do" || block.archived === true) continue;
       const id = typeof block.id === "string" ? block.id : "";
       const todo = block.to_do as
-        | { checked?: boolean; rich_text?: unknown }
-        | undefined;
+        { checked?: boolean; rich_text?: unknown } | undefined;
       if (!id || !todo || todo.checked) continue;
       const text = plainText(todo.rich_text);
       if (!text) continue;
@@ -703,8 +702,7 @@ function resolveSelectDoneOption(
   schemaProp: Record<string, unknown> | undefined,
 ): string | null {
   const select = schemaProp?.select as
-    | { options?: { name?: string }[] }
-    | undefined;
+    { options?: { name?: string }[] } | undefined;
   const options = Array.isArray(select?.options) ? select.options : [];
   const match = options.find(
     (opt) => typeof opt.name === "string" && isDoneOptionName(opt.name),

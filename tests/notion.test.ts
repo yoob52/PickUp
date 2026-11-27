@@ -266,7 +266,9 @@ describe("NotionApiClient", () => {
               {
                 id: "old-h2",
                 type: "heading_2",
-                heading_2: { rich_text: [{ plain_text: "今日已完成（1 项）" }] },
+                heading_2: {
+                  rich_text: [{ plain_text: "今日已完成（1 项）" }],
+                },
               },
               {
                 id: "old-blk-1",
@@ -278,7 +280,10 @@ describe("NotionApiClient", () => {
                 type: "paragraph",
                 paragraph: {
                   rich_text: [
-                    { plain_text: "由 PickUp 于 2026-11-27 同步 · 未结束事项：2 项" },
+                    {
+                      plain_text:
+                        "由 PickUp 于 2026-11-27 同步 · 未结束事项：2 项",
+                    },
                   ],
                 },
               },
@@ -348,7 +353,10 @@ describe("NotionApiClient", () => {
           postBlocks = Array.isArray(parsed.children)
             ? parsed.children.length
             : 0;
-          return jsonResponse({ id: "daily-big", url: "https://notion.so/big" });
+          return jsonResponse({
+            id: "daily-big",
+            url: "https://notion.so/big",
+          });
         }
         if (method === "PATCH" && path === "/blocks/daily-big/children") {
           patchBatches.push(
