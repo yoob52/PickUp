@@ -376,6 +376,84 @@ describe("NotionApiClient", () => {
     expect(patchBatches).toEqual([18]);
   });
 
+  it("ignores unrelated checkboxes and resolves database completion option names on write-back", async () => {
+    const patches: unknown[] = [];
+    const fetcher = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = init?.method ?? "GET";
+        const path = String(url).replace("https://api.notion.com/v1", "");
+        if (method === "POST" && path === "/databases/db-1/query") {
+          return jsonResponse({
+            results: [
+              {
+                id: "item-urgent",
+                url: "https://notion.so/item-urgent",
+                properties: {
+                  Urgent: { type: "checkbox", checkbox: true },
+                  Status: { type: "status", status: { name: "In progress" } },
+                  Name: {
+                    type: "title",
+                    title: [{ plain_text: "紧急但未完成的任务" }],
+                  },
+                },
+              },
+            ],
+          });
+        }
+        if (method === "GET" && path === "/pages/item-urgent") {
+          return jsonResponse({
+            parent: { type: "database_id", database_id: "db-1" },
+            properties: {
+              Urgent: { type: "checkbox", checkbox: true },
+              Status: { type: "status", status: { name: "In progress" } },
+            },
+          });
+        }
+        if (method === "GET" && path === "/databases/db-1") {
+          return jsonResponse({
+            properties: {
+              Status: {
+                type: "status",
+                status: {
+                  options: [
+                    { id: "o1", name: "In progress" },
+                    { id: "o2", name: "Completed" },
+                  ],
+                  groups: [{ name: "Complete", option_ids: ["o2"] }],
+                },
+              },
+            },
+          });
+        }
+        if (method === "PATCH" && path === "/pages/item-urgent") {
+          patches.push(JSON.parse(String(init?.body ?? "{}")));
+          return jsonResponse({ id: "item-urgent" });
+        }
+        return jsonResponse({}, 404);
+      },
+    );
+
+    const client = new NotionApiClient(fetcher);
+    const items = await client.queryDatabaseItems(
+      "ntn_test_token",
+      "db-1",
+      "任务库",
+      new Set(),
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].title).toBe("紧急但未完成的任务");
+
+    const synced = await client.markExternalDone(
+      "ntn_test_token",
+      "item-urgent",
+      "database_item",
+    );
+    expect(synced).toBe(true);
+    expect(patches).toEqual([
+      { properties: { Status: { status: { name: "Completed" } } } },
+    ]);
+  });
+
   it("maps 401 unauthorized responses to a clear non-retryable error", async () => {
     const fetcher = vi.fn(async () =>
       jsonResponse({ message: "API token is invalid." }, 401),

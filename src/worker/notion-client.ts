@@ -57,41 +57,55 @@ function extractDateProperty(
   return null;
 }
 
+function isDoneOptionName(name: string): boolean {
+  const lower = name.trim().toLowerCase();
+  return (
+    lower === "done" ||
+    lower === "completed" ||
+    lower === "complete" ||
+    lower === "finished" ||
+    name.trim() === "已完成" ||
+    name.trim() === "完成"
+  );
+}
+
+function isCompletionPropName(key: string): boolean {
+  return /^(done|complete|completed|finished|checked|status|状态|完成|已完成)$/i.test(
+    key.trim(),
+  );
+}
+
 function extractStatusInfo(props: Record<string, Record<string, unknown>>): {
   label: string;
   isDone: boolean;
 } {
-  for (const value of Object.values(props)) {
-    if (value?.type === "checkbox") {
-      const checked = Boolean(value.checkbox);
-      return { label: checked ? "已完成" : "待办", isDone: checked };
-    }
+  const entries = Object.entries(props);
+
+  for (const [, value] of entries) {
     if (value?.type === "status") {
       const status = value.status as { name?: unknown } | null | undefined;
       const name = typeof status?.name === "string" ? status.name.trim() : "";
-      const lower = name.toLowerCase();
-      const isDone =
-        lower === "done" ||
-        lower === "completed" ||
-        lower === "complete" ||
-        name === "已完成" ||
-        name === "完成";
-      return { label: name || "未分组", isDone };
+      return { label: name || "未分组", isDone: isDoneOptionName(name) };
     }
+  }
+
+  for (const [key, value] of entries) {
+    if (value?.type === "checkbox" && isCompletionPropName(key)) {
+      const checked = Boolean(value.checkbox);
+      return { label: checked ? "已完成" : "待办", isDone: checked };
+    }
+  }
+
+  for (const [key, value] of entries) {
     if (value?.type === "select") {
       const select = value.select as { name?: unknown } | null | undefined;
       const name = typeof select?.name === "string" ? select.name.trim() : "";
-      if (name) {
-        const lower = name.toLowerCase();
-        const isDone =
-          lower === "done" ||
-          lower === "completed" ||
-          name === "已完成" ||
-          name === "完成";
-        return { label: name, isDone };
+      if (name && (isCompletionPropName(key) || isDoneOptionName(name))) {
+        return { label: name, isDone: isDoneOptionName(name) };
       }
     }
   }
+
   return { label: "待办", isDone: false };
 }
 
@@ -579,11 +593,46 @@ export class NotionApiClient {
     }
 
     const page = await this.request<{
+      parent?: { type?: string; database_id?: string };
       properties?: Record<string, Record<string, unknown>>;
     }>(token, "GET", `/pages/${encodeURIComponent(externalId)}`);
     const props = page.properties ?? {};
-    for (const [key, value] of Object.entries(props)) {
-      if (value?.type === "checkbox") {
+    const entries = Object.entries(props);
+
+    let dbProps: Record<string, Record<string, unknown>> | null = null;
+    if (
+      page.parent?.type === "database_id" &&
+      typeof page.parent.database_id === "string"
+    ) {
+      try {
+        const db = await this.request<{
+          properties?: Record<string, Record<string, unknown>>;
+        }>(
+          token,
+          "GET",
+          `/databases/${encodeURIComponent(page.parent.database_id)}`,
+        );
+        dbProps = db.properties ?? null;
+      } catch {
+        dbProps = null;
+      }
+    }
+
+    for (const [key, value] of entries) {
+      if (value?.type === "status") {
+        const optionName = resolveStatusDoneOption(dbProps?.[key]) ?? "Done";
+        await this.request(
+          token,
+          "PATCH",
+          `/pages/${encodeURIComponent(externalId)}`,
+          { properties: { [key]: { status: { name: optionName } } } },
+        );
+        return true;
+      }
+    }
+
+    for (const [key, value] of entries) {
+      if (value?.type === "checkbox" && isCompletionPropName(key)) {
         await this.request(
           token,
           "PATCH",
@@ -592,16 +641,65 @@ export class NotionApiClient {
         );
         return true;
       }
-      if (value?.type === "status") {
-        await this.request(
-          token,
-          "PATCH",
-          `/pages/${encodeURIComponent(externalId)}`,
-          { properties: { [key]: { status: { name: "Done" } } } },
-        );
-        return true;
+    }
+
+    for (const [key, value] of entries) {
+      if (value?.type === "select") {
+        const optionName = resolveSelectDoneOption(dbProps?.[key]);
+        if (optionName) {
+          await this.request(
+            token,
+            "PATCH",
+            `/pages/${encodeURIComponent(externalId)}`,
+            { properties: { [key]: { select: { name: optionName } } } },
+          );
+          return true;
+        }
       }
     }
     return false;
   }
+}
+
+function resolveStatusDoneOption(
+  schemaProp: Record<string, unknown> | undefined,
+): string | null {
+  const status = schemaProp?.status as
+    | {
+        options?: { id?: string; name?: string }[];
+        groups?: { name?: string; option_ids?: string[] }[];
+      }
+    | undefined;
+  const options = Array.isArray(status?.options) ? status.options : [];
+  const groups = Array.isArray(status?.groups) ? status.groups : [];
+  const completeGroup = groups.find(
+    (g) => typeof g.name === "string" && g.name.toLowerCase() === "complete",
+  );
+  if (completeGroup && Array.isArray(completeGroup.option_ids)) {
+    const groupOptions = options.filter(
+      (opt) => opt.id && completeGroup.option_ids!.includes(opt.id),
+    );
+    const named = groupOptions.find(
+      (opt) => typeof opt.name === "string" && isDoneOptionName(opt.name),
+    );
+    if (named?.name) return named.name;
+    if (groupOptions[0]?.name) return groupOptions[0].name;
+  }
+  const byName = options.find(
+    (opt) => typeof opt.name === "string" && isDoneOptionName(opt.name),
+  );
+  return byName?.name ?? null;
+}
+
+function resolveSelectDoneOption(
+  schemaProp: Record<string, unknown> | undefined,
+): string | null {
+  const select = schemaProp?.select as
+    | { options?: { name?: string }[] }
+    | undefined;
+  const options = Array.isArray(select?.options) ? select.options : [];
+  const match = options.find(
+    (opt) => typeof opt.name === "string" && isDoneOptionName(opt.name),
+  );
+  return match?.name ?? null;
 }
