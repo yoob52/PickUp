@@ -200,6 +200,7 @@ describe("mobile API boundary", () => {
         "setWidgetExpanded",
         "quit",
         "getDesktopState",
+        "notion",
       ] as const) {
         expect(
           await (api[name] as () => Promise<Result<unknown>>)(),

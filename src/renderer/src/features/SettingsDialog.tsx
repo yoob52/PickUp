@@ -3,14 +3,21 @@ import { Check } from "lucide-react";
 import type { DesktopState, PreferenceState } from "../../../shared/contracts";
 import { Button } from "../ui/primitives";
 import { Modal } from "../ui/Modal";
+import { NotionSettings } from "./NotionSettings";
 import { SyncSettings } from "./SyncSettings";
+import type { NotionConfig } from "../../../shared/notion-contracts";
 
 type Props = {
   onClose: () => void;
   onNotice: (text: string, tone?: "ok" | "error") => void;
+  onNotionConfigChange?: (config: NotionConfig) => void;
 };
 
-export function SettingsDialog({ onClose, onNotice }: Props) {
+export function SettingsDialog({
+  onClose,
+  onNotice,
+  onNotionConfigChange,
+}: Props) {
   const [state, setState] = useState<PreferenceState | null>(null);
   const [desktop, setDesktop] = useState<DesktopState | null>(null);
   const [error, setError] = useState("");
@@ -155,6 +162,12 @@ export function SettingsDialog({ onClose, onNotice }: Props) {
         />
       </div>
       {window.pickup.host === "desktop" ? <SyncSettings /> : null}
+      {window.pickup.host === "desktop" ? (
+        <NotionSettings
+          onNotice={onNotice}
+          onConfigChange={onNotionConfigChange}
+        />
+      ) : null}
       <div className="modal-actions">
         <Button icon={<Check size={15} />} onClick={onClose}>
           完成

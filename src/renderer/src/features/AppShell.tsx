@@ -1,6 +1,7 @@
 import { useRef, type ReactNode } from "react";
 import logo from "../../../../docs/logo.png";
 import {
+  Download,
   LayoutDashboard,
   Cloud,
   Minus,
@@ -22,6 +23,8 @@ type Props = {
   onReview: () => void;
   onSettings: () => void;
   onSync: () => void;
+  onNotionImport?: () => void;
+  notionConnected?: boolean;
   children: ReactNode;
 };
 
@@ -31,6 +34,8 @@ export function AppShell({
   onReview,
   onSettings,
   onSync,
+  onNotionImport,
+  notionConnected,
   children,
 }: Props) {
   const notify = useToast();
@@ -98,6 +103,15 @@ export function AppShell({
           <div className="topbar-right">
             <span className="quiet-chip">{connection}</span>
             <span className="date-stamp">{formatStamp(Date.now())}</span>
+            {onNotionImport ? (
+              <Button
+                kind="secondary"
+                icon={<Download size={14} />}
+                onClick={onNotionImport}
+              >
+                Notion 导入
+              </Button>
+            ) : null}
             <Button icon={<Plus size={15} />} onClick={onCapture}>
               记一件事
             </Button>
@@ -163,6 +177,16 @@ export function AppShell({
                 <span>离线优先</span>
               </div>
               <strong>状态已在本机保存</strong>
+              {notionConnected ? (
+                <button
+                  type="button"
+                  className="notion-status-chip"
+                  onClick={onSettings}
+                >
+                  <span className="notion-status-dot" aria-hidden="true" />
+                  <span>Notion 已连接 · 配置</span>
+                </button>
+              ) : null}
             </div>
             <p className="sidebar-note">
               记下新事，接回未完的事。每一次暂停，都留一条回来的线。

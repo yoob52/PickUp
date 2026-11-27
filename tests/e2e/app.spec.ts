@@ -45,6 +45,7 @@ const EXPECTED_BRIDGE_METHODS = [
   "listTasks",
   "markWaiting",
   "moveWidget",
+  "notion",
   "onCaptureShown",
   "onDayInvalidated",
   "onPrepareClose",

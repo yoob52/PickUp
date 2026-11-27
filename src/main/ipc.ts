@@ -17,6 +17,17 @@ import type { DesktopHost } from "./desktop";
 import type { StoreClient } from "./worker-client";
 import type { AccountReply } from "../shared/account-contracts";
 import { createDesktopUpdates } from "./updates";
+import { localDayRangeUtc } from "../shared/local-date";
+import {
+  notionInputSchema,
+  type NotionReply,
+  type WorkerNotionRequest,
+} from "../shared/notion-contracts";
+import {
+  decryptNotionToken,
+  encryptNotionToken,
+  maskNotionToken,
+} from "./notion-secret";
 
 const noInput = z.undefined();
 const registry: Registered[] = [...storeRegistry];
@@ -137,6 +148,86 @@ export function registerIpcHandlers(
     (_client, expanded) => desktop.setWidgetExpanded(expanded),
   );
   register("pickup:quit", noInput, false, () => desktop.quit());
+  register(
+    "pickup:notion",
+    notionInputSchema,
+    false,
+    async (client, input): Promise<Result<NotionReply>> => {
+      const payload: WorkerNotionRequest = { input };
+
+      if (
+        input.action === "getDailyExportStatus" ||
+        input.action === "exportDailyReview"
+      ) {
+        payload.dayRange = localDayRangeUtc(Date.now());
+      }
+
+      if (input.action === "saveConfig" && input.token !== undefined) {
+        try {
+          payload.encryptedToken = encryptNotionToken(input.token);
+          payload.tokenHint = maskNotionToken(input.token);
+        } catch {
+          return {
+            ok: false,
+            code: "SYSTEM_SETTING_ERROR",
+            message: "无法加密保存 Notion Token，请检查系统密钥链状态。",
+            retryable: false,
+          };
+        }
+      }
+
+      const needsToken =
+        input.action === "testConnection" ||
+        input.action === "listTargets" ||
+        input.action === "fetchImportItems" ||
+        input.action === "exportDailyReview" ||
+        input.action === "writeBackTask";
+
+      if (needsToken) {
+        const inlineToken =
+          (input.action === "testConnection" ||
+            input.action === "listTargets") &&
+          input.token
+            ? input.token
+            : "";
+        if (inlineToken) {
+          payload.plainToken = inlineToken;
+        } else {
+          const encResult = await client.send<string>({
+            kind: "getNotionEncryptedToken",
+          });
+          if (!encResult.ok) return encResult;
+          try {
+            payload.plainToken = decryptNotionToken(encResult.value);
+          } catch (error) {
+            return {
+              ok: false,
+              code: "SYSTEM_SETTING_ERROR",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "无法解密本机 Notion Token，请重新保存。",
+              retryable: false,
+            };
+          }
+        }
+      }
+
+      const result = await client.send<NotionReply>(
+        { kind: "notion", payload },
+        { timeoutMs: 30_000 },
+      );
+      if (
+        result.ok &&
+        input.action === "importItems" &&
+        result.value.action === "importItems" &&
+        result.value.importedCount > 0
+      ) {
+        notifyStateChanged(result.revision);
+      }
+      return result;
+    },
+  );
   register("pickup:getDesktopState", noInput, false, () =>
     desktop.getDesktopState(),
   );

@@ -13,6 +13,7 @@ const api: PickupAPI = {
   applyUpdate: (intent) => ipcRenderer.invoke("pickup:applyUpdate", intent),
   openRepository: () => ipcRenderer.invoke("pickup:openRepository"),
   account: (input) => ipcRenderer.invoke("pickup:account", input),
+  notion: (input) => ipcRenderer.invoke("pickup:notion", input),
   pairWithPayload: (payload) =>
     ipcRenderer.invoke("pickup:pairWithPayload", payload),
   enableSync: (input) => ipcRenderer.invoke("pickup:enableSync", input),

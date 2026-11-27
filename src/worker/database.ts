@@ -11,6 +11,7 @@ import {
 import { SCHEMA_VERSION } from "./migrations";
 import { migrateSchema, migrationSource, schemaVersion } from "./migrate";
 import { createQueries } from "./queries";
+import { createNotionService } from "./notion";
 import { SyncClient } from "./sync-client";
 
 type SqliteDatabase = Database.Database;
@@ -138,9 +139,16 @@ export function openStore(
         version: string;
       }
     ).version;
+    const queries = createQueries(db);
+    const commands = createCommands(db, options.faults);
+    const notion = createNotionService(db, {
+      createTask: (input) => commands.createTask(input).value,
+      dailyReview: queries.dailyReview,
+    });
     return {
-      ...createQueries(db),
-      ...createCommands(db, options.faults),
+      ...queries,
+      ...commands,
+      notion,
       sqliteVersion,
       schemaVersion: SCHEMA_VERSION,
       backupPath,
