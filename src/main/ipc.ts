@@ -62,7 +62,7 @@ export function registerIpcHandlers(
   desktop: DesktopHost,
 ): void {
   client.onStateChanged(notifyStateChanged);
-  const updates = createDesktopUpdates();
+  const updates = createDesktopUpdates(desktop);
   register("pickup:checkForUpdate", noInput, false, updates.checkForUpdate);
   register("pickup:applyUpdate", noInput, false, updates.applyUpdate);
   register("pickup:openRepository", noInput, false, updates.openRepository);

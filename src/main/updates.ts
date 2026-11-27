@@ -1,5 +1,7 @@
 import { app, shell } from "electron";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { once } from "node:events";
 import { createWriteStream } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
@@ -13,12 +15,13 @@ import {
   type UpdateOffer,
 } from "../shared/releases";
 import type { Result } from "../shared/contracts";
+import type { DesktopHost } from "./desktop";
 
 function updateError(message: string): Result<never> {
   return { ok: false, code: "SYSTEM_SETTING_ERROR", message, retryable: true };
 }
 
-export function createDesktopUpdates() {
+export function createDesktopUpdates(desktop: Pick<DesktopHost, "quit">) {
   let available: AvailableRelease | null = null;
   let installing = false;
 
@@ -44,6 +47,7 @@ export function createDesktopUpdates() {
       if (installing) return updateError("正在下载更新，请稍候。");
       installing = true;
       let folder: string | undefined;
+      let installerStarted = false;
       try {
         const installer = available?.installer;
         if (!installer) {
@@ -70,17 +74,25 @@ export function createDesktopUpdates() {
           );
           if (hash.digest("hex") !== installer.sha256)
             throw new Error("update-checksum-mismatch");
-          if (await shell.openPath(path))
-            throw new Error("update-installer-failed");
+          const quit = await desktop.quit(async () => {
+            const child = spawn(path, [], {
+              detached: true,
+              stdio: "ignore",
+            });
+            await once(child, "spawn");
+            installerStarted = true;
+            child.unref();
+          });
+          if (!quit.ok) return quit;
         }
         return { ok: true, value: null, revision: 0 };
       } catch {
-        if (folder)
+        return updateError("无法打开或安装更新，请检查网络后重试。");
+      } finally {
+        if (folder && !installerStarted)
           await rm(folder, { recursive: true, force: true }).catch(() => {
             console.error("update-cleanup-failed");
           });
-        return updateError("无法打开或安装更新，请检查网络后重试。");
-      } finally {
         installing = false;
       }
     },
