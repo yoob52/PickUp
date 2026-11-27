@@ -521,7 +521,7 @@ export type CommandOutcome =
 
 export type PickupAPI = {
   checkForUpdate(): Promise<Result<UpdateOffer | null>>;
-  applyUpdate(): Promise<Result<null>>;
+  applyUpdate(intent?: "restart"): Promise<Result<UpdateOffer | null>>;
   openRepository(): Promise<Result<null>>;
   account(input: AccountInput): Promise<Result<AccountReply>>;
   enableSync(input: EnableSyncInput): Promise<Result<SyncStatus>>;

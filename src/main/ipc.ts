@@ -64,7 +64,12 @@ export function registerIpcHandlers(
   client.onStateChanged(notifyStateChanged);
   const updates = createDesktopUpdates(desktop);
   register("pickup:checkForUpdate", noInput, false, updates.checkForUpdate);
-  register("pickup:applyUpdate", noInput, false, updates.applyUpdate);
+  register(
+    "pickup:applyUpdate",
+    z.literal("restart").optional(),
+    false,
+    (_client, intent) => updates.applyUpdate(intent),
+  );
   register("pickup:openRepository", noInput, false, updates.openRepository);
   register("pickup:copyLoginPayload", noInput, false, async (client) => {
     const result = await client.send<AccountReply>({

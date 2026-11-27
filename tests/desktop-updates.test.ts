@@ -30,6 +30,7 @@ vi.mock("electron", () => ({
     isPackaged: true,
     getPath: mocks.getPath,
     getVersion: () => "1.0.0",
+    once: vi.fn(),
     quit: mocks.quit,
   },
   shell: {},
@@ -105,9 +106,20 @@ async function startApplying() {
   const updates = createDesktopUpdates(desktop);
   expect(await updates.checkForUpdate()).toMatchObject({
     ok: true,
-    value: { action: "install" },
+    value: { action: "download" },
   });
-  const done = updates.applyUpdate();
+  expect(await updates.applyUpdate("restart")).toMatchObject({ ok: false });
+  const staged = {
+    ok: true,
+    value: { version: "1.1.0", action: "restart" },
+  };
+  expect(await updates.applyUpdate()).toMatchObject(staged);
+  expect(await updates.checkForUpdate()).toMatchObject(staged);
+  expect(await updates.applyUpdate()).toMatchObject(staged);
+  expect(mocks.contents.send).not.toHaveBeenCalledWith("pickup:prepare-close");
+  expect(mocks.spawn).not.toHaveBeenCalled();
+  expect(mocks.quit).not.toHaveBeenCalled();
+  const done = updates.applyUpdate("restart");
   await vi.waitFor(() =>
     expect(mocks.contents.send).toHaveBeenCalledWith("pickup:prepare-close"),
   );

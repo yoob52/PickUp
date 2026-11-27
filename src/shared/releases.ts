@@ -23,7 +23,7 @@ const releaseSchema = z.object({
 
 export type UpdateOffer = {
   version: string;
-  action: "install" | "release";
+  action: "download" | "restart" | "install" | "release";
 };
 
 type Installer = { url: string; sha256: string };

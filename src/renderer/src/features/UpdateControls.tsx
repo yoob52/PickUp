@@ -4,6 +4,13 @@ import type { UpdateOffer } from "../../../shared/releases";
 import { Button, IconButton } from "../ui/primitives";
 import { useToast } from "../ui/Toast";
 
+const updateLabels: Record<UpdateOffer["action"], [string, string]> = {
+  download: ["下载更新", "正在下载…"],
+  restart: ["重启并安装", "正在启动安装…"],
+  install: ["下载并安装", "正在准备安装…"],
+  release: ["查看发布页", "正在打开…"],
+};
+
 export function useUpdateControls() {
   const notify = useToast();
   const [offer, setOffer] = useState<UpdateOffer | null>(null);
@@ -43,8 +50,12 @@ export function useUpdateControls() {
     busy.current = true;
     setApplying(true);
     try {
-      const result = await window.pickup.applyUpdate();
+      const result =
+        offer.action === "restart"
+          ? await window.pickup.applyUpdate("restart")
+          : await window.pickup.applyUpdate();
       if (!result.ok) notify(result.message, "error");
+      else if (result.value) setOffer(result.value);
       else if (offer.action === "install")
         notify("安装程序已打开，请按提示完成更新。");
     } catch {
@@ -93,27 +104,23 @@ export function useUpdateControls() {
     notice: offer && (
       <div className="update-notice">
         <span role="status">
-          发现新版本 <strong>v{offer.version}</strong>
+          {offer.action === "restart" ? "已下载" : "发现新版本"}{" "}
+          <strong>v{offer.version}</strong>
+          {offer.action === "restart" && "，请先保存修改。"}
         </span>
         <Button
           kind="secondary"
           icon={
-            offer.action === "install" ? (
-              <Download size={15} />
-            ) : (
+            offer.action === "release" ? (
               <ExternalLink size={15} />
+            ) : (
+              <Download size={15} />
             )
           }
           disabled={checking || applying}
           onClick={() => void apply()}
         >
-          {applying
-            ? offer.action === "install"
-              ? "正在准备安装…"
-              : "正在打开…"
-            : offer.action === "install"
-              ? "下载并安装"
-              : "查看发布页"}
+          {updateLabels[offer.action][applying ? 1 : 0]}
         </Button>
       </div>
     ),

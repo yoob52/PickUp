@@ -159,7 +159,8 @@ function createApi(overrides: Partial<PickupAPI> = {}): PickupAPI {
 }
 
 it.each([
-  { host: "desktop", action: "install", label: "下载并安装" },
+  { host: "desktop", action: "download", label: "下载更新" },
+  { host: "mobile", action: "install", label: "下载并安装" },
   { host: "mobile", action: "release", label: "查看发布页" },
 ] as const)(
   "checks for updates on $host startup and supports the top-bar actions",
@@ -169,6 +170,10 @@ it.each([
       .mockResolvedValueOnce(ok({ version: "1.10.0", action }))
       .mockResolvedValue(ok(null));
     const applyUpdate = vi.fn().mockResolvedValue(ok(null));
+    if (action === "download")
+      applyUpdate.mockResolvedValueOnce(
+        ok({ version: "1.10.0", action: "restart" }),
+      );
     const openRepository = vi.fn().mockResolvedValue(ok(null));
     window.pickup = createApi({
       host,
@@ -194,6 +199,16 @@ it.each([
     expect(checkForUpdate).toHaveBeenCalledTimes(1);
     fireEvent.click(button);
     expect(applyUpdate).toHaveBeenCalledTimes(1);
+    if (action === "download") {
+      const restart = await screen.findByRole("button", { name: "重启并安装" });
+      expect(applyUpdate).toHaveBeenLastCalledWith();
+      expect(screen.getByText(/请先保存修改/)).toHaveAttribute(
+        "role",
+        "status",
+      );
+      fireEvent.click(restart);
+      expect(applyUpdate).toHaveBeenLastCalledWith("restart");
+    }
     fireEvent.click(screen.getByRole("button", { name: "打开 GitHub 仓库" }));
     expect(openRepository).toHaveBeenCalledTimes(1);
     await waitFor(() =>
