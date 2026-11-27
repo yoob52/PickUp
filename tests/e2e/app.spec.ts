@@ -18,7 +18,9 @@ declare global {
 
 const EXPECTED_BRIDGE_METHODS = [
   "account",
+  "applyUpdate",
   "cancelTask",
+  "checkForUpdate",
   "clearDraft",
   "completeTask",
   "controlMainWindow",
@@ -47,6 +49,7 @@ const EXPECTED_BRIDGE_METHODS = [
   "onDayInvalidated",
   "onPrepareClose",
   "onStateChanged",
+  "openRepository",
   "pairWithPayload",
   "pauseTask",
   "quit",

@@ -14,6 +14,7 @@ import { formatStamp } from "../lib/format";
 import { Button, IconButton } from "../ui/primitives";
 import { useToast } from "../ui/Toast";
 import type { MainWindowAction } from "../../../shared/contracts";
+import { useUpdateControls } from "./UpdateControls";
 
 type Props = {
   connection: string;
@@ -35,6 +36,7 @@ export function AppShell({
   const notify = useToast();
   const mobile = window.pickup.host === "mobile";
   const mainRef = useRef<HTMLElement>(null);
+  const updates = useUpdateControls();
 
   async function controlWindow(action: MainWindowAction) {
     const result = await window.pickup.controlMainWindow(action);
@@ -44,13 +46,19 @@ export function AppShell({
   if (mobile) {
     return (
       <div className="app-shell mobile-shell">
-        <header className="mobile-header">
-          <img src={logo} alt="" draggable={false} />
-          <span>接着 PickUp</span>
-          <IconButton label="打开同步" onClick={onSync}>
-            <Cloud size={20} />
-          </IconButton>
-        </header>
+        <div>
+          <header className="mobile-header">
+            <img src={logo} alt="" draggable={false} />
+            <span>接着 PickUp</span>
+            <div className="mobile-header-actions">
+              {updates.buttons}
+              <IconButton label="打开同步" onClick={onSync}>
+                <Cloud size={20} />
+              </IconButton>
+            </div>
+          </header>
+          {updates.notice}
+        </div>
         <main className="main" ref={mainRef}>
           {children}
         </main>
@@ -78,48 +86,52 @@ export function AppShell({
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div className="brand-lockup">
-          <img className="brand-mark" src={logo} alt="" draggable={false} />
-          <div>
-            <div className="brand-name">接着 PickUp</div>
-            <div className="brand-meta">记下新事，接回未完的事</div>
+      <div>
+        <header className="topbar">
+          <div className="brand-lockup">
+            <img className="brand-mark" src={logo} alt="" draggable={false} />
+            <div>
+              <div className="brand-name">接着 PickUp</div>
+              <div className="brand-meta">记下新事，接回未完的事</div>
+            </div>
           </div>
-        </div>
-        <div className="topbar-right">
-          <span className="quiet-chip">{connection}</span>
-          <span className="date-stamp">{formatStamp(Date.now())}</span>
-          <Button icon={<Plus size={15} />} onClick={onCapture}>
-            记一件事
-          </Button>
-          <IconButton label="打开设置" onClick={onSettings}>
-            <SlidersHorizontal size={16} />
-          </IconButton>
-        </div>
-        <div className="window-controls" role="group" aria-label="窗口控制">
-          <button
-            type="button"
-            aria-label="最小化"
-            onClick={() => void controlWindow("minimize")}
-          >
-            <Minus size={14} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            aria-label="最大化或还原"
-            onClick={() => void controlWindow("toggleMaximize")}
-          >
-            <Square size={12} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            aria-label="关闭主窗口"
-            onClick={() => void controlWindow("close")}
-          >
-            <X size={16} aria-hidden="true" />
-          </button>
-        </div>
-      </header>
+          <div className="topbar-right">
+            <span className="quiet-chip">{connection}</span>
+            <span className="date-stamp">{formatStamp(Date.now())}</span>
+            <Button icon={<Plus size={15} />} onClick={onCapture}>
+              记一件事
+            </Button>
+            {updates.buttons}
+            <IconButton label="打开设置" onClick={onSettings}>
+              <SlidersHorizontal size={16} />
+            </IconButton>
+          </div>
+          <div className="window-controls" role="group" aria-label="窗口控制">
+            <button
+              type="button"
+              aria-label="最小化"
+              onClick={() => void controlWindow("minimize")}
+            >
+              <Minus size={14} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-label="最大化或还原"
+              onClick={() => void controlWindow("toggleMaximize")}
+            >
+              <Square size={12} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-label="关闭主窗口"
+              onClick={() => void controlWindow("close")}
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+        {updates.notice}
+      </div>
       <div className="layout">
         <aside className="sidebar">
           <div>

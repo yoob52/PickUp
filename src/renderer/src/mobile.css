@@ -20,8 +20,25 @@ html[data-host="mobile"] body {
   font-weight: 650;
 }
 
-[data-host="mobile"] .mobile-header .icon-button {
+[data-host="mobile"] .mobile-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin-left: auto;
+}
+
+[data-host="mobile"] .mobile-header-actions .icon-button {
+  width: 44px;
+  height: 44px;
+}
+
+[data-host="mobile"] .update-notice {
+  padding-inline: max(16px, env(safe-area-inset-left))
+    max(16px, env(safe-area-inset-right));
+}
+
+[data-host="mobile"] .update-notice .btn {
+  min-height: 44px;
 }
 [data-host="mobile"] .mobile-sync-intro {
   display: flex;

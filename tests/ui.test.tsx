@@ -16,6 +16,7 @@ import { SyncSettings } from "../src/renderer/src/features/SyncSettings";
 import { AccountPanel } from "../src/renderer/src/features/AccountPanel";
 import { MobileSyncSheet } from "../src/renderer/src/features/MobileSyncSheet";
 import { CaptureApp } from "../src/renderer/src/views/CaptureApp";
+import { AppShell } from "../src/renderer/src/features/AppShell";
 import { WorkspaceProvider } from "../src/renderer/src/state/workspace";
 import { ToastProvider } from "../src/renderer/src/ui/Toast";
 import type {
@@ -68,6 +69,9 @@ function task(
 
 function createApi(overrides: Partial<PickupAPI> = {}): PickupAPI {
   return {
+    checkForUpdate: vi.fn().mockResolvedValue(ok(null)),
+    applyUpdate: unused,
+    openRepository: unused,
     account: unused,
     enableSync: unused,
     pairWithPayload: unused,
@@ -153,6 +157,61 @@ function createApi(overrides: Partial<PickupAPI> = {}): PickupAPI {
     ...overrides,
   } as PickupAPI;
 }
+
+it.each([
+  { host: "desktop", action: "install", label: "下载并安装" },
+  { host: "mobile", action: "release", label: "查看发布页" },
+] as const)(
+  "checks for updates on $host startup and supports the top-bar actions",
+  async ({ host, action, label }) => {
+    const checkForUpdate = vi
+      .fn()
+      .mockResolvedValueOnce(ok({ version: "1.10.0", action }))
+      .mockResolvedValue(ok(null));
+    const applyUpdate = vi.fn().mockResolvedValue(ok(null));
+    const openRepository = vi.fn().mockResolvedValue(ok(null));
+    window.pickup = createApi({
+      host,
+      checkForUpdate,
+      applyUpdate,
+      openRepository,
+    });
+    render(
+      <ToastProvider>
+        <AppShell
+          connection="本地"
+          onCapture={() => {}}
+          onReview={() => {}}
+          onSettings={() => {}}
+          onSync={() => {}}
+        >
+          工作台
+        </AppShell>
+      </ToastProvider>,
+    );
+    const button = await screen.findByRole("button", { name: label });
+    expect(screen.getByText("v1.10.0")).toBeInTheDocument();
+    expect(checkForUpdate).toHaveBeenCalledTimes(1);
+    fireEvent.click(button);
+    expect(applyUpdate).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "打开 GitHub 仓库" }));
+    expect(openRepository).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "检查更新" })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+    expect(await screen.findByText("当前已是最新版本。")).toBeInTheDocument();
+    expect(screen.queryByText("v1.10.0")).not.toBeInTheDocument();
+    if (host === "mobile") {
+      expect(
+        screen.queryByRole("group", { name: "窗口控制" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("navigation", { name: "主导航" }),
+      ).not.toBeInTheDocument();
+    }
+  },
+);
 
 function renderCapture() {
   return render(

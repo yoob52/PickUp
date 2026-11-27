@@ -161,7 +161,7 @@ html[data-window="main"] #root {
 .app-shell {
   height: 100dvh;
   display: grid;
-  grid-template-rows: 72px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -276,6 +276,30 @@ html[data-window="main"] #root {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.update-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 8px 24px;
+  color: var(--cyan);
+  background: var(--cyan-soft);
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.update-notice strong {
+  margin-inline-start: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.update-notice .btn {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 13px;
 }
 
 .date-stamp {

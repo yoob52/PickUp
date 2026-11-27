@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { EnableSyncInput, SyncStatus } from "./sync-contracts";
 import type { AccountInput, AccountReply } from "./account-contracts";
 import { TASK_STATUSES, type StatusCounts, type TaskStatus } from "./task";
+import type { UpdateOffer } from "./releases";
 
 /* ------------------------------------------------------------------ 通用 */
 
@@ -519,6 +520,9 @@ export type CommandOutcome =
 /* --------------------------------------------------------------- 渲染进程 API */
 
 export type PickupAPI = {
+  checkForUpdate(): Promise<Result<UpdateOffer | null>>;
+  applyUpdate(): Promise<Result<null>>;
+  openRepository(): Promise<Result<null>>;
   account(input: AccountInput): Promise<Result<AccountReply>>;
   enableSync(input: EnableSyncInput): Promise<Result<SyncStatus>>;
   pairWithPayload(payload: string): Promise<Result<SyncStatus>>;
