@@ -651,7 +651,7 @@ export class NotionApiClient {
     }
 
     for (const [key, value] of entries) {
-      if (value?.type === "select") {
+      if (value?.type === "select" && isCompletionPropName(key)) {
         const optionName = resolveSelectDoneOption(dbProps?.[key]);
         if (optionName) {
           await this.request(
@@ -666,6 +666,12 @@ export class NotionApiClient {
     }
     return false;
   }
+}
+
+function isCanceledOptionName(name: string): boolean {
+  return /^(cancel|cancelled|canceled|won't do|wont do|dropped|archived|取消|已取消|放弃)$/i.test(
+    name.trim(),
+  );
 }
 
 function resolveStatusDoneOption(
@@ -690,7 +696,10 @@ function resolveStatusDoneOption(
       (opt) => typeof opt.name === "string" && isDoneOptionName(opt.name),
     );
     if (named?.name) return named.name;
-    if (groupOptions[0]?.name) return groupOptions[0].name;
+    const nonCanceled = groupOptions.find(
+      (opt) => typeof opt.name === "string" && !isCanceledOptionName(opt.name),
+    );
+    if (nonCanceled?.name) return nonCanceled.name;
   }
   const byName = options.find(
     (opt) => typeof opt.name === "string" && isDoneOptionName(opt.name),
