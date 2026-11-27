@@ -96,28 +96,37 @@ export function NotionImportModal({
     setImporting(true);
     setError("");
     try {
-      const res = await window.pickup.notion({
-        action: "importItems",
-        items: chosen.map((item) => ({
-          externalId: item.externalId,
-          externalType: item.externalType,
-          title: item.title,
-          sourceTitle: item.sourceTitle,
-          externalUrl: item.externalUrl,
-          dueDate: item.dueDate,
-        })),
-      });
-      if (!res.ok || res.value.action !== "importItems") {
-        const msg = !res.ok ? res.message : "导入失败，请稍后重试。";
-        setError(msg);
-        onNotice(msg, "error");
-        return;
+      const payloadItems = chosen.map((item) => ({
+        externalId: item.externalId,
+        externalType: item.externalType,
+        title: item.title,
+        sourceTitle: item.sourceTitle,
+        externalUrl: item.externalUrl,
+        dueDate: item.dueDate,
+      }));
+      let totalImported = 0;
+      let totalSkipped = 0;
+      for (let i = 0; i < payloadItems.length; i += 50) {
+        const batch = payloadItems.slice(i, i + 50);
+        const res = await window.pickup.notion({
+          action: "importItems",
+          items: batch,
+        });
+        if (!res.ok || res.value.action !== "importItems") {
+          if (totalImported > 0) await onImported();
+          const msg = !res.ok ? res.message : "导入失败，请稍后重试。";
+          setError(msg);
+          onNotice(msg, "error");
+          return;
+        }
+        totalImported += res.value.importedCount;
+        totalSkipped += res.value.skippedCount;
       }
       await onImported();
       onNotice(
-        res.value.skippedCount > 0
-          ? `已导入 ${res.value.importedCount} 项，跳过 ${res.value.skippedCount} 项重复记录。`
-          : `已从 Notion 导入 ${res.value.importedCount} 项到待处理。`,
+        totalSkipped > 0
+          ? `已导入 ${totalImported} 项，跳过 ${totalSkipped} 项重复记录。`
+          : `已从 Notion 导入 ${totalImported} 项到待处理。`,
       );
       onClose();
     } finally {
