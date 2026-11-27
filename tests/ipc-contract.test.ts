@@ -16,7 +16,7 @@ vi.mock("electron", () => ({
   app: { isPackaged: false },
   clipboard: { writeText: mocks.writeText },
   safeStorage: {
-    isEncryptionAvailable: () => false,
+    isEncryptionAvailable: () => true,
     encryptString: (v: string) => Buffer.from(v, "utf8"),
     decryptString: (b: Buffer) => b.toString("utf8"),
   },
