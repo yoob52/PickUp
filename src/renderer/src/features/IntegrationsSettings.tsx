@@ -213,11 +213,15 @@ export function IntegrationsSettings({ onNotice, onEnabledChange }: Props) {
       }
       const next = res.value.config;
       setObsidian(next);
-      setVaultPathDraft(next.vaultPath);
-      setDailyFolderDraft(next.dailyFolder);
-      setDailyFormatDraft(next.dailyFilenameFormat || "YYYY-MM-DD");
-      setTodoSourceDraft(next.todoSourcePath);
-      setTodoTagDraft(next.todoTag);
+      if (patch.vaultPath !== undefined) setVaultPathDraft(next.vaultPath);
+      if (patch.dailyFolder !== undefined)
+        setDailyFolderDraft(next.dailyFolder);
+      if (patch.dailyFilenameFormat !== undefined) {
+        setDailyFormatDraft(next.dailyFilenameFormat || "YYYY-MM-DD");
+      }
+      if (patch.todoSourcePath !== undefined)
+        setTodoSourceDraft(next.todoSourcePath);
+      if (patch.todoTag !== undefined) setTodoTagDraft(next.todoTag);
       emitEnabled(notion, next);
       onNotice(successMsg);
     } finally {
