@@ -361,15 +361,15 @@ export function parseMarkdownTodos(
     const state = anyCheckbox[1]!;
     const rawBody = anyCheckbox[2]!.trim();
     if (!rawBody) continue;
-    const lineHash = hashTodoTitle(rawBody);
-    const occurrence = (seenCounts.get(lineHash) ?? 0) + 1;
-    seenCounts.set(lineHash, occurrence);
-    if (state !== " ") continue;
-    if (!matchesTag(rawBody, tagFilter)) continue;
     const title = cleanTodoTitle(rawBody);
     if (!title) continue;
+    const titleHash = hashTodoTitle(title);
+    const occurrence = (seenCounts.get(titleHash) ?? 0) + 1;
+    seenCounts.set(titleHash, occurrence);
+    if (state !== " ") continue;
+    if (!matchesTag(rawBody, tagFilter)) continue;
     const idPrefix = vaultKey ? `${vaultKey}::${relPosixPath}` : relPosixPath;
-    const externalId = `${idPrefix}::${lineHash}#${occurrence}`;
+    const externalId = `${idPrefix}::${titleHash}#${occurrence}`;
     candidates.push({
       externalId,
       title,
@@ -953,11 +953,11 @@ export function createObsidianService(
           const match = line.match(/^(\s*[-*+]\s+\[)([ xX])(\]\s+)(.+)$/);
           if (!match) continue;
           const rawBody = match[4]!.trim();
-          const lineHash = hashTodoTitle(rawBody);
-          const legacyTitleHash = hashTodoTitle(cleanTodoTitle(rawBody));
+          const titleHash = hashTodoTitle(cleanTodoTitle(rawBody));
+          const rawBodyHash = hashTodoTitle(rawBody);
           if (
-            lineHash === parsedId.expectedHash ||
-            legacyTitleHash === parsedId.expectedHash
+            titleHash === parsedId.expectedHash ||
+            rawBodyHash === parsedId.expectedHash
           ) {
             seen += 1;
             if (seen === parsedId.occurrence) {
