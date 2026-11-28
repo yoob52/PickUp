@@ -46,6 +46,7 @@ const EXPECTED_BRIDGE_METHODS = [
   "markWaiting",
   "moveWidget",
   "notion",
+  "obsidian",
   "onCaptureShown",
   "onDayInvalidated",
   "onPrepareClose",

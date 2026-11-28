@@ -1,5 +1,11 @@
 # PickUp 验证记录
 
+## 2026-11-28 · 1.2.0 发版准备
+
+- [#30](https://github.com/yoob52/PickUp/pull/30) 将桌面 Notion、Obsidian 集成改为按需启用；未启用时不显示额外的导入和今日收尾入口。Obsidian 支持从用户选择的本机 Vault 导入 Markdown 待办、写入每日笔记，并可选回写完成状态。
+- 根包及锁文件版本为 `1.2.0`；Android 和 iOS 发布配置从根包派生版本号 `1.2.0` 和构建号 `10200`。
+- `npm run check` 覆盖集成开关和桌面桥接，以及使用临时 Vault 验证导入去重、重复导出保留手写内容、完成回写和路径边界。本轮未重新打包或实测正式安装、升级，也未连接真实 Notion 工作区。
+
 ## 2026-11-27 · 1.1.0 发版准备
 
 - 合并 [#26](https://github.com/yoob52/PickUp/pull/26) 的应用内更新和 GitHub 仓库入口，以及 [#27](https://github.com/yoob52/PickUp/pull/27) 的桌面 Notion 集成（任务导入、完成状态回写、每日收尾导出）。Windows 下载并校验更新后，须手动点击「重启并安装」；Android 将已校验的 APK 交给系统安装器，免费签名的 iOS 仅提示并打开发布页。
