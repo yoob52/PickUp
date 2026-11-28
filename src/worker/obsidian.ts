@@ -609,17 +609,28 @@ export function createObsidianService(
               : 0
             : current.auto_writeback;
 
-        // Validate daily folder & filename format before persisting so Daily Review never silently hides export
-        const previewDailyRel = buildDailyRelativePath(
-          nextDailyFolder,
-          nextDailyFormat,
-          "2026-01-01",
-        );
-        if (nextVault) {
-          const vaultReal = assertVaultDir(nextVault);
-          resolveInsideVault(vaultReal, previewDailyRel);
-          if (nextTodoSource) {
-            resolveInsideVault(vaultReal, nextTodoSource);
+        // Validate daily folder & filename format when path/format fields are edited,
+        // without blocking enable/disable toggles if a previously saved Vault was moved.
+        const editingPathOrFormat =
+          input.vaultPath !== undefined ||
+          input.dailyFolder !== undefined ||
+          input.dailyFilenameFormat !== undefined ||
+          input.todoSourcePath !== undefined;
+        if (editingPathOrFormat) {
+          const previewDailyRel = buildDailyRelativePath(
+            nextDailyFolder,
+            nextDailyFormat,
+            "2026-01-01",
+          );
+          if (
+            nextVault &&
+            (input.vaultPath !== undefined || fs.existsSync(nextVault))
+          ) {
+            const vaultReal = assertVaultDir(nextVault);
+            resolveInsideVault(vaultReal, previewDailyRel);
+            if (nextTodoSource) {
+              resolveInsideVault(vaultReal, nextTodoSource);
+            }
           }
         }
 
