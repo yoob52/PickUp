@@ -339,4 +339,147 @@ describe("createObsidianService (SQLite + Vault filesystem)", () => {
       close();
     }
   });
+
+  it("handles symlink daily dirs, file permissions, vault switching, duplicate titles, nested fences, and invalid formats", async () => {
+    // 1. Nested 4-backtick fence containing 3-backtick inner lines & duplicate titles with different due dates
+    const md = [
+      "````markdown",
+      "```",
+      "- [ ] 嵌套代码块里的示例任务",
+      "```",
+      "````",
+      "- [ ] 重复标题 📅 2026-11-29",
+      "- [ ] 重复标题 📅 2026-11-30",
+      "- [ ] 完全相同",
+      "- [ ] 完全相同",
+    ].join("\n");
+    const parsed = parseMarkdownTodos(
+      md,
+      "notes.md",
+      "V",
+      "",
+      new Set(),
+      "vaultA",
+    );
+    expect(parsed).toHaveLength(4);
+    expect(new Set(parsed.map((p) => p.externalId)).size).toBe(4);
+
+    // 2. Symlink daily dir must not create subdirectories outside Vault & 0600 permissions preserved
+    const { db, close } = openTestDb();
+    try {
+      const vaultA = makeTempDir("pickup-vault-a-");
+      const vaultB = makeTempDir("pickup-vault-b-");
+      const outside = makeTempDir("pickup-outside-daily-");
+      fs.symlinkSync(outside, path.join(vaultA, "DailyLink"));
+      const noteA = path.join(vaultA, "same.md");
+      const noteB = path.join(vaultB, "same.md");
+      fs.writeFileSync(noteA, "- [ ] 跨库防误改\n", {
+        encoding: "utf8",
+        mode: 0o600,
+      });
+      fs.writeFileSync(noteB, "- [ ] 跨库防误改\n", "utf8");
+
+      const commands = createCommands(db);
+      const queries = createQueries(db);
+      const service = createObsidianService(db, {
+        createTask: (input) => commands.createTask(input).value,
+        dailyReview: queries.dailyReview,
+      });
+
+      // Invalid filename format rejected at saveConfig time
+      await expect(
+        service.handle({
+          input: {
+            action: "saveConfig",
+            vaultPath: vaultA,
+            dailyFilenameFormat: "YYYY/MM/YYYY-MM-DD",
+          },
+        }),
+      ).rejects.toThrow(/路径分隔符/);
+
+      // Symlinked daily folder must not create directories outside vault
+      await service.handle({
+        input: {
+          action: "saveConfig",
+          enabled: true,
+          vaultPath: vaultA,
+          dailyFolder: "DailyLink/nested-should-not-exist",
+          dailyFilenameFormat: "YYYY-MM-DD",
+          autoWriteback: true,
+        },
+      });
+      await expect(
+        service.handle({
+          input: { action: "exportDailyReview", includeBreakpoints: false },
+          dayRange: {
+            dayKey: "2026-11-28",
+            startUtc: 0,
+            endUtc: Date.now() + 60_000,
+          },
+        }),
+      ).rejects.toThrow(/符号链接/);
+      expect(fs.existsSync(path.join(outside, "nested-should-not-exist"))).toBe(
+        false,
+      );
+
+      // Import from vaultA, verify 0600 preserved on write-back, and switching to vaultB skips cross-vault write-back
+      await service.handle({
+        input: {
+          action: "saveConfig",
+          dailyFolder: "Daily",
+        },
+      });
+      const fetched = await service.handle({
+        input: { action: "fetchImportItems" },
+      });
+      expect(fetched.action).toBe("fetchImportItems");
+      if (fetched.action !== "fetchImportItems") return;
+      const imp = await service.handle({
+        input: {
+          action: "importItems",
+          items: [
+            {
+              externalId: fetched.items[0].externalId,
+              title: fetched.items[0].title,
+              filePath: fetched.items[0].filePath,
+              sourceTitle: fetched.items[0].sourceTitle,
+              externalUrl: fetched.items[0].externalUrl,
+              dueDate: fetched.items[0].dueDate,
+            },
+          ],
+        },
+      });
+      expect(imp.action).toBe("importItems");
+      if (imp.action !== "importItems") return;
+      const taskId = imp.taskIds[0]!;
+
+      // Switch to vaultB -> write-back must NOT touch noteB
+      await service.handle({
+        input: { action: "saveConfig", vaultPath: vaultB },
+      });
+      const wbCross = await service.handle({
+        input: { action: "writeBackTask", taskId },
+      });
+      expect(wbCross).toMatchObject({
+        action: "writeBackTask",
+        synced: false,
+      });
+      expect(fs.readFileSync(noteB, "utf8")).toContain("- [ ] 跨库防误改");
+
+      // Switch back to vaultA -> write-back checks noteA and preserves 0600 mode
+      await service.handle({
+        input: { action: "saveConfig", vaultPath: vaultA },
+      });
+      const wbSame = await service.handle({
+        input: { action: "writeBackTask", taskId },
+      });
+      expect(wbSame).toEqual({ action: "writeBackTask", synced: true });
+      expect(fs.readFileSync(noteA, "utf8")).toContain("- [x] 跨库防误改");
+      if (process.platform !== "win32") {
+        expect(fs.statSync(noteA).mode & 0o777).toBe(0o600);
+      }
+    } finally {
+      close();
+    }
+  });
 });
