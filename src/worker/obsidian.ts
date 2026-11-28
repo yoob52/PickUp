@@ -710,6 +710,7 @@ export function createObsidianService(
             continue;
           }
           const relPosix = toPosix(path.relative(vaultReal, file));
+          if (relPosix.length > 512) continue;
           const parsed = parseMarkdownTodos(
             content,
             relPosix,

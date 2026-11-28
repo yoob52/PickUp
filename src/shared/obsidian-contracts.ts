@@ -37,7 +37,7 @@ const formatStr = z.string().trim().min(1).max(64);
 
 export const obsidianImportItemSchema = z
   .object({
-    externalId: z.string().trim().min(1).max(256),
+    externalId: z.string().trim().min(1).max(600),
     title: z.string().trim().min(1).max(300),
     filePath: relPathStr,
     sourceTitle: z.string().trim().max(300).default(""),
