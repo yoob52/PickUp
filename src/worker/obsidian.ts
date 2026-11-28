@@ -275,34 +275,101 @@ function collectMarkdownFiles(
   return files;
 }
 
+type CodeFence = { char: "`" | "~"; length: number };
+
+function updateFenceState(
+  line: string,
+  active: CodeFence | null,
+): { active: CodeFence | null; isFenceLine: boolean } {
+  if (active === null) {
+    const open = line.match(/^\s*(`{3,}|~{3,})(.*)$/);
+    if (!open) return { active: null, isFenceLine: false };
+    const marker = open[1]!;
+    const rest = open[2] ?? "";
+    const char = marker[0] as "`" | "~";
+    if (char === "`" && rest.includes("`")) {
+      return { active: null, isFenceLine: false };
+    }
+    return { active: { char, length: marker.length }, isFenceLine: true };
+  }
+  const close = line.match(/^\s*(`{3,}|~{3,})\s*$/);
+  if (
+    close &&
+    close[1]![0] === active.char &&
+    close[1]!.length >= active.length
+  ) {
+    return { active: null, isFenceLine: true };
+  }
+  return { active, isFenceLine: false };
+}
+
+export function vaultFingerprint(vaultReal: string): string {
+  return createHash("sha1").update(vaultReal).digest("hex").slice(0, 12);
+}
+
+function parseObsidianExternalId(externalId: string): {
+  vaultKey: string | null;
+  relPosixPath: string;
+  expectedHash: string;
+  occurrence: number;
+} | null {
+  const lastSep = externalId.lastIndexOf("::");
+  if (lastSep <= 0) return null;
+  const hashSpec = externalId.slice(lastSep + 2);
+  const prefix = externalId.slice(0, lastSep);
+  if (!hashSpec || !prefix) return null;
+
+  let vaultKey: string | null = null;
+  let relPosixPath = prefix;
+  const firstSep = prefix.indexOf("::");
+  if (firstSep > 0) {
+    vaultKey = prefix.slice(0, firstSep);
+    relPosixPath = prefix.slice(firstSep + 2);
+  }
+  if (!relPosixPath) return null;
+
+  const occIdx = hashSpec.lastIndexOf("#");
+  const expectedHash = occIdx > 0 ? hashSpec.slice(0, occIdx) : hashSpec;
+  const parsedOcc = occIdx > 0 ? Number(hashSpec.slice(occIdx + 1)) : 1;
+  const occurrence =
+    Number.isInteger(parsedOcc) && parsedOcc >= 1 ? parsedOcc : 1;
+  return { vaultKey, relPosixPath, expectedHash, occurrence };
+}
+
 export function parseMarkdownTodos(
   content: string,
   relPosixPath: string,
   vaultName: string,
   tagFilter: string,
   importedIds: Set<string>,
+  vaultKey = "",
 ): ObsidianImportCandidate[] {
   const candidates: ObsidianImportCandidate[] = [];
   const lines = content.split(/\r?\n/);
   const sourceTitle = path.posix.basename(relPosixPath, ".md");
   const url = buildObsidianUrl(vaultName, relPosixPath);
-  let inCodeFence = false;
+  const seenCounts = new Map<string, number>();
+  let fence: CodeFence | null = null;
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i]!;
-    if (/^\s*(`{3,}|~{3,})/.test(line)) {
-      inCodeFence = !inCodeFence;
-      continue;
-    }
-    if (inCodeFence) continue;
-    const match = line.match(/^\s*[-*+]\s+\[\s\]\s+(.+)$/);
-    if (!match) continue;
-    const rawBody = match[1]!.trim();
+    const fenceStep = updateFenceState(line, fence);
+    fence = fenceStep.active;
+    if (fenceStep.isFenceLine || fence !== null) continue;
+    const anyCheckbox = line.match(/^\s*[-*+]\s+\[([ xX])\]\s+(.+)$/);
+    if (!anyCheckbox) continue;
+    const state = anyCheckbox[1]!;
+    const rawBody = anyCheckbox[2]!.trim();
     if (!rawBody) continue;
+    const lineHash = hashTodoTitle(rawBody);
+    const occurrence = (seenCounts.get(lineHash) ?? 0) + 1;
+    seenCounts.set(lineHash, occurrence);
+    if (state !== " ") continue;
     if (!matchesTag(rawBody, tagFilter)) continue;
     const title = cleanTodoTitle(rawBody);
     if (!title) continue;
-    const externalId = `${relPosixPath}::${hashTodoTitle(title)}`;
+    const idPrefix = vaultKey ? `${vaultKey}::${relPosixPath}` : relPosixPath;
+    const externalId = `${idPrefix}::${lineHash}#${occurrence}`;
     candidates.push({
       externalId,
       title,
@@ -598,9 +665,11 @@ export function createObsidianService(
         }
         const files = collectMarkdownFiles(vaultReal, target, MAX_SCAN_FILES);
         const importedIds = listImportedObsidianIds(db);
-        const items: ObsidianImportCandidate[] = [];
+        const vaultKey = vaultFingerprint(vaultReal);
+        const unimported: ObsidianImportCandidate[] = [];
+        const imported: ObsidianImportCandidate[] = [];
         for (const file of files) {
-          if (items.length >= MAX_SCAN_CANDIDATES) break;
+          if (unimported.length >= MAX_SCAN_CANDIDATES) break;
           let stat: fs.Stats;
           try {
             stat = fs.statSync(file);
@@ -621,12 +690,25 @@ export function createObsidianService(
             vaultName,
             tagFilter,
             importedIds,
+            vaultKey,
           );
           for (const candidate of parsed) {
-            if (items.length >= MAX_SCAN_CANDIDATES) break;
-            items.push(candidate);
+            if (candidate.alreadyImported) {
+              if (imported.length < MAX_SCAN_CANDIDATES) {
+                imported.push(candidate);
+              }
+            } else if (unimported.length < MAX_SCAN_CANDIDATES) {
+              unimported.push(candidate);
+            }
           }
         }
+        const items = [
+          ...unimported,
+          ...imported.slice(
+            0,
+            Math.max(0, MAX_SCAN_CANDIDATES - unimported.length),
+          ),
+        ];
         return {
           action: "fetchImportItems",
           items,
@@ -804,18 +886,26 @@ export function createObsidianService(
             skippedReason: "该任务未关联 Obsidian 条目。",
           };
         }
-        const sepIdx = link.external_id.lastIndexOf("::");
-        if (sepIdx <= 0) {
+        const parsedId = parseObsidianExternalId(link.external_id);
+        if (!parsedId) {
           return {
             action: "writeBackTask",
             synced: false,
             skippedReason: "无法解析 Obsidian 外部标识。",
           };
         }
-        const relPosixPath = link.external_id.slice(0, sepIdx);
-        const expectedHash = link.external_id.slice(sepIdx + 2);
         const vaultReal = assertVaultDir(config.vault_path);
-        const fullPath = resolveInsideVault(vaultReal, relPosixPath);
+        if (
+          parsedId.vaultKey &&
+          parsedId.vaultKey !== vaultFingerprint(vaultReal)
+        ) {
+          return {
+            action: "writeBackTask",
+            synced: false,
+            skippedReason: "该任务来自其他 Obsidian Vault，已跳过回写。",
+          };
+        }
+        const fullPath = resolveInsideVault(vaultReal, parsedId.relPosixPath);
         if (!fs.existsSync(fullPath)) {
           return {
             action: "writeBackTask",
@@ -827,21 +917,30 @@ export function createObsidianService(
         const eol = raw.includes("\r\n") ? "\r\n" : "\n";
         const lines = raw.split(/\r?\n/);
         let changed = false;
-        let inCodeFence = false;
+        let fence: CodeFence | null = null;
+        let seen = 0;
         for (let i = 0; i < lines.length; i += 1) {
           const line = lines[i]!;
-          if (/^\s*(`{3,}|~{3,})/.test(line)) {
-            inCodeFence = !inCodeFence;
-            continue;
-          }
-          if (inCodeFence) continue;
-          const match = line.match(/^(\s*[-*+]\s+\[)\s(\]\s+)(.+)$/);
+          const fenceStep = updateFenceState(line, fence);
+          fence = fenceStep.active;
+          if (fenceStep.isFenceLine || fence !== null) continue;
+          const match = line.match(/^(\s*[-*+]\s+\[)([ xX])(\]\s+)(.+)$/);
           if (!match) continue;
-          const title = cleanTodoTitle(match[3]!);
-          if (hashTodoTitle(title) === expectedHash) {
-            lines[i] = `${match[1]}x${match[2]}${match[3]}`;
-            changed = true;
-            break;
+          const rawBody = match[4]!.trim();
+          const lineHash = hashTodoTitle(rawBody);
+          const legacyTitleHash = hashTodoTitle(cleanTodoTitle(rawBody));
+          if (
+            lineHash === parsedId.expectedHash ||
+            legacyTitleHash === parsedId.expectedHash
+          ) {
+            seen += 1;
+            if (seen === parsedId.occurrence) {
+              if (match[2] === " ") {
+                lines[i] = `${match[1]}x${match[3]}${match[4]}`;
+                changed = true;
+              }
+              break;
+            }
           }
         }
         if (!changed) {
