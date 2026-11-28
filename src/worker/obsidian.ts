@@ -584,9 +584,6 @@ export function createObsidianService(
       case "saveConfig": {
         const current = readConfigRow(db);
         const now = Date.now();
-        if (input.enabled !== undefined) {
-          writeEnabled(db, input.enabled, now);
-        }
         const nextVault =
           input.vaultPath !== undefined
             ? input.vaultPath.trim()
@@ -611,6 +608,24 @@ export function createObsidianService(
               ? 1
               : 0
             : current.auto_writeback;
+
+        // Validate daily folder & filename format before persisting so Daily Review never silently hides export
+        const previewDailyRel = buildDailyRelativePath(
+          nextDailyFolder,
+          nextDailyFormat,
+          "2026-01-01",
+        );
+        if (nextVault) {
+          const vaultReal = assertVaultDir(nextVault);
+          resolveInsideVault(vaultReal, previewDailyRel);
+          if (nextTodoSource) {
+            resolveInsideVault(vaultReal, nextTodoSource);
+          }
+        }
+
+        if (input.enabled !== undefined) {
+          writeEnabled(db, input.enabled, now);
+        }
 
         db.prepare(
           `UPDATE obsidian_config SET
