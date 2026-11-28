@@ -385,13 +385,53 @@ export function mergeDailyMarkdownContent(
   return { content: next, updated: true };
 }
 
+function ensureSafeDirInsideVault(vaultReal: string, dirPath: string): void {
+  const rel = path.relative(vaultReal, dirPath);
+  if (rel === "") return;
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw DomainError.validation(
+      "日报目录超出 Obsidian Vault 范围，已拒绝写入。",
+    );
+  }
+  const segments = rel.split(path.sep).filter(Boolean);
+  let cursor = vaultReal;
+  for (const segment of segments) {
+    const next = path.join(cursor, segment);
+    if (fs.existsSync(next)) {
+      const realNext = fs.realpathSync(next);
+      if (!isInsideRoot(vaultReal, realNext)) {
+        throw DomainError.validation(
+          "日报目录包含指向 Vault 外部的符号链接，已拒绝写入。",
+        );
+      }
+      if (!fs.statSync(realNext).isDirectory()) {
+        throw DomainError.validation("日报路径中的父级目标不是文件夹。");
+      }
+      cursor = realNext;
+    } else {
+      fs.mkdirSync(next);
+      cursor = next;
+    }
+  }
+}
+
 function writeFileAtomic(filePath: string, content: string): void {
   const dir = path.dirname(filePath);
+  let existingMode: number | null = null;
+  if (fs.existsSync(filePath)) {
+    existingMode = fs.statSync(filePath).mode & 0o777;
+  }
   const tmpPath = path.join(
     dir,
     `.pickup-tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.md`,
   );
-  fs.writeFileSync(tmpPath, content, "utf8");
+  fs.writeFileSync(tmpPath, content, {
+    encoding: "utf8",
+    mode: existingMode ?? 0o600,
+  });
+  if (existingMode !== null && process.platform !== "win32") {
+    fs.chmodSync(tmpPath, existingMode);
+  }
   try {
     fs.renameSync(tmpPath, filePath);
   } catch (error) {
@@ -643,13 +683,7 @@ export function createObsidianService(
           );
           const fullPath = resolveInsideVault(vaultReal, relPath);
           const parentDir = path.dirname(fullPath);
-          fs.mkdirSync(parentDir, { recursive: true });
-          const realParent = fs.realpathSync(parentDir);
-          if (!isInsideRoot(vaultReal, realParent)) {
-            throw DomainError.validation(
-              "日报目录超出 Obsidian Vault 范围，已拒绝写入。",
-            );
-          }
+          ensureSafeDirInsideVault(vaultReal, parentDir);
 
           const firstReview = deps.dailyReview({
             dayKey: dayRange.dayKey,
