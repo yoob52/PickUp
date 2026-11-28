@@ -14,6 +14,7 @@ const api: PickupAPI = {
   openRepository: () => ipcRenderer.invoke("pickup:openRepository"),
   account: (input) => ipcRenderer.invoke("pickup:account", input),
   notion: (input) => ipcRenderer.invoke("pickup:notion", input),
+  obsidian: (input) => ipcRenderer.invoke("pickup:obsidian", input),
   pairWithPayload: (payload) =>
     ipcRenderer.invoke("pickup:pairWithPayload", payload),
   enableSync: (input) => ipcRenderer.invoke("pickup:enableSync", input),

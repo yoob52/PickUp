@@ -9,7 +9,8 @@ import { AppShell } from "../features/AppShell";
 import { CaptureApp } from "./CaptureApp";
 import { CurrentCard } from "../features/CurrentCard";
 import { DailyReviewDialog } from "../features/DailyReview";
-import { NotionImportModal } from "../features/NotionImportModal";
+import { IntegrationImportModal } from "../features/IntegrationImportModal";
+import type { IntegrationsEnabledState } from "../features/IntegrationsSettings";
 import { ResumePanel } from "../features/ResumePanel";
 import { SettingsDialog } from "../features/SettingsDialog";
 import { MobileSyncSheet } from "../features/MobileSyncSheet";
@@ -32,7 +33,7 @@ type Overlay =
   | { type: "detail"; taskId: string }
   | { type: "wait"; task: TaskSummary }
   | { type: "settings" }
-  | { type: "notionImport" }
+  | { type: "import" }
   | { type: "sync" }
   | { type: "capture" };
 
@@ -50,7 +51,11 @@ export function MainApp() {
   const [endedLoading, setEndedLoading] = useState(false);
   const [resumeHighlight, setResumeHighlight] = useState(false);
   const [savedUnsynced, setSavedUnsynced] = useState(false);
-  const [notionConnected, setNotionConnected] = useState(false);
+  const [integrationsEnabled, setIntegrationsEnabled] =
+    useState<IntegrationsEnabledState>({
+      notion: false,
+      obsidian: false,
+    });
   const reopenAction = useReopenAction((refreshed) =>
     setSavedUnsynced(!refreshed),
   );
@@ -75,10 +80,20 @@ export function MainApp() {
 
   useEffect(() => {
     if (window.pickup.host !== "desktop") return;
-    void window.pickup.notion({ action: "getConfig" }).then((res) => {
-      if (res.ok && res.value.action === "getConfig") {
-        setNotionConnected(res.value.config.connected);
-      }
+    void Promise.all([
+      window.pickup.notion({ action: "getConfig" }),
+      window.pickup.obsidian({ action: "getConfig" }),
+    ]).then(([notionRes, obsidianRes]) => {
+      setIntegrationsEnabled({
+        notion:
+          notionRes.ok && notionRes.value.action === "getConfig"
+            ? notionRes.value.config.enabled
+            : false,
+        obsidian:
+          obsidianRes.ok && obsidianRes.value.action === "getConfig"
+            ? obsidianRes.value.config.enabled
+            : false,
+      });
     });
   }, []);
 
@@ -221,6 +236,19 @@ export function MainApp() {
             notify("已同步勾选 Notion 对应事项。");
           }
         });
+    } else if (
+      window.pickup.host === "desktop" &&
+      task.externalLink?.provider === "obsidian"
+    ) {
+      void window.pickup
+        .obsidian({ action: "writeBackTask", taskId: task.id })
+        .then((wb) => {
+          if (!wb.ok) {
+            notify(`Obsidian 完成回写失败：${wb.message}`, "error");
+          } else if (wb.value.action === "writeBackTask" && wb.value.synced) {
+            notify("已同步勾选 Obsidian 对应待办。");
+          }
+        });
     }
   }
 
@@ -270,12 +298,12 @@ export function MainApp() {
       onReview={() => setReviewOpen(true)}
       onSettings={() => setOverlay({ type: "settings" })}
       onSync={() => setOverlay({ type: "sync" })}
-      onNotionImport={
-        window.pickup.host === "desktop"
-          ? () => setOverlay({ type: "notionImport" })
+      onImport={
+        window.pickup.host === "desktop" &&
+        (integrationsEnabled.notion || integrationsEnabled.obsidian)
+          ? () => setOverlay({ type: "import" })
           : undefined
       }
-      notionConnected={notionConnected}
     >
       {notice ? (
         <NoticeBar
@@ -453,8 +481,12 @@ export function MainApp() {
       {overlay?.type === "capture" ? (
         <CaptureApp onClose={() => setOverlay(null)} />
       ) : null}
-      {overlay?.type === "notionImport" && window.pickup.host === "desktop" ? (
-        <NotionImportModal
+      {overlay?.type === "import" &&
+      window.pickup.host === "desktop" &&
+      (integrationsEnabled.notion || integrationsEnabled.obsidian) ? (
+        <IntegrationImportModal
+          notionEnabled={integrationsEnabled.notion}
+          obsidianEnabled={integrationsEnabled.obsidian}
           onClose={() => setOverlay(null)}
           onOpenSettings={() => setOverlay({ type: "settings" })}
           onImported={refresh}
@@ -465,9 +497,7 @@ export function MainApp() {
         <SettingsDialog
           onClose={() => setOverlay(null)}
           onNotice={notify}
-          onNotionConfigChange={(config) =>
-            setNotionConnected(config.connected)
-          }
+          onIntegrationsChange={setIntegrationsEnabled}
         />
       ) : null}
       {overlay?.type === "sync" && window.pickup.host === "mobile" ? (

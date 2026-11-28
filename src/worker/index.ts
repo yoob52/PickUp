@@ -95,6 +95,17 @@ function start(): void {
           };
           break;
         }
+        case "obsidian": {
+          const reply = await store.obsidian.handle(request.payload);
+          const nextRevision = store.revision();
+          if (nextRevision > revision) sync.localCommitted();
+          result = {
+            ok: true,
+            value: reply,
+            revision: nextRevision,
+          };
+          break;
+        }
         case "pairWithPayload":
           throw DomainError.validation("请在手机上扫描桌面配对码。");
         case "enableSync":

@@ -3,20 +3,22 @@ import { Check } from "lucide-react";
 import type { DesktopState, PreferenceState } from "../../../shared/contracts";
 import { Button } from "../ui/primitives";
 import { Modal } from "../ui/Modal";
-import { NotionSettings } from "./NotionSettings";
+import {
+  IntegrationsSettings,
+  type IntegrationsEnabledState,
+} from "./IntegrationsSettings";
 import { SyncSettings } from "./SyncSettings";
-import type { NotionConfig } from "../../../shared/notion-contracts";
 
 type Props = {
   onClose: () => void;
   onNotice: (text: string, tone?: "ok" | "error") => void;
-  onNotionConfigChange?: (config: NotionConfig) => void;
+  onIntegrationsChange?: (next: IntegrationsEnabledState) => void;
 };
 
 export function SettingsDialog({
   onClose,
   onNotice,
-  onNotionConfigChange,
+  onIntegrationsChange,
 }: Props) {
   const [state, setState] = useState<PreferenceState | null>(null);
   const [desktop, setDesktop] = useState<DesktopState | null>(null);
@@ -163,9 +165,9 @@ export function SettingsDialog({
       </div>
       {window.pickup.host === "desktop" ? <SyncSettings /> : null}
       {window.pickup.host === "desktop" ? (
-        <NotionSettings
+        <IntegrationsSettings
           onNotice={onNotice}
-          onConfigChange={onNotionConfigChange}
+          onEnabledChange={onIntegrationsChange}
         />
       ) : null}
       <div className="modal-actions">

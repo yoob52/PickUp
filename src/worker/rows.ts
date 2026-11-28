@@ -2,7 +2,8 @@ import type { SqliteDatabase } from "./sqlite";
 import type { BreakpointSummary, TaskSummary } from "../shared/contracts";
 import type {
   ExternalLinkSummary,
-  NotionExternalType,
+  ExternalLinkType,
+  IntegrationProvider,
 } from "../shared/notion-contracts";
 import type { TaskStatus } from "../shared/task";
 
@@ -107,9 +108,9 @@ export function loadExternalLinks(
     )
     .all(...ids) as {
     task_id: string;
-    provider: "notion";
+    provider: IntegrationProvider;
     external_id: string;
-    external_type: NotionExternalType;
+    external_type: ExternalLinkType;
     external_url: string;
     source_title: string;
     due_date: string | null;

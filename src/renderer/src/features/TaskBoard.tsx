@@ -140,6 +140,9 @@ function TaskRow({
           {task.externalLink?.provider === "notion" ? (
             <span className="notion-badge">Notion</span>
           ) : null}
+          {task.externalLink?.provider === "obsidian" ? (
+            <span className="notion-badge">Obsidian</span>
+          ) : null}
           {task.externalLink?.dueDate ? (
             <span className="notion-badge date-pill">
               {task.externalLink.dueDate}

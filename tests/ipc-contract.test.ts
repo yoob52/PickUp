@@ -15,6 +15,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock("electron", () => ({
   app: { isPackaged: false },
   clipboard: { writeText: mocks.writeText },
+  dialog: {
+    showOpenDialog: vi
+      .fn()
+      .mockResolvedValue({ canceled: true, filePaths: [] }),
+  },
   safeStorage: {
     isEncryptionAvailable: () => true,
     encryptString: (v: string) => Buffer.from(v, "utf8"),

@@ -6,6 +6,10 @@ import type {
   NotionDailyExportRecord,
 } from "../../../shared/notion-contracts";
 import type {
+  ObsidianConfig,
+  ObsidianDailyExportRecord,
+} from "../../../shared/obsidian-contracts";
+import type {
   BreakpointDraft,
   DailyReview,
   TaskRef,
@@ -46,8 +50,15 @@ export function DailyReviewDialog({
   const [notionConfig, setNotionConfig] = useState<NotionConfig | null>(null);
   const [exportRecord, setExportRecord] =
     useState<NotionDailyExportRecord | null>(null);
+  const [obsidianConfig, setObsidianConfig] = useState<ObsidianConfig | null>(
+    null,
+  );
+  const [obsidianTargetPath, setObsidianTargetPath] = useState("");
+  const [obsidianExportRecord, setObsidianExportRecord] =
+    useState<ObsidianDailyExportRecord | null>(null);
   const [includeBreakpoints, setIncludeBreakpoints] = useState(true);
   const [exportingNotion, setExportingNotion] = useState(false);
+  const [exportingObsidian, setExportingObsidian] = useState(false);
   const seenCurrent = useRef<TaskRef | null>(null);
   const seq = useRef(0);
   const midnightTimer = useRef(0);
@@ -108,14 +119,23 @@ export function DailyReviewDialog({
   useEffect(() => {
     void load();
     if (window.pickup.host === "desktop") {
-      void window.pickup
-        .notion({ action: "getDailyExportStatus" })
-        .then((res) => {
-          if (res.ok && res.value.action === "getDailyExportStatus") {
-            setNotionConfig(res.value.config);
-            setExportRecord(res.value.record);
-          }
-        });
+      void Promise.all([
+        window.pickup.notion({ action: "getDailyExportStatus" }),
+        window.pickup.obsidian({ action: "getDailyExportStatus" }),
+      ]).then(([notionRes, obsidianRes]) => {
+        if (notionRes.ok && notionRes.value.action === "getDailyExportStatus") {
+          setNotionConfig(notionRes.value.config);
+          setExportRecord(notionRes.value.record);
+        }
+        if (
+          obsidianRes.ok &&
+          obsidianRes.value.action === "getDailyExportStatus"
+        ) {
+          setObsidianConfig(obsidianRes.value.config);
+          setObsidianTargetPath(obsidianRes.value.targetPath);
+          setObsidianExportRecord(obsidianRes.value.record);
+        }
+      });
     }
     const onVisible = () => {
       if (document.visibilityState === "visible") void load();
@@ -270,6 +290,33 @@ export function DailyReviewDialog({
     }
   }
 
+  async function exportToObsidian() {
+    if (exportingObsidian) return;
+    setExportingObsidian(true);
+    setError("");
+    try {
+      const res = await window.pickup.obsidian({
+        action: "exportDailyReview",
+        includeBreakpoints,
+      });
+      if (!res.ok || res.value.action !== "exportDailyReview") {
+        const msg = !res.ok ? res.message : "写入 Obsidian 失败。";
+        setError(msg);
+        onNotice(msg, "error");
+        return;
+      }
+      setObsidianExportRecord(res.value.record);
+      setObsidianTargetPath(res.value.record.targetPath);
+      onNotice(
+        res.value.updated
+          ? `已更新今日 Obsidian 笔记（${res.value.record.targetPath}）。`
+          : `已写入 Obsidian 每日笔记（${res.value.record.targetPath}）。`,
+      );
+    } finally {
+      setExportingObsidian(false);
+    }
+  }
+
   const current = review?.currentTask ?? null;
   const unfinished = review?.unfinished ?? [];
   const completed = review?.completedToday;
@@ -325,43 +372,47 @@ export function DailyReviewDialog({
               ) : null}
             </div>
           </Field>
-          {window.pickup.host === "desktop" && notionConfig ? (
+          {window.pickup.host === "desktop" &&
+          (notionConfig?.enabled || obsidianConfig?.enabled) ? (
             <div className="notion-export-card">
               <div className="notion-export-head">
                 <div className="notion-export-title">
                   <FileText size={16} aria-hidden="true" />
-                  <span>写入 Notion 每日一页</span>
+                  <span>写入笔记</span>
                 </div>
-                {notionConfig.hasToken && notionConfig.dailyParentId ? (
-                  <span className="notion-badge synced-pill">
-                    目标：{notionConfig.dailyParentTitle || "已绑定父页面"}
-                  </span>
-                ) : (
-                  <span className="notion-badge">未配置日报父页面</span>
-                )}
+                <label className="notion-export-check">
+                  <input
+                    type="checkbox"
+                    checked={includeBreakpoints}
+                    disabled={exportingNotion || exportingObsidian}
+                    onChange={(event) =>
+                      setIncludeBreakpoints(event.target.checked)
+                    }
+                  />
+                  <span>附带任务断点摘要</span>
+                </label>
               </div>
-              {notionConfig.hasToken && notionConfig.dailyParentId ? (
-                <>
-                  <p className="notion-export-desc">
-                    页面标题：<strong>{review.dayKey} 每日总结</strong>（将写入{" "}
-                    {completed?.total ?? 0} 项已完成任务
-                    {exportRecord
-                      ? `；上次写入 ${formatDateTime(exportRecord.exportedAt)}，再次点击直接更新同日页面`
-                      : "，同日重复写入自动更新"}
-                    ）。
-                  </p>
-                  <div className="notion-export-footer">
-                    <label className="notion-export-check">
-                      <input
-                        type="checkbox"
-                        checked={includeBreakpoints}
-                        disabled={exportingNotion}
-                        onChange={(event) =>
-                          setIncludeBreakpoints(event.target.checked)
-                        }
-                      />
-                      <span>附带任务断点摘要</span>
-                    </label>
+
+              {notionConfig?.enabled ? (
+                <div className="export-provider-row">
+                  <div className="export-provider-info">
+                    <div className="export-provider-name">
+                      <strong>Notion</strong>
+                      {notionConfig.hasToken && notionConfig.dailyParentId ? (
+                        <span className="notion-badge synced-pill">
+                          {notionConfig.dailyParentTitle || "已绑定父页面"}
+                        </span>
+                      ) : (
+                        <span className="notion-badge">未配置父页面</span>
+                      )}
+                    </div>
+                    <p className="notion-export-desc">
+                      {notionConfig.hasToken && notionConfig.dailyParentId
+                        ? `${review.dayKey} 每日总结 · ${completed?.total ?? 0} 项已完成${exportRecord ? `（上次 ${formatDateTime(exportRecord.exportedAt)}）` : ""}`
+                        : "在设置中连接 Notion 并选择日报父页面后可一键写入。"}
+                    </p>
+                  </div>
+                  {notionConfig.hasToken && notionConfig.dailyParentId ? (
                     <Button
                       kind="secondary"
                       icon={<Upload size={14} />}
@@ -371,18 +422,10 @@ export function DailyReviewDialog({
                       {exportingNotion
                         ? "正在写入…"
                         : exportRecord
-                          ? "更新今日 Notion"
+                          ? "更新 Notion"
                           : "写入 Notion"}
                     </Button>
-                  </div>
-                </>
-              ) : (
-                <div className="notion-export-footer">
-                  <span className="notion-export-desc" style={{ margin: 0 }}>
-                    在设置中连接 Notion
-                    并选择日报父页面后，可一键归档当日完成事项。
-                  </span>
-                  {onOpenSettings ? (
+                  ) : onOpenSettings ? (
                     <Button
                       kind="secondary"
                       onClick={() => {
@@ -394,7 +437,53 @@ export function DailyReviewDialog({
                     </Button>
                   ) : null}
                 </div>
-              )}
+              ) : null}
+
+              {obsidianConfig?.enabled ? (
+                <div className="export-provider-row">
+                  <div className="export-provider-info">
+                    <div className="export-provider-name">
+                      <strong>Obsidian</strong>
+                      {obsidianConfig.configured ? (
+                        <span className="notion-badge synced-pill">
+                          {obsidianTargetPath || `${review.dayKey}.md`}
+                        </span>
+                      ) : (
+                        <span className="notion-badge">未选择 Vault</span>
+                      )}
+                    </div>
+                    <p className="notion-export-desc">
+                      {obsidianConfig.configured
+                        ? `写入本机 Markdown · ${completed?.total ?? 0} 项已完成${obsidianExportRecord ? `（上次 ${formatDateTime(obsidianExportRecord.exportedAt)}）` : "，保留原有笔记"}`
+                        : "在设置中绑定本机 Obsidian Vault 目录后可一键写入。"}
+                    </p>
+                  </div>
+                  {obsidianConfig.configured ? (
+                    <Button
+                      kind="secondary"
+                      icon={<Upload size={14} />}
+                      disabled={exportingObsidian || busy}
+                      onClick={() => void exportToObsidian()}
+                    >
+                      {exportingObsidian
+                        ? "正在写入…"
+                        : obsidianExportRecord
+                          ? "更新 Obsidian"
+                          : "写入 Obsidian"}
+                    </Button>
+                  ) : onOpenSettings ? (
+                    <Button
+                      kind="secondary"
+                      onClick={() => {
+                        onClose();
+                        onOpenSettings();
+                      }}
+                    >
+                      去配置
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ) : null}
           <Field id="review-unfinished" label="下一次开工第一件事">

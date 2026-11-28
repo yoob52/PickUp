@@ -76,6 +76,19 @@ export function WidgetApp() {
             notify("已同步勾选 Notion 对应事项。");
           }
         });
+    } else if (
+      window.pickup.host === "desktop" &&
+      current.externalLink?.provider === "obsidian"
+    ) {
+      void window.pickup
+        .obsidian({ action: "writeBackTask", taskId: current.id })
+        .then((wb) => {
+          if (!wb.ok) {
+            notify(`Obsidian 完成回写失败：${wb.message}`, "error");
+          } else if (wb.value.action === "writeBackTask" && wb.value.synced) {
+            notify("已同步勾选 Obsidian 对应待办。");
+          }
+        });
     }
   }
 
