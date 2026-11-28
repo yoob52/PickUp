@@ -6,6 +6,7 @@ import type {
   NotionInput,
   NotionReply,
 } from "./notion-contracts";
+import type { ObsidianInput, ObsidianReply } from "./obsidian-contracts";
 import { TASK_STATUSES, type StatusCounts, type TaskStatus } from "./task";
 import type { UpdateOffer } from "./releases";
 
@@ -531,6 +532,7 @@ export type PickupAPI = {
   openRepository(): Promise<Result<null>>;
   account(input: AccountInput): Promise<Result<AccountReply>>;
   notion(input: NotionInput): Promise<Result<NotionReply>>;
+  obsidian(input: ObsidianInput): Promise<Result<ObsidianReply>>;
   enableSync(input: EnableSyncInput): Promise<Result<SyncStatus>>;
   pairWithPayload(payload: string): Promise<Result<SyncStatus>>;
   disableSync(): Promise<Result<SyncStatus>>;

@@ -152,6 +152,7 @@ function createApi(overrides: Partial<PickupAPI> = {}): PickupAPI {
     ),
     notion: vi.fn().mockImplementation(async (input: { action: string }) => {
       const config = {
+        enabled: false,
         connected: false,
         hasToken: false,
         tokenHint: "",
@@ -169,6 +170,33 @@ function createApi(overrides: Partial<PickupAPI> = {}): PickupAPI {
           {
             action: "getDailyExportStatus",
             dayKey: "2026-11-27",
+            record: null,
+            config,
+          },
+          0,
+        );
+      }
+      return ok({ action: "getConfig", config }, 0);
+    }),
+    obsidian: vi.fn().mockImplementation(async (input: { action: string }) => {
+      const config = {
+        enabled: false,
+        configured: false,
+        vaultPath: "",
+        vaultName: "",
+        dailyFolder: "Daily",
+        dailyFilenameFormat: "YYYY-MM-DD",
+        todoSourcePath: "",
+        todoTagFilter: "",
+        autoWriteback: false,
+        updatedAt: 0,
+      };
+      if (input.action === "getDailyExportStatus") {
+        return ok(
+          {
+            action: "getDailyExportStatus",
+            dayKey: "2026-11-27",
+            targetPath: "Daily/2026-11-27.md",
             record: null,
             config,
           },
@@ -202,7 +230,7 @@ it.each([
         ok({ version: "1.10.0", action: "restart" }),
       );
     const openRepository = vi.fn().mockResolvedValue(ok(null));
-    const onNotionImport = vi.fn();
+    const onImport = vi.fn();
     window.pickup = createApi({
       host,
       checkForUpdate,
@@ -217,7 +245,7 @@ it.each([
           onReview={() => {}}
           onSettings={() => {}}
           onSync={() => {}}
-          onNotionImport={onNotionImport}
+          onImport={onImport}
         >
           工作台
         </AppShell>
@@ -247,12 +275,12 @@ it.each([
     expect(await screen.findByText("当前已是最新版本。")).toBeInTheDocument();
     expect(screen.queryByText("v1.10.0")).not.toBeInTheDocument();
     if (host === "desktop") {
-      fireEvent.click(screen.getByRole("button", { name: "Notion 导入" }));
-      expect(onNotionImport).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole("button", { name: "导入" }));
+      expect(onImport).toHaveBeenCalledTimes(1);
     }
     if (host === "mobile") {
       expect(
-        screen.queryByRole("button", { name: "Notion 导入" }),
+        screen.queryByRole("button", { name: "导入" }),
       ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("group", { name: "窗口控制" }),

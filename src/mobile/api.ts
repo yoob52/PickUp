@@ -72,6 +72,7 @@ export function createMobileAPI(
     ...createMobileUpdates(),
     account: (input) => invoke("account", input),
     notion: unsupported,
+    obsidian: unsupported,
     enableSync: unsupported,
     pairWithPayload: (payload) => invoke("pairWithPayload", payload),
     disableSync: () => invoke("disableSync"),

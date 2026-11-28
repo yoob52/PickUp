@@ -3,19 +3,30 @@ import { z } from "zod";
 export const notionSourceTypeSchema = z.enum(["", "database", "page"]);
 export type NotionSourceType = z.infer<typeof notionSourceTypeSchema>;
 
+export const integrationProviderSchema = z.enum(["notion", "obsidian"]);
+export type IntegrationProvider = z.infer<typeof integrationProviderSchema>;
+
+export const externalTypeSchema = z.enum([
+  "database_item",
+  "todo_block",
+  "markdown_todo",
+]);
+export type ExternalLinkType = z.infer<typeof externalTypeSchema>;
+
 export const notionExternalTypeSchema = z.enum(["database_item", "todo_block"]);
 export type NotionExternalType = z.infer<typeof notionExternalTypeSchema>;
 
 export type ExternalLinkSummary = {
-  provider: "notion";
+  provider: IntegrationProvider;
   externalId: string;
-  externalType: NotionExternalType;
+  externalType: ExternalLinkType;
   externalUrl: string;
   sourceTitle: string;
   dueDate: string | null;
 };
 
 export type NotionConfig = {
+  enabled: boolean;
   connected: boolean;
   hasToken: boolean;
   tokenHint: string;
@@ -77,6 +88,7 @@ export const notionInputSchema = z.discriminatedUnion("action", [
   z
     .object({
       action: z.literal("saveConfig"),
+      enabled: z.boolean().optional(),
       token: z.string().trim().max(512).optional(),
       clearToken: z.boolean().optional(),
       workspaceName: titleStr.optional(),

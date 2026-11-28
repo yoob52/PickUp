@@ -523,9 +523,16 @@ describe("createNotionService (SQLite persistence & deduplication)", () => {
       api: mockApi,
     });
 
+    const initial = await service.handle({ input: { action: "getConfig" } });
+    expect(initial.action).toBe("getConfig");
+    if (initial.action === "getConfig") {
+      expect(initial.config.enabled).toBe(false);
+    }
+
     const saved = await service.handle({
       input: {
         action: "saveConfig",
+        enabled: true,
         workspaceName: "Liu Workspace",
         dailyParentId: "parent-1",
         dailyParentTitle: "PickUp 每日归档",
@@ -539,6 +546,7 @@ describe("createNotionService (SQLite persistence & deduplication)", () => {
     });
     expect(saved.action).toBe("saveConfig");
     if (saved.action === "saveConfig") {
+      expect(saved.config.enabled).toBe(true);
       expect(saved.config.connected).toBe(true);
       expect(saved.config.tokenHint).toBe("ntn_••••1234");
     }

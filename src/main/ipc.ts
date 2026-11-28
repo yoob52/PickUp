@@ -2,6 +2,7 @@ import {
   BrowserWindow,
   app,
   clipboard,
+  dialog,
   ipcMain,
   type IpcMainInvokeEvent,
 } from "electron";
@@ -23,6 +24,11 @@ import {
   type NotionReply,
   type WorkerNotionRequest,
 } from "../shared/notion-contracts";
+import {
+  obsidianInputSchema,
+  type ObsidianReply,
+  type WorkerObsidianRequest,
+} from "../shared/obsidian-contracts";
 import {
   decryptNotionToken,
   encryptNotionToken,
@@ -215,6 +221,53 @@ export function registerIpcHandlers(
 
       const result = await client.send<NotionReply>(
         { kind: "notion", payload },
+        { timeoutMs: 30_000 },
+      );
+      if (
+        result.ok &&
+        input.action === "importItems" &&
+        result.value.action === "importItems" &&
+        result.value.importedCount > 0
+      ) {
+        notifyStateChanged(result.revision);
+      }
+      return result;
+    },
+  );
+  register(
+    "pickup:obsidian",
+    obsidianInputSchema,
+    false,
+    async (client, input): Promise<Result<ObsidianReply>> => {
+      if (input.action === "pickVault") {
+        const owner = BrowserWindow.getFocusedWindow();
+        const opts: Electron.OpenDialogOptions = {
+          title: "选择 Obsidian Vault 目录",
+          properties: ["openDirectory", "createDirectory"],
+        };
+        const picked = owner
+          ? await dialog.showOpenDialog(owner, opts)
+          : await dialog.showOpenDialog(opts);
+        return {
+          ok: true,
+          value: {
+            action: "pickVault",
+            vaultPath: picked.canceled ? null : (picked.filePaths[0] ?? null),
+          },
+          revision: 0,
+        };
+      }
+
+      const payload: WorkerObsidianRequest = { input };
+      if (
+        input.action === "getDailyExportStatus" ||
+        input.action === "exportDailyReview"
+      ) {
+        payload.dayRange = localDayRangeUtc(Date.now());
+      }
+
+      const result = await client.send<ObsidianReply>(
+        { kind: "obsidian", payload },
         { timeoutMs: 30_000 },
       );
       if (

@@ -63,9 +63,29 @@ function readConfigRow(db: SqliteDatabase): NotionConfigRow {
     .get() as NotionConfigRow;
 }
 
-function toConfig(row: NotionConfigRow): NotionConfig {
+function readEnabled(db: SqliteDatabase): boolean {
+  const row = db
+    .prepare(
+      `SELECT enabled FROM integration_settings WHERE provider = 'notion'`,
+    )
+    .get() as { enabled: number } | undefined;
+  return row?.enabled === 1;
+}
+
+function writeEnabled(db: SqliteDatabase, enabled: boolean, now: number): void {
+  db.prepare(
+    `INSERT INTO integration_settings(provider, enabled, updated_at)
+     VALUES ('notion', ?, ?)
+     ON CONFLICT(provider) DO UPDATE SET
+       enabled = excluded.enabled,
+       updated_at = excluded.updated_at`,
+  ).run(enabled ? 1 : 0, now);
+}
+
+function toConfig(row: NotionConfigRow, enabled: boolean): NotionConfig {
   const hasToken = row.token_enc.length > 0;
   return {
+    enabled,
     connected: hasToken && row.workspace_name.length > 0,
     hasToken,
     tokenHint: row.token_hint,
@@ -180,12 +200,18 @@ export function createNotionService(db: SqliteDatabase, deps: NotionStoreDeps) {
 
     switch (input.action) {
       case "getConfig": {
-        return { action: "getConfig", config: toConfig(readConfigRow(db)) };
+        return {
+          action: "getConfig",
+          config: toConfig(readConfigRow(db), readEnabled(db)),
+        };
       }
 
       case "saveConfig": {
         const current = readConfigRow(db);
         const now = Date.now();
+        if (input.enabled !== undefined) {
+          writeEnabled(db, input.enabled, now);
+        }
         let nextTokenEnc = current.token_enc;
         let nextTokenHint = current.token_hint;
         let nextWorkspace =
@@ -254,7 +280,10 @@ export function createNotionService(db: SqliteDatabase, deps: NotionStoreDeps) {
           nextAutoWriteback,
           now,
         );
-        return { action: "saveConfig", config: toConfig(readConfigRow(db)) };
+        return {
+          action: "saveConfig",
+          config: toConfig(readConfigRow(db), readEnabled(db)),
+        };
       }
 
       case "testConnection": {
@@ -364,7 +393,7 @@ export function createNotionService(db: SqliteDatabase, deps: NotionStoreDeps) {
           action: "getDailyExportStatus",
           dayKey: req.dayRange.dayKey,
           record: readDailyExport(db, req.dayRange.dayKey),
-          config: toConfig(readConfigRow(db)),
+          config: toConfig(readConfigRow(db), readEnabled(db)),
         };
       }
 
@@ -487,6 +516,13 @@ export function createNotionService(db: SqliteDatabase, deps: NotionStoreDeps) {
       }
 
       case "writeBackTask": {
+        if (!readEnabled(db)) {
+          return {
+            action: "writeBackTask",
+            synced: false,
+            skippedReason: "Notion 集成未启用。",
+          };
+        }
         const config = readConfigRow(db);
         if (config.auto_writeback !== 1) {
           return {
